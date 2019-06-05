@@ -1,0 +1,16 @@
+[package]
+name = "vertex_server"
+version = "0.1.0"
+authors = ["Restioson <restiosondev@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+actix = "^0.8"
+actix-web = "^1"
+actix-web-actors = "^1"
+awc = "^0.2.0"
+serde = "^1"
+serde_cbor = "^0.9"
+ccl = "^2.1.7"
+uuid = { version = "^0.7", features = ["serde", "v4"] }
+vertex_common = { path = "../common/" }

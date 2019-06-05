@@ -1,0 +1,16 @@
+[package]
+name = "vertex_client"
+version = "0.1.0"
+authors = ["Restioson <restiosondev@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+websocket = "0.22.4"
+uuid = { version = "0.7", features = ["serde", "v4"] }
+serde = "^1"
+serde_cbor = "^0.9"
+vertex_common = { path = "../common/" }
+
+[dependencies.molasses]
+git = "https://github.com/trailofbits/molasses/"
+rev = "4e923e63341ec6b959dd0bf14f34c365244d5ad7"

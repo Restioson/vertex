@@ -1,0 +1,12 @@
+[package]
+name = "vertex_common"
+version = "0.1.0"
+authors = ["Restioson <restiosondev@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+serde = "^1"
+actix = "^0.8"
+awc = "^0.2.0"
+uuid = { version = "^0.7", features = ["serde", "v4"] }
+bytes = { version = "0.4.12", features = ["serde"] }
