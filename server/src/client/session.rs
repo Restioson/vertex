@@ -4,9 +4,10 @@ use actix::prelude::*;
 use actix_web_actors::ws;
 use websocket::message::OwnedMessage;
 use websocket::client::builder::ClientBuilder;
+use url::Url;
 use vertex_common::*;
 use super::*;
-use crate::federation::{OutgoingServerWsSession, FederationServer, WsReaderStreamAdapter};
+use crate::federation::{OutgoingSession, FederationServer, WsReaderStreamAdapter};
 
 pub struct ClientWsSession {
     client_server: Addr<ClientServer>,
@@ -26,7 +27,6 @@ impl Actor for ClientWsSession {
     type Context = ws::WebsocketContext<Self>;
 }
 
-/// Handler for ws::Message message
 impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
     fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
         match msg {
@@ -49,24 +49,50 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
 
                 match msg {
                     ClientMessage::PublishInitKey(publish) => {
-                        // TODO check is valid
                         self.client_server.do_send(publish);
-                        // TODO return
+
+                        let success = serde_cbor::to_vec(&ServerMessage::success()).unwrap();
+                        ctx.binary(success);
                     },
-                    ClientMessage::RequestInitKey(request) => { // TODO do with actual api
-                        // TODO check that request is valid
+                    ClientMessage::RequestInitKey(request) => {
                         match self.client_server.send(request).wait() {
-                            Ok(Some(key)) => ctx.binary(key.bytes()),
-                            Ok(None) => ctx.text("no key for id"),
-                            Err(e) => ctx.text(format!("error executing: {:?}", e))
+                            Ok(Some(key)) => {
+                                let key = serde_cbor::to_vec(
+                                    &ServerMessage::Success(Success::Key(key))
+                                ).unwrap();
+                                ctx.binary(key);
+                            },
+                            Ok(None) => {
+                                let err = serde_cbor::to_vec(
+                                    &ServerMessage::Error(Error::IdNotFound)
+                                ).unwrap();
+                                ctx.binary(err);
+                            },
+                            Err(_) => {
+                                let err = serde_cbor::to_vec(
+                                    &ServerMessage::Error(Error::Internal)
+                                ).unwrap();
+                                ctx.binary(err)
+                            }
                         }
                     },
                     ClientMessage::Federate(federate) => {
                         // TODO check url is valid
-                        let mut client = ClientBuilder::new(&federate.url)
-                            .expect("error making builder")
-                            .connect_insecure()
-                            .expect("Error connecting to server"); // TODO wss/https
+
+                        let res = catch! {
+                            ClientBuilder::new(&federate.url)
+                                .map_err(|_| Error::InvalidUrl)?
+                                .connect_insecure()
+                                .map_err(|_| Error::WsConnectionError)
+                        };
+
+                        let client = match res {
+                            Ok(c) => c,
+                            Err(e) => {
+                                let err = serde_cbor::to_vec(&ServerMessage::Error(e)).unwrap();
+                                return ctx.binary(err);
+                            }
+                        };
 
                         client.stream_ref()
                             .set_read_timeout(Some(Duration::from_micros(1)))
@@ -76,13 +102,19 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                             .set_write_timeout(Some(Duration::from_millis(1000)))
                             .unwrap();
 
-                        let (mut reader, mut writer) = client.split().unwrap();
-                        writer.send_message(&OwnedMessage::Text("hi".to_string())).unwrap();
+                        let (reader, mut writer) = client.split().unwrap();
+
+                        let args = std::env::args().collect::<Vec<_>>();
+                        let port = args.get(1).cloned().unwrap_or("8080".to_string());
+                        writer.send_message(
+                            &OwnedMessage::Text(format!("http://127.0.0.1:{}", port))
+                        ).unwrap();
 
                         let addr = self.federation_server.clone();
-                        let session = OutgoingServerWsSession::create(move |session_ctx| {
+                        OutgoingSession::create(move |session_ctx| {
                             session_ctx.add_stream(WsReaderStreamAdapter(reader));
-                            OutgoingServerWsSession::new(
+                            OutgoingSession::new(
+                                Url::parse(&federate.url).expect("url invalid"), // TODO ^
                                 addr,
                                 writer,
                             )
@@ -90,7 +122,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
 
                         println!("ya");
 
-                        let success = serde_cbor::to_vec(&ServerMessage::Success).unwrap();
+                        let success = serde_cbor::to_vec(&ServerMessage::success()).unwrap();
                         ctx.binary(success);
                     },
                 }

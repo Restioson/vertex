@@ -34,8 +34,14 @@ impl Message for RequestInitKey {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ServerMessage {
-    Success,
+    Success(Success),
     Error(Error),
+}
+
+impl ServerMessage {
+    pub fn success() -> Self {
+        ServerMessage::Success(Success::NoData)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,6 +49,16 @@ pub enum Error {
     InvalidMessage,
     InvalidInitKey,
     UnexpectedTextFrame,
+    IdNotFound,
+    Internal,
+    InvalidUrl,
+    WsConnectionError,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum Success {
+    NoData,
+    Key(InitKey),
 }
 
 /// Dummy type for init key
@@ -68,3 +84,9 @@ impl TryFrom<Bytes> for InitKey {
 #[derive(Debug)]
 pub enum InvalidInitKey {}
 
+#[macro_export]
+macro_rules! catch {
+    { $($tt:tt)* } => {
+        (||{ $($tt)* })()
+    }
+}
