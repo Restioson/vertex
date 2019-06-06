@@ -10,6 +10,7 @@ uuid = { version = "0.7", features = ["serde", "v4"] }
 serde = "^1"
 serde_cbor = "^0.9"
 vertex_common = { path = "../common/" }
+actix = "^0.8"
 
 [dependencies.molasses]
 git = "https://github.com/trailofbits/molasses/"

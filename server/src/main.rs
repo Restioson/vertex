@@ -10,14 +10,18 @@ mod client;
 mod federation;
 
 use client::{ClientWsSession, ClientServer};
-use federation::{ServerWsSession, FederationServer};
+use federation::{IncomingServerWsSession, FederationServer};
 
 fn dispatch_client_ws(
     request: HttpRequest,
     stream: Payload,
-    srv: Data<Addr<ClientServer>>
+    client_server: Data<Addr<ClientServer>>,
+    federation_server: Data<Addr<FederationServer>>,
 ) -> Result<HttpResponse, Error> {
-    ws::start(ClientWsSession::new(srv.get_ref().clone()), &request, stream)
+    let client_server = client_server.get_ref().clone();
+    let federation_server = federation_server.get_ref().clone();
+
+    ws::start(ClientWsSession::new(client_server, federation_server), &request, stream)
 }
 
 fn dispatch_server_ws(
@@ -26,7 +30,7 @@ fn dispatch_server_ws(
     srv: Data<Addr<FederationServer>>
 ) -> Result<HttpResponse, Error> {
     println!("wow");
-    ws::start(ServerWsSession::new(srv.get_ref().clone()), &request, stream)
+    ws::start(IncomingServerWsSession::new(srv.get_ref().clone()), &request, stream)
 }
 
 fn main() -> std::io::Result<()> {

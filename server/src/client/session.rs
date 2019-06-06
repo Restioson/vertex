@@ -1,19 +1,23 @@
+use std::io::Cursor;
 use std::time::Duration;
-use std::io::{Write, Cursor};
 use actix::prelude::*;
 use actix_web_actors::ws;
-use awc::Client;
+use websocket::message::OwnedMessage;
+use websocket::client::builder::ClientBuilder;
 use vertex_common::*;
 use super::*;
+use crate::federation::{OutgoingServerWsSession, FederationServer, WsReaderStreamAdapter};
 
 pub struct ClientWsSession {
-    server: Addr<ClientServer>,
+    client_server: Addr<ClientServer>,
+    federation_server: Addr<FederationServer>,
 }
 
 impl ClientWsSession {
-    pub fn new(server: Addr<ClientServer>) -> Self {
+    pub fn new(client_server: Addr<ClientServer>, federation_server: Addr<FederationServer>) -> Self {
         ClientWsSession {
-            server,
+            client_server,
+            federation_server,
         }
     }
 }
@@ -46,30 +50,45 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                 match msg {
                     ClientMessage::PublishInitKey(publish) => {
                         // TODO check is valid
-                        self.server.do_send(publish);
+                        self.client_server.do_send(publish);
+                        // TODO return
                     },
-                    ClientMessage::RequestInitKey(request) => {
+                    ClientMessage::RequestInitKey(request) => { // TODO do with actual api
                         // TODO check that request is valid
-                        match self.server.send(request).wait() {
+                        match self.client_server.send(request).wait() {
                             Ok(Some(key)) => ctx.binary(key.bytes()),
-                            Ok(None) => ctx.text("no key for index"),
+                            Ok(None) => ctx.text("no key for id"),
                             Err(e) => ctx.text(format!("error executing: {:?}", e))
                         }
                     },
                     ClientMessage::Federate(federate) => {
                         // TODO check url is valid
-                        actix::spawn(
-                            Client::build()
-                                .timeout(Duration::from_millis(300))
-                                .finish()
-                                .ws(federate.url)
-                                .connect()
-                                .map(|(_response, mut socket)| {
-                                    println!("ya");
-                                    socket.get_mut().write(b"yes").unwrap();
-                                })
-                                .map_err(|_| eprintln!("oops"))
-                        );
+                        let mut client = ClientBuilder::new(&federate.url)
+                            .expect("error making builder")
+                            .connect_insecure()
+                            .expect("Error connecting to server"); // TODO wss/https
+
+                        client.stream_ref()
+                            .set_read_timeout(Some(Duration::from_micros(1)))
+                            .unwrap();
+
+                        client.stream_ref()
+                            .set_write_timeout(Some(Duration::from_millis(1000)))
+                            .unwrap();
+
+                        let (mut reader, mut writer) = client.split().unwrap();
+                        writer.send_message(&OwnedMessage::Text("hi".to_string())).unwrap();
+
+                        let addr = self.federation_server.clone();
+                        let session = OutgoingServerWsSession::create(move |session_ctx| {
+                            session_ctx.add_stream(WsReaderStreamAdapter(reader));
+                            OutgoingServerWsSession::new(
+                                addr,
+                                writer,
+                            )
+                        });
+
+                        println!("ya");
 
                         let success = serde_cbor::to_vec(&ServerMessage::Success).unwrap();
                         ctx.binary(success);

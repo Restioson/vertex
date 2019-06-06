@@ -1725,6 +1725,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "vertex_client"
 version = "0.1.0"
 dependencies = [
+ "actix 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "molasses 0.1.0 (git+https://github.com/trailofbits/molasses/?rev=4e923e63341ec6b959dd0bf14f34c365244d5ad7)",
  "serde 1.0.92 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_cbor 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",

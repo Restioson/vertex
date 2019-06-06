@@ -12,5 +12,7 @@ awc = "^0.2.0"
 serde = "^1"
 serde_cbor = "^0.9"
 ccl = "^2.1.7"
+websocket = "^0.22"
+futures = "^0.1"
 uuid = { version = "^0.7", features = ["serde", "v4"] }
 vertex_common = { path = "../common/" }

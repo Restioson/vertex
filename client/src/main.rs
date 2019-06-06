@@ -14,7 +14,7 @@ fn main() {
     let (mut receiver, mut sender) = client.split().unwrap();
 
     let federate = serde_cbor::to_vec(&ClientMessage::Federate(Federate {
-        url: "ws://127.0.0.1:8081/client/".to_string(),
+        url: "ws://127.0.0.1:8081/server/".to_string(),
     })).unwrap();
 
     match sender.send_message(&OwnedMessage::Binary(federate)) {
@@ -43,6 +43,5 @@ fn main() {
         },
         Err(e) => eprintln!("{:?}", e),
     };
-
-
 }
+
