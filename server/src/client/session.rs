@@ -5,6 +5,7 @@ use actix_web_actors::ws;
 use websocket::message::OwnedMessage;
 use websocket::client::builder::ClientBuilder;
 use url::Url;
+use uuid::Uuid;
 use vertex_common::*;
 use super::*;
 use crate::federation::{OutgoingSession, FederationServer, WsReaderStreamAdapter};
@@ -12,7 +13,16 @@ use crate::federation::{OutgoingSession, FederationServer, WsReaderStreamAdapter
 #[derive(Eq, PartialEq)]
 enum SessionState {
     WaitingForLogin,
-    Ready,
+    Ready(Uuid),
+}
+
+impl SessionState {
+    fn logged_in(&self) -> bool {
+        match self {
+            SessionState::WaitingForLogin => false,
+            SessionState::Ready(_) => true,
+        }
+    }
 }
 
 pub struct ClientWsSession {
@@ -28,6 +38,10 @@ impl ClientWsSession {
             federation_server,
             state: SessionState::WaitingForLogin,
         }
+    }
+
+    fn logged_in(&self) -> bool {
+        self.state.logged_in()
     }
 }
 
@@ -62,19 +76,58 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                         // Register with the server
                         self.client_server.do_send(Connect {
                             session: ctx.address(),
-                            login,
+                            login: login.clone(),
                         });
-                        self.state = SessionState::Ready;
+                        self.state = SessionState::Ready(login.id);
 
                         let success = serde_cbor::to_vec(&ServerMessage::success()).unwrap();
                         ctx.binary(success);
                     },
+                    // Send a message to the server
+                    ClientMessage::SendMessage(msg) => {
+                        match self.state {
+                            SessionState::WaitingForLogin => {
+                                let err = serde_cbor::to_vec(&ServerMessage::Error(Error::NotLoggedIn))
+                                    .unwrap();
+                                ctx.binary(err);
+                            },
+                            SessionState::Ready(id) => {
+                                self.client_server.do_send(IdentifiedMessage { id, msg });
+
+                                let success = serde_cbor::to_vec(&ServerMessage::success()).unwrap();
+                                ctx.binary(success);
+                            },
+                        }
+                    },
+                    // Create a room
+                    ClientMessage::CreateRoom => {
+                        match self.state {
+                            SessionState::WaitingForLogin => {
+                                let err = serde_cbor::to_vec(&ServerMessage::Error(Error::NotLoggedIn))
+                                    .unwrap();
+                                ctx.binary(err);
+                            },
+                            SessionState::Ready(id) => {
+                                let id = self.client_server.send(
+                                    IdentifiedMessage { id, msg: CreateRoom }
+                                )
+                                    .wait()
+                                    .unwrap();
+
+                                let success = serde_cbor::to_vec(
+                                    &ServerMessage::Success(Success::Room { id: *id })
+                                ).unwrap();
+
+                                ctx.binary(success);
+                            },
+                        }
+                    }
                     // Publish an initialisation key from the server
                     ClientMessage::PublishInitKey(publish) => {
-                        if self.state != SessionState::Ready {
+                        if !self.logged_in() {
                             let err = serde_cbor::to_vec(&ServerMessage::Error(Error::NotLoggedIn))
                                 .unwrap();
-                            ctx.binary(err);
+                            return ctx.binary(err);
                         }
 
                         self.client_server.do_send(publish);
@@ -84,10 +137,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                     },
                     // Request an initialisation key from the server
                     ClientMessage::RequestInitKey(request) => {
-                        if self.state != SessionState::Ready {
+                        if !self.logged_in() {
                             let err = serde_cbor::to_vec(&ServerMessage::Error(Error::NotLoggedIn))
                                 .unwrap();
-                            ctx.binary(err);
+                            return ctx.binary(err);
                         }
 
                         match self.client_server.send(request).wait() {
@@ -113,10 +166,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                     },
                     // Federate with another server
                     ClientMessage::Federate(federate) => {
-                        if self.state != SessionState::Ready {
+                        if !self.logged_in() {
                             let err = serde_cbor::to_vec(&ServerMessage::Error(Error::NotLoggedIn))
                                 .unwrap();
-                            ctx.binary(err);
+                            return ctx.binary(err);
                         }
 
                         // TODO check url is valid

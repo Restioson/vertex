@@ -5,23 +5,38 @@ use serde::{Serialize, Deserialize};
 use actix::prelude::*;
 use uuid::Uuid;
 
+pub trait ClientMessageType {}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
     PublishInitKey(PublishInitKey),
     RequestInitKey(RequestInitKey),
     Federate(Federate),
     Login(Login),
+    SendMessage(SentMessage),
+    CreateRoom,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Login {
-    pub uuid: Uuid,
+#[derive(Debug, Message, Serialize, Deserialize)]
+pub struct SentMessage {
+    pub to_room: Uuid,
+    pub content: String,
 }
+
+impl ClientMessageType for SentMessage {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Login {
+    pub id: Uuid,
+}
+impl ClientMessageType for Login {}
 
 #[derive(Debug, Message, Serialize, Deserialize)]
 pub struct Federate {
     pub url: String,
 }
+
+impl ClientMessageType for Federate {}
 
 #[derive(Debug, Message, Serialize, Deserialize)]
 pub struct PublishInitKey {
@@ -29,10 +44,13 @@ pub struct PublishInitKey {
     pub key: InitKey,
 }
 
+impl ClientMessageType for PublishInitKey {}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RequestInitKey {
     pub id: Uuid,
 }
+impl ClientMessageType for RequestInitKey {}
 
 impl Message for RequestInitKey {
     type Result = Option<InitKey>;
@@ -66,6 +84,7 @@ pub enum Error {
 pub enum Success {
     NoData,
     Key(InitKey),
+    Room { id: Uuid, },
 }
 
 /// Dummy type for init key
