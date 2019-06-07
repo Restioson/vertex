@@ -1,6 +1,6 @@
 # Vertex
 
-<p style="text-align: center;">![](https://i.imgur.com/HcHTAYS.png </p>
+![Vertex logo](https://i.imgur.com/HcHTAYS.png
 
 Vertex is a WIP end-to-end encrypted, decentralised, federated chat platform built on top of 
 [MLS](https://messaginglayersecurity.rocks).
