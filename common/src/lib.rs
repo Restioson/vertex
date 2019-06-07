@@ -11,7 +11,6 @@ pub trait ClientMessageType {}
 pub enum ClientMessage {
     PublishInitKey(PublishInitKey),
     RequestInitKey(RequestInitKey),
-    Federate(Federate),
     Login(Login),
     SendMessage(ClientSentMessage),
     CreateRoom,
@@ -46,13 +45,6 @@ pub struct Login {
     pub id: Uuid,
 }
 impl ClientMessageType for Login {}
-
-#[derive(Debug, Message, Serialize, Deserialize)]
-pub struct Federate {
-    pub url: String,
-}
-
-impl ClientMessageType for Federate {}
 
 #[derive(Debug, Message, Serialize, Deserialize)]
 pub struct PublishInitKey {
