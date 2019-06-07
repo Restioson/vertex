@@ -9,9 +9,16 @@ use vertex_common::*;
 use super::*;
 use crate::federation::{OutgoingSession, FederationServer, WsReaderStreamAdapter};
 
+#[derive(Eq, PartialEq)]
+enum SessionState {
+    WaitingForLogin,
+    Ready,
+}
+
 pub struct ClientWsSession {
     client_server: Addr<ClientServer>,
     federation_server: Addr<FederationServer>,
+    state: SessionState,
 }
 
 impl ClientWsSession {
@@ -19,6 +26,7 @@ impl ClientWsSession {
         ClientWsSession {
             client_server,
             federation_server,
+            state: SessionState::WaitingForLogin,
         }
     }
 }
@@ -27,6 +35,7 @@ impl Actor for ClientWsSession {
     type Context = ws::WebsocketContext<Self>;
 }
 
+// TODO break up handle into smaller methods
 impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
     fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
         match msg {
@@ -48,27 +57,53 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                 };
 
                 match msg {
+                    // Log in to the server
+                    ClientMessage::Login(login) => {
+                        // Register with the server
+                        self.client_server.do_send(Connect {
+                            session: ctx.address(),
+                            login,
+                        });
+                        self.state = SessionState::Ready;
+
+                        let success = serde_cbor::to_vec(&ServerMessage::success()).unwrap();
+                        ctx.binary(success);
+                    },
+                    // Publish an initialisation key from the server
                     ClientMessage::PublishInitKey(publish) => {
+                        if self.state != SessionState::Ready {
+                            let err = serde_cbor::to_vec(&ServerMessage::Error(Error::NotLoggedIn))
+                                .unwrap();
+                            ctx.binary(err);
+                        }
+
                         self.client_server.do_send(publish);
 
                         let success = serde_cbor::to_vec(&ServerMessage::success()).unwrap();
                         ctx.binary(success);
                     },
+                    // Request an initialisation key from the server
                     ClientMessage::RequestInitKey(request) => {
+                        if self.state != SessionState::Ready {
+                            let err = serde_cbor::to_vec(&ServerMessage::Error(Error::NotLoggedIn))
+                                .unwrap();
+                            ctx.binary(err);
+                        }
+
                         match self.client_server.send(request).wait() {
-                            Ok(Some(key)) => {
+                            Ok(Some(key)) => { // Key returned
                                 let key = serde_cbor::to_vec(
                                     &ServerMessage::Success(Success::Key(key))
                                 ).unwrap();
                                 ctx.binary(key);
                             },
-                            Ok(None) => {
+                            Ok(None) => { // No key
                                 let err = serde_cbor::to_vec(
                                     &ServerMessage::Error(Error::IdNotFound)
                                 ).unwrap();
                                 ctx.binary(err);
                             },
-                            Err(_) => {
+                            Err(_) => { // Internal error (with actor?)
                                 let err = serde_cbor::to_vec(
                                     &ServerMessage::Error(Error::Internal)
                                 ).unwrap();
@@ -76,7 +111,14 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                             }
                         }
                     },
+                    // Federate with another server
                     ClientMessage::Federate(federate) => {
+                        if self.state != SessionState::Ready {
+                            let err = serde_cbor::to_vec(&ServerMessage::Error(Error::NotLoggedIn))
+                                .unwrap();
+                            ctx.binary(err);
+                        }
+
                         // TODO check url is valid
 
                         let res = catch! {

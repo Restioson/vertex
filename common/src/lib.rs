@@ -10,6 +10,12 @@ pub enum ClientMessage {
     PublishInitKey(PublishInitKey),
     RequestInitKey(RequestInitKey),
     Federate(Federate),
+    Login(Login),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Login {
+    pub uuid: Uuid,
 }
 
 #[derive(Debug, Message, Serialize, Deserialize)]
@@ -53,6 +59,7 @@ pub enum Error {
     Internal,
     InvalidUrl,
     WsConnectionError,
+    NotLoggedIn,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
