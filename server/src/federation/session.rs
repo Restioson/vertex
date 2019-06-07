@@ -8,7 +8,6 @@ use websocket::sender::Writer;
 use websocket::receiver::Reader;
 use websocket::stream::sync::TcpStream;
 use futures::Async;
-use either::Either;
 use url::Url;
 use serde::{Serialize, Deserialize};
 use super::{FederationServer, Connect};
@@ -59,17 +58,12 @@ impl Into<Vec<u8>> for SendMessage {
 }
 
 #[derive(Message)]
-pub struct ServerWsSession(Either<Addr<IncomingSession>, Addr<OutgoingSession>>);
+pub enum ServerWsSession {
+    Incoming(Addr<IncomingSession>),
+    Outgoing(Addr<OutgoingSession>),
+}
 
 impl ServerWsSession {
-    pub fn new_outgoing(addr: Addr<OutgoingSession>) -> Self {
-        ServerWsSession(Either::Right(addr))
-    }
-
-    fn new_incoming(addr: Addr<IncomingSession>) -> Self {
-        ServerWsSession(Either::Left(addr))
-    }
-
     pub fn start_incoming(
         request: HttpRequest,
         server: Data<Addr<FederationServer>>,
@@ -83,9 +77,10 @@ impl ServerWsSession {
     }
 
     pub fn send_message(&mut self, message: FederationMessage) {
-        match &mut self.0 {
-            Either::Left(inc) => inc.do_send(SendMessage { message }),
-            Either::Right(out) => out.do_send(SendMessage { message }),
+        let message = SendMessage { message };
+        match self {
+            ServerWsSession::Incoming(inc) => inc.do_send(message),
+            ServerWsSession::Outgoing(out) => out.do_send(message),
         }
     }
 
@@ -139,7 +134,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for IncomingSession {
                     println!("url: {}", text); //TODO
                     self.server.do_send(Connect {
                         url: Url::parse(&text).expect("invalid url"), // TODO <- return err properly
-                        session: ServerWsSession::new_incoming(ctx.address())
+                        session: ServerWsSession::Incoming(ctx.address())
                     });
                     ctx.binary(FederationMessage::Success(Success::NoData));
                 } else {
@@ -203,7 +198,7 @@ impl Actor for OutgoingSession {
     fn started(&mut self, ctx: &mut Context<Self>) {
         self.server.do_send(Connect {
             url: self.to.clone(),
-            session: ServerWsSession::new_outgoing(ctx.address()),
+            session: ServerWsSession::Outgoing(ctx.address()),
         });
     }
 }
