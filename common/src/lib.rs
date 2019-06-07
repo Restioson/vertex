@@ -44,6 +44,7 @@ impl From<ClientSentMessage> for ForwardedMessage {
 pub struct Login {
     pub id: Uuid,
 }
+
 impl ClientMessageType for Login {}
 
 #[derive(Debug, Message, Serialize, Deserialize)]

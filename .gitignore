@@ -3,3 +3,4 @@
 *.iml
 .idea/
 common/Cargo.lock
+client/Cargo.lock
