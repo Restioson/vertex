@@ -168,3 +168,11 @@ impl Handler<IdentifiedMessage<Edit>> for ClientServer {
         self.send_to_room(&m.msg.room_id.clone(), ServerMessage::Edit(m.msg), m.id);
     }
 }
+
+impl Handler<IdentifiedMessage<Delete>> for ClientServer {
+    type Result = ();
+
+    fn handle(&mut self, m: IdentifiedMessage<Delete>, _: &mut Context<Self>) {
+        self.send_to_room(&m.msg.room_id.clone(), ServerMessage::Delete(m.msg), m.id);
+    }
+}

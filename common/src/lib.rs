@@ -17,6 +17,7 @@ pub enum ClientMessage {
     EditMessage(Edit),
     CreateRoom,
     JoinRoom(Uuid),
+    Delete(Delete),
 }
 
 #[derive(Debug, Message, Serialize, Deserialize)]
@@ -50,6 +51,15 @@ pub struct Edit {
 
 impl ClientMessageType for Edit {}
 
+#[derive(Debug, Clone, Message, Serialize, Deserialize)]
+pub struct Delete {
+    pub message_id: Uuid,
+    pub room_id: Uuid,
+}
+
+impl ClientMessageType for Delete {}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
     pub id: Uuid,
@@ -81,6 +91,7 @@ pub enum ServerMessage {
     Error(Error),
     Message(ForwardedMessage),
     Edit(Edit),
+    Delete(Delete),
 }
 
 impl ServerMessage {

@@ -10,7 +10,7 @@ Vertex is a WIP end-to-end encrypted, decentralised, federated chat platform bui
 - [ ] Basic Messaging:
   - [x] Message routing to locally-connected clients
   - [x] Message editing
-  - [ ] Message deletion
+  - [x] Message deletion
   - [ ] Message history
 - [ ] Client:
   - [ ] Basic GUI electron client
