@@ -5,6 +5,14 @@
 Vertex is a WIP end-to-end encrypted, decentralised, federated chat platform built on top of 
 [MLS](https://messaginglayersecurity.rocks).
 
+## Installation
+1. Install the latest Rust stable compiler
+2. Install [`wasm-pack`](https://rustwasm.github.io/wasm-pack/installer/)
+
+## Running
+To run the server, do `cargo run` in the `server/` directory. You can pass it a port to run on,
+e.g `cargo run -- 8081`.
+
 ## Objectives
 
 - [ ] Basic Messaging:
