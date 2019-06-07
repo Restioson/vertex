@@ -70,7 +70,7 @@ fn listen_loop(client: &mut Client<TcpStream>) {
 
                 println!("{:?}", msg);
             },
-            Err(e) => eprintln!("{:?}", e),
+            Err(e) => panic!("{:?}", e),
         }
     }
 }
