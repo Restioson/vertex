@@ -64,6 +64,10 @@ impl ClientWsSession {
                         self.client_server.do_send(IdentifiedMessage { id, msg });
                         ServerMessage::success()
                     },
+                    ClientMessage::EditMessage(edit) => {
+                        self.client_server.do_send(IdentifiedMessage { id, msg: edit });
+                        ServerMessage::success()
+                    },
                     ClientMessage::JoinRoom(room) => { // TODO check that it worked lol
                         self.client_server.do_send(IdentifiedMessage { id, msg: Join { room } });
                         ServerMessage::success()

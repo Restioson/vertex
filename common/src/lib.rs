@@ -7,12 +7,14 @@ use uuid::Uuid;
 
 pub trait ClientMessageType {}
 
+// TODO wrapper newtypes for uuid's e.g messageid, roomid
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
     PublishInitKey(PublishInitKey),
     RequestInitKey(RequestInitKey),
     Login(Login),
     SendMessage(ClientSentMessage),
+    EditMessage(Edit),
     CreateRoom,
     JoinRoom(Uuid),
 }
@@ -40,6 +42,14 @@ impl From<ClientSentMessage> for ForwardedMessage {
     }
 }
 
+#[derive(Debug, Clone, Message, Serialize, Deserialize)]
+pub struct Edit {
+    pub message_id: Uuid,
+    pub room_id: Uuid,
+}
+
+impl ClientMessageType for Edit {}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
     pub id: Uuid,
@@ -65,11 +75,12 @@ impl Message for RequestInitKey {
     type Result = Option<InitKey>;
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
     Success(Success),
     Error(Error),
     Message(ForwardedMessage),
+    Edit(Edit),
 }
 
 impl ServerMessage {
@@ -84,7 +95,7 @@ impl Into<Bytes> for ServerMessage {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Error {
     InvalidMessage,
     InvalidInitKey,
@@ -96,11 +107,12 @@ pub enum Error {
     NotLoggedIn,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Success {
     NoData,
     Key(InitKey),
     Room { id: Uuid, },
+    MessageSent { id: Uuid },
 }
 
 /// Dummy type for init key

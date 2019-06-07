@@ -91,11 +91,11 @@ impl ClientServer {
         }
     }
 
-    fn send_to_room(&mut self, room: &Uuid, message: ForwardedMessage, sender: Uuid) {
+    fn send_to_room(&mut self, room: &Uuid, message: ServerMessage, sender: Uuid) {
         let room = self.rooms.get(room).unwrap();
         for client_id in room.clients.iter().filter(|id| **id != sender) { // TODO do not unwrap
             if let Some(client) = self.sessions.get_mut(client_id) {
-                client.do_send(SendMessage { message: ServerMessage::Message(message.clone()) });
+                client.do_send(SendMessage { message: message.clone() });
             }
         }
     }
@@ -134,7 +134,11 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
 
     fn handle(&mut self, m: IdentifiedMessage<ClientSentMessage>, _: &mut Context<Self>) {
         println!("msg: {:?}", m);
-        self.send_to_room(&m.msg.to_room.clone(), m.msg.into(), m.id);
+        self.send_to_room(
+            &m.msg.to_room.clone(),
+            ServerMessage::Message(m.msg.into()),
+            m.id,
+        );
     }
 }
 
@@ -154,5 +158,13 @@ impl Handler<IdentifiedMessage<Join>> for ClientServer {
 
     fn handle(&mut self, m: IdentifiedMessage<Join>, _: &mut Context<Self>) {
         self.rooms.get_mut(&m.msg.room).unwrap().add(m.id); // TODO don't unwrap
+    }
+}
+
+impl Handler<IdentifiedMessage<Edit>> for ClientServer {
+    type Result = ();
+
+    fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) {
+        self.send_to_room(&m.msg.room_id.clone(), ServerMessage::Edit(m.msg), m.id);
     }
 }
