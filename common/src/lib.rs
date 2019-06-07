@@ -13,17 +13,33 @@ pub enum ClientMessage {
     RequestInitKey(RequestInitKey),
     Federate(Federate),
     Login(Login),
-    SendMessage(SentMessage),
+    SendMessage(ClientSentMessage),
     CreateRoom,
+    JoinRoom(Uuid),
 }
 
 #[derive(Debug, Message, Serialize, Deserialize)]
-pub struct SentMessage {
+pub struct ClientSentMessage {
     pub to_room: Uuid,
     pub content: String,
 }
 
-impl ClientMessageType for SentMessage {}
+impl ClientMessageType for ClientSentMessage {}
+
+#[derive(Debug, Clone, Message, Serialize, Deserialize)]
+pub struct ForwardedMessage {
+    pub from_room: Uuid,
+    pub content: String,
+}
+
+impl From<ClientSentMessage> for ForwardedMessage {
+    fn from(msg: ClientSentMessage) -> ForwardedMessage {
+        ForwardedMessage {
+            from_room: msg.to_room,
+            content: msg.content,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
@@ -60,11 +76,18 @@ impl Message for RequestInitKey {
 pub enum ServerMessage {
     Success(Success),
     Error(Error),
+    Message(ForwardedMessage),
 }
 
 impl ServerMessage {
     pub fn success() -> Self {
         ServerMessage::Success(Success::NoData)
+    }
+}
+
+impl Into<Bytes> for ServerMessage {
+    fn into(self) -> Bytes {
+        serde_cbor::to_vec(&self).unwrap().into()
     }
 }
 

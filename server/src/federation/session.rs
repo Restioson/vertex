@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::{fmt::Debug, io::Cursor};
 use actix::prelude::*;
 use actix_web::web::{Data, Payload, HttpRequest, HttpResponse, Bytes};
 use actix_web_actors::ws::{self, WebsocketContext};
@@ -11,6 +11,7 @@ use futures::Async;
 use url::Url;
 use serde::{Serialize, Deserialize};
 use super::{FederationServer, Connect};
+use crate::SendMessage;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum FederationMessage {
@@ -40,18 +41,13 @@ pub enum Error {
     UnexpectedText,
 }
 
-#[derive(Debug, Serialize, Deserialize, Message)]
-struct SendMessage {
-    message: FederationMessage,
-}
-
-impl Into<Bytes> for SendMessage {
+impl<'a, T: Into<Bytes> + Debug + Serialize + Deserialize<'a>> Into<Bytes> for SendMessage<T> {
     fn into(self) -> Bytes {
         self.message.into()
     }
 }
 
-impl Into<Vec<u8>> for SendMessage {
+impl<'a, T: Into<Vec<u8>> + Debug + Serialize + Deserialize<'a>> Into<Vec<u8>> for SendMessage<T> {
     fn into(self) -> Vec<u8> {
         self.message.into()
     }
@@ -108,7 +104,7 @@ impl ServerWsSession {
     }
 }
 
-struct IncomingSession {
+pub struct IncomingSession {
     from: Option<Url>,
     server: Addr<FederationServer>,
 }
@@ -151,10 +147,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for IncomingSession {
     }
 }
 
-impl Handler<SendMessage> for IncomingSession {
+impl Handler<SendMessage<FederationMessage>> for IncomingSession {
     type Result = ();
 
-    fn handle(&mut self, msg: SendMessage, ctx: &mut WebsocketContext<Self>) {
+    fn handle(&mut self, msg: SendMessage<FederationMessage>, ctx: &mut WebsocketContext<Self>) {
         ctx.binary(msg);
     }
 }
@@ -224,10 +220,10 @@ impl StreamHandler<OwnedMessage, WebSocketError> for OutgoingSession {
     }
 }
 
-impl Handler<SendMessage> for OutgoingSession {
+impl Handler<SendMessage<FederationMessage>> for OutgoingSession {
     type Result = ();
 
-    fn handle(&mut self, msg: SendMessage, _: &mut Context<Self>) {
+    fn handle(&mut self, msg: SendMessage<FederationMessage>, _: &mut Context<Self>) {
         self.sender.send_message(&OwnedMessage::Binary(msg.into())).unwrap();
     }
 }

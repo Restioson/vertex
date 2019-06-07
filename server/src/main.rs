@@ -1,6 +1,6 @@
 #![feature(async_await)]
 
-use std::env;
+use std::{env, fmt::Debug};
 use actix::prelude::*;
 use actix_web::{web, App, HttpServer, HttpRequest, HttpResponse, Error};
 use actix_web::web::{Data, Payload};
@@ -11,6 +11,12 @@ mod federation;
 
 use client::{ClientWsSession, ClientServer};
 use federation::{ServerWsSession, FederationServer};
+
+
+#[derive(Debug, Message)]
+pub struct SendMessage<T: Debug> {
+    message: T,
+}
 
 fn dispatch_client_ws(
     request: HttpRequest,

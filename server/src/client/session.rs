@@ -1,13 +1,14 @@
 use std::io::Cursor;
 use std::time::Duration;
 use actix::prelude::*;
-use actix_web_actors::ws;
+use actix_web_actors::ws::{self, WebsocketContext};
 use websocket::message::OwnedMessage;
 use websocket::client::builder::ClientBuilder;
 use url::Url;
 use uuid::Uuid;
 use vertex_common::*;
 use super::*;
+use crate::SendMessage;
 use crate::federation::{OutgoingSession, FederationServer, WsReaderStreamAdapter};
 
 #[derive(Eq, PartialEq)]
@@ -46,12 +47,12 @@ impl ClientWsSession {
 }
 
 impl Actor for ClientWsSession {
-    type Context = ws::WebsocketContext<Self>;
+    type Context = WebsocketContext<Self>;
 }
 
 // TODO break up handle into smaller methods
 impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
-    fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
+    fn handle(&mut self, msg: ws::Message, ctx: &mut WebsocketContext<Self>) {
         match msg {
             ws::Message::Ping(msg) => ctx.pong(&msg),
             ws::Message::Text(_) => {
@@ -99,6 +100,26 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                             },
                         }
                     },
+                    ClientMessage::JoinRoom(room) => {
+                        match self.state {
+                            SessionState::WaitingForLogin => {
+                                let err = serde_cbor::to_vec(&ServerMessage::Error(Error::NotLoggedIn))
+                                    .unwrap();
+                                ctx.binary(err);
+                            },
+                            SessionState::Ready(id) => {
+                                self.client_server.do_send(
+                                    IdentifiedMessage { id, msg: Join { room } }
+                                ); // TODO check that it worked lol
+
+                                let success = serde_cbor::to_vec(
+                                    &ServerMessage::Success(Success::NoData)
+                                ).unwrap();
+
+                                ctx.binary(success);
+                            },
+                        }
+                    }
                     // Create a room
                     ClientMessage::CreateRoom => {
                         match self.state {
@@ -224,5 +245,13 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
             },
             _ => (),
         }
+    }
+}
+
+impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
+    type Result = ();
+
+    fn handle(&mut self, msg: SendMessage<ServerMessage>, ctx: &mut WebsocketContext<Self>) {
+        ctx.binary(msg);
     }
 }
