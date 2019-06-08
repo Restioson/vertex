@@ -5,3 +5,5 @@
 common/Cargo.lock
 client/Cargo.lock
 **/bin/
+**/dist/
+**/node_modules/
