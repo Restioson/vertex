@@ -32,6 +32,17 @@ pub struct Vertex {
 
 // Internal rust methods
 impl Vertex {
+    fn send(&mut self, msg: ClientMessage) -> Result<(), Error> {
+        if !self.socket.send(msg.into()) {
+            Err(Error::WebSocketError)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[wasm_bindgen] // Exported methods
+impl Vertex {
     pub fn new(socket: WebSocket) -> Self {
         Vertex {
             socket,
@@ -40,21 +51,10 @@ impl Vertex {
         }
     }
 
-    fn send(&mut self, msg: ClientMessage) -> Result<(), Error> {
-        if !self.socket.send(msg.into()) {
-            Err(Error::WebSocketError)
-        } else {
-            Ok(())
-        }
-    }
-
     pub fn handle(&mut self, binary: Vec<u8>) {
-       // TODO
+        // TODO
     }
-}
 
-#[wasm_bindgen] // Exported methods
-impl Vertex {
     /// Logs in, returning whether it was successful
     pub fn login(&mut self) -> bool {
         if !self.logged_in {
