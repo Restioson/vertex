@@ -1,5 +1,3 @@
-#![feature(async_await)]
-
 use std::{env, fmt::Debug};
 use actix::prelude::*;
 use actix_web::{web, App, HttpServer, HttpRequest, HttpResponse, Error};

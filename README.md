@@ -8,6 +8,7 @@ Vertex is a WIP end-to-end encrypted, decentralised, federated chat platform bui
 ## Installation
 1. Install the latest Rust stable compiler
 2. Install [`wasm-pack`](https://rustwasm.github.io/wasm-pack/installer/)
+3. Install `gcc`, `clang`, etc - general build tools (`clang` is important though).
 
 ## Running
 To run the server, do `cargo run` in the `server/` directory. You can pass it a port to run on,

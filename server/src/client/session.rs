@@ -1,5 +1,6 @@
 use std::io::Cursor;
 use actix::prelude::*;
+use actix_web::web::Bytes;
 use actix_web_actors::ws::{self, WebsocketContext};
 use uuid::Uuid;
 use vertex_common::*;
@@ -31,7 +32,7 @@ impl ClientWsSession {
 
 impl ClientWsSession {
     fn handle_message(&mut self, msg: ClientMessage, ctx: &mut WebsocketContext<Self>) {
-        match msg {
+        let response: ServerMessage = match msg {
             ClientMessage::Login(login) => {
                 // Register with the server
                 self.client_server.do_send(Connect {
@@ -39,27 +40,24 @@ impl ClientWsSession {
                     login: login.clone(),
                 });
                 self.state = SessionState::Ready(login.id);
-
-                let success = serde_cbor::to_vec(&ServerMessage::success()).unwrap();
-                ctx.binary(success);
+                ServerMessage::success()
             },
             _ => self.handle_authenticated_message(msg, ctx),
-        }
+        };
+
+        let binary: Bytes = response.into();
+        ctx.binary(binary);
     }
 
     fn handle_authenticated_message(
         &mut self,
         msg: ClientMessage,
         ctx: &mut WebsocketContext<Self>,
-    ) {
+    ) -> ServerMessage {
         match self.state {
-            SessionState::WaitingForLogin => {
-                let err = serde_cbor::to_vec(&ServerMessage::Error(Error::NotLoggedIn))
-                    .unwrap();
-                ctx.binary(err);
-            },
+            SessionState::WaitingForLogin => ServerMessage::Error(Error::NotLoggedIn),
             SessionState::Ready(id) => {
-                let response = match msg {
+                match msg {
                     ClientMessage::SendMessage(msg) => {
                         self.client_server.do_send(IdentifiedMessage { id, msg });
                         ServerMessage::success()
@@ -93,9 +91,7 @@ impl ClientWsSession {
                         }
                     },
                     _ => unimplemented!(),
-                };
-
-                ctx.binary(serde_cbor::to_vec(&response).unwrap());
+                }
             }
         }
     }

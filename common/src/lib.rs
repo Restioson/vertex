@@ -1,9 +1,13 @@
 //! Some type definitions common between server and client
 use std::convert::TryFrom;
 use bytes::Bytes;
-use serde::{Serialize, Deserialize};
+
+#[cfg(feature = "enable-actix")]
 use actix::prelude::*;
 use uuid::Uuid;
+
+#[macro_use]
+extern crate serde_derive;
 
 pub trait ClientMessageType {}
 
@@ -20,7 +24,20 @@ pub enum ClientMessage {
     Delete(Delete),
 }
 
-#[derive(Debug, Message, Serialize, Deserialize)]
+impl Into<Bytes> for ClientMessage {
+    fn into(self) -> Bytes {
+        serde_cbor::to_vec(&self).unwrap().into()
+    }
+}
+
+impl Into<Vec<u8>> for ClientMessage {
+    fn into(self) -> Vec<u8> {
+        serde_cbor::to_vec(&self).unwrap()
+    }
+}
+
+#[cfg_attr(feature = "enable-actix", derive(Message))]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ClientSentMessage {
     pub to_room: Uuid,
     pub content: String,
@@ -28,7 +45,8 @@ pub struct ClientSentMessage {
 
 impl ClientMessageType for ClientSentMessage {}
 
-#[derive(Debug, Clone, Message, Serialize, Deserialize)]
+#[cfg_attr(feature = "enable-actix", derive(Message))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardedMessage {
     pub from_room: Uuid,
     pub content: String,
@@ -43,7 +61,8 @@ impl From<ClientSentMessage> for ForwardedMessage {
     }
 }
 
-#[derive(Debug, Clone, Message, Serialize, Deserialize)]
+#[cfg_attr(feature = "enable-actix", derive(Message))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Edit {
     pub message_id: Uuid,
     pub room_id: Uuid,
@@ -51,7 +70,8 @@ pub struct Edit {
 
 impl ClientMessageType for Edit {}
 
-#[derive(Debug, Clone, Message, Serialize, Deserialize)]
+#[cfg_attr(feature = "enable-actix", derive(Message))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delete {
     pub message_id: Uuid,
     pub room_id: Uuid,
@@ -67,7 +87,8 @@ pub struct Login {
 
 impl ClientMessageType for Login {}
 
-#[derive(Debug, Message, Serialize, Deserialize)]
+#[cfg_attr(feature = "enable-actix", derive(Message))]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PublishInitKey {
     pub id: Uuid,
     pub key: InitKey,
@@ -81,6 +102,7 @@ pub struct RequestInitKey {
 }
 impl ClientMessageType for RequestInitKey {}
 
+#[cfg(feature = "enable-actix")]
 impl Message for RequestInitKey {
     type Result = Option<InitKey>;
 }
@@ -103,6 +125,12 @@ impl ServerMessage {
 impl Into<Bytes> for ServerMessage {
     fn into(self) -> Bytes {
         serde_cbor::to_vec(&self).unwrap().into()
+    }
+}
+
+impl Into<Vec<u8>> for ServerMessage {
+    fn into(self) -> Vec<u8> {
+        serde_cbor::to_vec(&self).unwrap()
     }
 }
 

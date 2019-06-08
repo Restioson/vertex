@@ -17,4 +17,4 @@ websocket = "^0.22"
 url = "1.7.2"
 futures = "^0.1"
 uuid = { version = "^0.7", features = ["serde", "v4"] }
-vertex_common = { path = "../common/" }
+vertex_common = { path = "../common/", features = ["enable-actix"] }
