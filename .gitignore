@@ -8,5 +8,6 @@ client/Cargo.lock
 **/dist/
 **/node_modules/
 **/pkg/
-
 wasm-pack.log
+**/.crates.toml/
+.vscode/
