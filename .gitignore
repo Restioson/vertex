@@ -7,3 +7,6 @@ client/Cargo.lock
 **/bin/
 **/dist/
 **/node_modules/
+**/pkg/
+
+wasm-pack.log
