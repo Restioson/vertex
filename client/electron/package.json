@@ -10,6 +10,9 @@
   },
   "author": "gegy1000",
   "license": "AGPL-3.0",
+  "dependencies": {
+    "vertex-client": "file:../backend/pkg"
+  },
   "devDependencies": {
     "electron": "^5.0.2",
     "typescript": "^2.8.3"
