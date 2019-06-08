@@ -6,12 +6,12 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "start": "npm run build && ./node_modules/electron/dist/electron dist/main.js"
+    "start": "cd ../backend && wasm-pack build && cd ../electron && npm run build && electron dist/main.js"
   },
   "author": "gegy1000",
   "license": "AGPL-3.0",
   "dependencies": {
-    "vertex-client": "file:../backend/pkg"
+    "vertex_client": "file:../backend/pkg/"
   },
   "devDependencies": {
     "electron": "^5.0.2",

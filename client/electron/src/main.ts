@@ -1,6 +1,6 @@
 import { app, BrowserWindow } from "electron";
 import * as path from "path";
-import
+import { Vertex } from "vertex_client";
 
 let window: Electron.BrowserWindow
 
