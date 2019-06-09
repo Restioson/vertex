@@ -33,7 +33,11 @@ To run the client, do `wasm-pack build`
   - [ ] KeyTransparency or similar for Authentication Service
 - [ ] Voice chat
 
-
 ## Licensing
 
 The project is licensed under the GNU AGPL v3.
+
+## Contributions
+- [@Restioson](https://github.com/Restioson): programming
+- [@gegy1000](https://github.com/gegy1000): programming
+- @oof oof: icon
