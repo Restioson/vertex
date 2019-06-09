@@ -1,4 +1,4 @@
-use std::{ops::Deref, fmt::Debug, convert::Into};
+use std::{ops::Deref, fmt::Debug};
 use ccl::dhashmap::DHashMap;
 use uuid::Uuid;
 use actix::prelude::*;
@@ -136,7 +136,7 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
         println!("msg: {:?}", m);
         self.send_to_room(
             &m.msg.to_room.clone(),
-            ServerMessage::Message(m.msg.into()),
+            ServerMessage::Message(ForwardedMessage::from_message_and_author(m.msg, m.id)),
             m.id,
         );
     }

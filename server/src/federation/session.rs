@@ -1,4 +1,4 @@
-use std::{fmt::Debug, io::Cursor};
+use std::{fmt::Debug, io::{self, Cursor}};
 use actix::prelude::*;
 use actix_web::web::{Data, Payload, HttpRequest, HttpResponse, Bytes};
 use actix_web_actors::ws::{self, WebsocketContext};
@@ -167,6 +167,13 @@ impl Stream for WsReaderStreamAdapter {
         match res {
             Ok(msg) => Ok(Async::Ready(Some(msg))),
             Err(WebSocketError::NoDataAvailable) => Ok(Async::NotReady),
+            Err(WebSocketError::IoError(e)) => {
+                if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut {
+                    Ok(Async::NotReady)
+                } else {
+                    Err(WebSocketError::IoError(e))
+                }
+            },
             Err(e) => Err(e),
         }
     }

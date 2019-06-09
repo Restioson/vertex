@@ -6,10 +6,9 @@ edition = "2018"
 
 [dependencies]
 vertex_client_backend = { path = "../backend/" }
-
-[dependencies.gtk]
-version = "^0.6"
-features = ["v3_20"]
-
-[dependencies.gio]
-version = "^0.6"
+gio = "^0.6"
+glib = "^0.7"
+url = "^1.7"
+lazy_static = "^1"
+uuid = { version = "^0.7", features = ["serde", "v4"] }
+gtk = { version = "^0.6", features = ["v3_20"] }

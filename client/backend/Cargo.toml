@@ -5,9 +5,9 @@ authors = ["Restioson <restiosondev@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-bytes = { version = "^0.4.12", features = ["serde"] }
-uuid = { version = "0.7", features = ["serde", "v4"] }
+websocket = "^0.22"
+uuid = { version = "^0.7", features = ["serde", "v4"] }
 serde = "^1"
-serde_derive = "^1"
 serde_cbor = "^0.9"
 vertex_common = { path = "../../common/" }
+url = "^1.7"

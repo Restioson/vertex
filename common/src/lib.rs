@@ -48,14 +48,16 @@ impl ClientMessageType for ClientSentMessage {}
 #[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardedMessage {
-    pub from_room: Uuid,
+    pub room: Uuid,
+    pub author: Uuid,
     pub content: String,
 }
 
-impl From<ClientSentMessage> for ForwardedMessage {
-    fn from(msg: ClientSentMessage) -> ForwardedMessage {
+impl ForwardedMessage {
+    pub fn from_message_and_author(msg: ClientSentMessage, author: Uuid) -> Self {
         ForwardedMessage {
-            from_room: msg.to_room,
+            room: msg.to_room,
+            author,
             content: msg.content,
         }
     }
@@ -110,7 +112,7 @@ impl Message for RequestInitKey {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
     Success(Success),
-    Error(Error),
+    Error(ServerError),
     Message(ForwardedMessage),
     Edit(Edit),
     Delete(Delete),
@@ -135,7 +137,7 @@ impl Into<Vec<u8>> for ServerMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Error {
+pub enum ServerError {
     InvalidMessage,
     InvalidInitKey,
     UnexpectedTextFrame,

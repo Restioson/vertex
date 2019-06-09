@@ -55,7 +55,7 @@ impl ClientWsSession {
         ctx: &mut WebsocketContext<Self>,
     ) -> ServerMessage {
         match self.state {
-            SessionState::WaitingForLogin => ServerMessage::Error(Error::NotLoggedIn),
+            SessionState::WaitingForLogin => ServerMessage::Error(ServerError::NotLoggedIn),
             SessionState::Ready(id) => {
                 match msg {
                     ClientMessage::SendMessage(msg) => {
@@ -85,9 +85,9 @@ impl ClientWsSession {
                             // Key returned
                             Ok(Some(key)) => ServerMessage::Success(Success::Key(key)),
                             // No key
-                            Ok(None) => ServerMessage::Error(Error::IdNotFound),
+                            Ok(None) => ServerMessage::Error(ServerError::IdNotFound),
                             // Internal error (with actor?)
-                            Err(_) => ServerMessage::Error(Error::Internal),
+                            Err(_) => ServerMessage::Error(ServerError::Internal),
                         }
                     },
                     _ => unimplemented!(),
@@ -106,7 +106,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
         match msg {
             ws::Message::Ping(msg) => ctx.pong(&msg),
             ws::Message::Text(_) => {
-                let error = serde_cbor::to_vec(&ServerMessage::Error(Error::UnexpectedTextFrame))
+                let error = serde_cbor::to_vec(&ServerMessage::Error(ServerError::UnexpectedTextFrame))
                     .unwrap();
                 ctx.binary(error);
             },
@@ -115,7 +115,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                 let msg = match serde_cbor::from_reader(&mut bin) {
                     Ok(m) => m,
                     Err(_) => {
-                        let error = serde_cbor::to_vec(&ServerMessage::Error(Error::InvalidMessage))
+                        let error = serde_cbor::to_vec(&ServerMessage::Error(ServerError::InvalidMessage))
                             .unwrap();
                         return ctx.binary(error);
                     }
