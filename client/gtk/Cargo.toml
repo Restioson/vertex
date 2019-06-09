@@ -8,5 +8,8 @@ edition = "2018"
 vertex_client_backend = { path = "../backend/" }
 
 [dependencies.gtk]
-version = "0.6.0"
-features = ["v3_16"]
+version = "^0.6"
+features = ["v3_20"]
+
+[dependencies.gio]
+version = "^0.6"
