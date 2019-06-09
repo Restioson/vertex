@@ -1,9 +1,11 @@
-use gio::prelude::*;
-use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Entry, TextView};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use gio::prelude::*;
+use gtk::prelude::*;
+use glib::Sender;
+use gtk::{Application, ApplicationWindow, Entry, TextView, ListBox, Label, TextBuffer};
+use ccl::dhashmap::DHashMap;
 use url::Url;
 use uuid::Uuid;
 use vertex_client_backend::*;
@@ -28,6 +30,7 @@ macro_rules! clone {
 struct VertexApp {
     vertex: Vertex,
     room: Option<Uuid>,
+    rooms: DHashMap<Uuid, Sender<String>>,
 }
 
 fn main() {
@@ -45,6 +48,7 @@ fn create(gtk_app: &Application) {
             client_id: Uuid::new_v4(),
         }),
         room: None,
+        rooms: DHashMap::default(),
     }));
 
     let glade_src = include_str!("client.glade");
@@ -80,13 +84,13 @@ fn create(gtk_app: &Application) {
 
     action_rx.attach(
         None,
-        clone!(text_buffer => move |action| {
+        clone!(app => move |action| {
             match action {
                 Action::AddMessage(msg) => {
-                    text_buffer.insert(
-                        &mut text_buffer.get_end_iter(),
-                        &format!("{}: {}\n", msg.author, msg.content)
-                    );
+                    let room = app.lock().unwrap().room.unwrap();
+                    app.lock().unwrap().rooms.get_mut(&room).unwrap()
+                        .send(format!("{}: {}\n", msg.author, msg.content))
+                        .expect("Error sending message over channel");
                 },
                 _ => panic!("unimplemented"),
             }
@@ -96,6 +100,8 @@ fn create(gtk_app: &Application) {
     );
 
     let entry: Entry = builder.get_object("message_entry").unwrap();
+    let rooms: ListBox = builder.get_object("channels").unwrap();
+
     entry.connect_activate(move |entry| {
         let mut app = app.lock().unwrap();
         let msg = entry.get_text().unwrap().to_string();
@@ -115,11 +121,26 @@ fn create(gtk_app: &Application) {
                             &format!("Joined room {}\n", room),
                         );
 
-                        app.room = Some(room)
+                        app.room = Some(room);
+                        let txt: &str = &format!("#{}", room);
+                        let room_label = Label::new(Some(txt));
+                        rooms.insert(&room_label, -1);
+                        room_label.show_all();
+
+                        let (msg_tx, msg_rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+                        app.rooms.insert(room, msg_tx);
+                        msg_rx.attach(None, clone!(text_buffer => move |text| {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    &text,
+                                );
+                                glib::Continue(true)
+                            })
+                        );
                     } else {
                         text_buffer.insert(&mut text_buffer.get_end_iter(), "Room id required");
                     }
-                }
+                },
                 "/createroom" => {
                     text_buffer.insert(&mut text_buffer.get_end_iter(), "Creating room...\n");
                     let room = app.vertex.create_room().expect("Error creating room");
@@ -128,11 +149,24 @@ fn create(gtk_app: &Application) {
                         &format!("Joined room {}\n", room),
                     );
 
-                    app.room = Some(room)
-                }
-                _ => {
-                    text_buffer.insert(&mut text_buffer.get_end_iter(), "Unknown command\n");
-                }
+                    app.room = Some(room);
+                    let txt: &str = &format!("#{}", room);
+                    let room_label = Label::new(Some(txt));
+                    rooms.insert(&room_label, -1);
+                    room_label.show_all();
+
+                    let (msg_tx, msg_rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+                    app.rooms.insert(room, msg_tx);
+                    msg_rx.attach(None, clone!(text_buffer => move |text| {
+                            text_buffer.insert(
+                                &mut text_buffer.get_end_iter(),
+                                &text,
+                            );
+                            glib::Continue(true)
+                        })
+                    );
+                },
+                _ => text_buffer.insert(&mut text_buffer.get_end_iter(), "Unknown command\n"),
             }
 
             entry.set_text("");
