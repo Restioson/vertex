@@ -1,0 +1,12 @@
+[package]
+name = "vertex_client_gtk"
+version = "0.1.0"
+authors = ["Restioson <restiosondev@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+vertex_client_backend = { path = "../backend/" }
+
+[dependencies.gtk]
+version = "0.6.0"
+features = ["v3_16"]

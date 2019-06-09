@@ -1,36 +1,13 @@
 [package]
-name = "vertex_client"
+name = "vertex_client_backend"
 version = "0.1.0"
 authors = ["Restioson <restiosondev@gmail.com>"]
 edition = "2018"
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
 [dependencies]
-# The `console_error_panic_hook` crate provides better debugging of panics by
-# logging them with `console.error`. This is great for development, but requires
-# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
-# code size when deploying.
-console_error_panic_hook = { version = "0.1.1", optional = true }
-
-# `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
-# compared to the default allocator's ~10K. It is slower than the default
-# allocator, however.
-#
-# Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
-wee_alloc = { version = "0.4.2", optional = true }
-
-wasm-bindgen = { version = "^0.2", features = ["serde-serialize"] }
 bytes = { version = "^0.4.12", features = ["serde"] }
 uuid = { version = "0.7", features = ["serde", "v4"] }
 serde = "^1"
 serde_derive = "^1"
 serde_cbor = "^0.9"
 vertex_common = { path = "../../common/" }
-
-[dev-dependencies]
-wasm-bindgen-test = "0.2"
-
-[profile.release]
-opt-level = "s" # Optimize for small code size
