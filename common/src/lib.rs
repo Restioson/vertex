@@ -1,6 +1,6 @@
 //! Some type definitions common between server and client
-use std::convert::TryFrom;
 use bytes::Bytes;
+use std::convert::TryFrom;
 
 #[cfg(feature = "enable-actix")]
 use actix::prelude::*;
@@ -81,7 +81,6 @@ pub struct Delete {
 
 impl ClientMessageType for Delete {}
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
     pub id: Uuid,
@@ -152,7 +151,7 @@ pub enum ServerError {
 pub enum Success {
     NoData,
     Key(InitKey),
-    Room { id: Uuid, },
+    Room { id: Uuid },
     MessageSent { id: Uuid },
 }
 

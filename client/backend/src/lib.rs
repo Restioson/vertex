@@ -1,13 +1,13 @@
-use std::io::{self, Cursor};
 use std::convert::Into;
+use std::io::{self, Cursor};
 use std::time::Duration;
-use uuid::Uuid;
 use url::Url;
-use websocket::client::ClientBuilder;
-use websocket::sync::Client;
-use websocket::stream::sync::TcpStream;
-use websocket::{OwnedMessage, WebSocketError};
+use uuid::Uuid;
 use vertex_common::*;
+use websocket::client::ClientBuilder;
+use websocket::stream::sync::TcpStream;
+use websocket::sync::Client;
+use websocket::{OwnedMessage, WebSocketError};
 
 pub struct Config {
     pub url: Url,
@@ -27,7 +27,8 @@ impl Vertex {
             .expect("Error connecting to websocket");
 
         // TODO have a heartbeat
-        socket.stream_ref()
+        socket
+            .stream_ref()
             .set_read_timeout(Some(Duration::from_micros(1)))
             .unwrap();
 
@@ -54,7 +55,8 @@ impl Vertex {
     }
 
     fn send(&mut self, msg: ClientMessage) -> Result<(), Error> {
-        self.socket.send_message(&OwnedMessage::Binary(msg.into()))
+        self.socket
+            .send_message(&OwnedMessage::Binary(msg.into()))
             .map_err(Error::WebSocketError)
     }
 
@@ -64,11 +66,11 @@ impl Vertex {
             Err(WebSocketError::NoDataAvailable) => return None,
             Err(WebSocketError::IoError(e)) => {
                 if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut {
-                    return None
+                    return None;
                 } else {
                     Err(WebSocketError::IoError(e))
                 }
-            },
+            }
             Err(e) => Err(e),
         };
 
@@ -82,13 +84,14 @@ impl Vertex {
         Some(serde_cbor::from_reader(&mut bin).map_err(|_| Error::InvalidServerMessage))
     }
 
-    fn receive_blocking(&mut self) -> Result<ServerMessage, Error> { // TODO eventual timeout
+    fn receive_blocking(&mut self) -> Result<ServerMessage, Error> {
+        // TODO eventual timeout
         loop {
             match self.receive() {
                 Some(res) => return res,
                 None => (),
             };
-        };
+        }
     }
 
     pub fn login(&mut self) -> Result<(), Error> {
@@ -127,7 +130,10 @@ impl Vertex {
     /// Sends a message, returning whether it was successful
     pub fn send_message(&mut self, msg: String, to_room: Uuid) -> Result<(), Error> {
         if !self.logged_in {
-            self.send(ClientMessage::SendMessage(ClientSentMessage { to_room, content: msg, }))
+            self.send(ClientMessage::SendMessage(ClientSentMessage {
+                to_room,
+                content: msg,
+            }))
         } else {
             Err(Error::NotLoggedIn)
         }

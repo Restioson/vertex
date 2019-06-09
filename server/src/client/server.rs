@@ -1,11 +1,11 @@
-use std::{ops::Deref, fmt::Debug};
-use ccl::dhashmap::DHashMap;
-use uuid::Uuid;
-use actix::prelude::*;
-use actix::dev::{MessageResponse, ResponseChannel};
-use vertex_common::*;
 use super::ClientWsSession;
 use crate::SendMessage;
+use actix::dev::{MessageResponse, ResponseChannel};
+use actix::prelude::*;
+use ccl::dhashmap::DHashMap;
+use std::{fmt::Debug, ops::Deref};
+use uuid::Uuid;
+use vertex_common::*;
 
 struct Room {
     clients: Vec<Uuid>,
@@ -13,7 +13,9 @@ struct Room {
 
 impl Room {
     fn new(creator: Uuid) -> Self {
-        Room { clients: vec![creator] }
+        Room {
+            clients: vec![creator],
+        }
     }
 
     fn add(&mut self, client: Uuid) {
@@ -49,7 +51,7 @@ impl MessageResponse<ClientServer, IdentifiedMessage<CreateRoom>> for SendableUu
     fn handle<R: ResponseChannel<IdentifiedMessage<CreateRoom>>>(
         self,
         _: &mut Context<ClientServer>,
-        tx: Option<R>
+        tx: Option<R>,
     ) {
         if let Some(tx) = tx {
             tx.send(self)
@@ -93,9 +95,12 @@ impl ClientServer {
 
     fn send_to_room(&mut self, room: &Uuid, message: ServerMessage, sender: Uuid) {
         let room = self.rooms.get(room).unwrap();
-        for client_id in room.clients.iter().filter(|id| **id != sender) { // TODO do not unwrap
+        for client_id in room.clients.iter().filter(|id| **id != sender) {
+            // TODO do not unwrap
             if let Some(client) = self.sessions.get_mut(client_id) {
-                client.do_send(SendMessage { message: message.clone() });
+                client.do_send(SendMessage {
+                    message: message.clone(),
+                });
             }
         }
     }

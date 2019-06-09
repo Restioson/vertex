@@ -1,17 +1,20 @@
-use std::{fmt::Debug, io::{self, Cursor}};
+use super::{Connect, FederationServer};
+use crate::SendMessage;
 use actix::prelude::*;
-use actix_web::web::{Data, Payload, HttpRequest, HttpResponse, Bytes};
+use actix_web::web::{Bytes, Data, HttpRequest, HttpResponse, Payload};
 use actix_web_actors::ws::{self, WebsocketContext};
+use futures::Async;
+use serde::{Deserialize, Serialize};
+use std::{
+    fmt::Debug,
+    io::{self, Cursor},
+};
+use url::Url;
 use websocket::message::OwnedMessage;
+use websocket::receiver::Reader;
 use websocket::result::WebSocketError;
 use websocket::sender::Writer;
-use websocket::receiver::Reader;
 use websocket::stream::sync::TcpStream;
-use futures::Async;
-use url::Url;
-use serde::{Serialize, Deserialize};
-use super::{FederationServer, Connect};
-use crate::SendMessage;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum FederationMessage {
@@ -86,7 +89,7 @@ impl ServerWsSession {
 
     fn handle_binary(
         binary: Bytes,
-        _server: &mut Addr<FederationServer>
+        _server: &mut Addr<FederationServer>,
     ) -> Option<FederationMessage> {
         let cursor = Cursor::new(binary);
         let msg = serde_cbor::from_reader(cursor).expect("invaild bytes"); // TODO <- return properly
@@ -95,7 +98,7 @@ impl ServerWsSession {
             FederationMessage::Success(s) => {
                 println!("Msg from federated server: {:?}", s);
                 Some(FederationMessage::Success(Success::NoData))
-            },
+            }
             FederationMessage::Error(e) => {
                 eprintln!("Error from federated server: {:?}", e);
                 None
@@ -111,7 +114,7 @@ pub struct IncomingSession {
 
 impl IncomingSession {
     fn new(server: Addr<FederationServer>) -> Self {
-        IncomingSession { from: None, server, }
+        IncomingSession { from: None, server }
     }
 }
 
@@ -122,26 +125,24 @@ impl Actor for IncomingSession {
 impl StreamHandler<ws::Message, ws::ProtocolError> for IncomingSession {
     fn handle(&mut self, msg: ws::Message, ctx: &mut WebsocketContext<Self>) {
         match msg {
-            ws::Message::Ping(msg) => {
-                ctx.pong(&msg)
-            },
+            ws::Message::Ping(msg) => ctx.pong(&msg),
             ws::Message::Text(text) => {
                 if self.from.is_none() {
                     println!("url: {}", text); //TODO
                     self.server.do_send(Connect {
                         url: Url::parse(&text).expect("invalid url"), // TODO <- return err properly
-                        session: ServerWsSession::Incoming(ctx.address())
+                        session: ServerWsSession::Incoming(ctx.address()),
                     });
                     ctx.binary(FederationMessage::Success(Success::NoData));
                 } else {
                     ctx.binary(ServerWsSession::handle_text()) // todo get rid of
                 }
-            },
+            }
             ws::Message::Binary(bin) => {
                 if let Some(bin) = ServerWsSession::handle_binary(bin, &mut self.server) {
                     ctx.binary(bin)
                 }
-            },
+            }
             _ => println!("wat?"),
         }
     }
@@ -173,7 +174,7 @@ impl Stream for WsReaderStreamAdapter {
                 } else {
                     Err(WebSocketError::IoError(e))
                 }
-            },
+            }
             Err(e) => Err(e),
         }
     }
@@ -186,12 +187,8 @@ pub struct OutgoingSession {
 }
 
 impl OutgoingSession {
-    pub fn new(
-        to: Url,
-        server: Addr<FederationServer>,
-        sender: Writer<TcpStream>,
-    ) -> Self {
-        OutgoingSession { to, sender, server, }
+    pub fn new(to: Url, server: Addr<FederationServer>, sender: Writer<TcpStream>) -> Self {
+        OutgoingSession { to, sender, server }
     }
 }
 
@@ -211,17 +208,19 @@ impl StreamHandler<OwnedMessage, WebSocketError> for OutgoingSession {
         match msg {
             OwnedMessage::Ping(msg) => {
                 self.sender.send_message(&OwnedMessage::Ping(msg)).unwrap(); // TODO unwraps
-            },
+            }
             OwnedMessage::Text(_text) => {
-                self.sender.send_message(
-                    &OwnedMessage::Binary(ServerWsSession::handle_text().into()),
-                ).unwrap();
-            },
+                self.sender
+                    .send_message(&OwnedMessage::Binary(ServerWsSession::handle_text().into()))
+                    .unwrap();
+            }
             OwnedMessage::Binary(bin) => {
                 if let Some(bin) = ServerWsSession::handle_binary(bin.into(), &mut self.server) {
-                    self.sender.send_message(&OwnedMessage::Binary(bin.into())).unwrap();
+                    self.sender
+                        .send_message(&OwnedMessage::Binary(bin.into()))
+                        .unwrap();
                 }
-            },
+            }
             _ => println!("wat?"),
         }
     }
@@ -231,6 +230,8 @@ impl Handler<SendMessage<FederationMessage>> for OutgoingSession {
     type Result = ();
 
     fn handle(&mut self, msg: SendMessage<FederationMessage>, _: &mut Context<Self>) {
-        self.sender.send_message(&OwnedMessage::Binary(msg.into())).unwrap();
+        self.sender
+            .send_message(&OwnedMessage::Binary(msg.into()))
+            .unwrap();
     }
 }

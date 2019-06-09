@@ -1,9 +1,9 @@
-use std::sync::{Mutex, Arc};
-use std::thread;
-use std::time::Duration;
 use gio::prelude::*;
 use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, TextView, Entry};
+use gtk::{Application, ApplicationWindow, Entry, TextView};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
 use vertex_client_backend::*;
@@ -34,18 +34,20 @@ fn main() {
     let app = Application::new("com.github.restioson.vertex", Default::default())
         .expect("Error initializing GTK application");
 
-    app.connect_activate(move |app| create(app, Arc::new(Mutex::new(VertexApp {
-            vertex: Vertex::new(Config {
-                url: Url::parse("ws://127.0.0.1:8080/client/").unwrap(),
-                client_id: Uuid::new_v4(),
-            }),
-            room: None,
-    }))));
+    app.connect_activate(move |app| create(app));
 
     app.run(&std::env::args().collect::<Vec<_>>());
 }
 
-fn create(gtk_app: &Application, app: Arc<Mutex<VertexApp>>) {
+fn create(gtk_app: &Application) {
+    let app = Arc::new(Mutex::new(VertexApp {
+        vertex: Vertex::new(Config {
+            url: Url::parse("ws://127.0.0.1:8080/client/").unwrap(),
+            client_id: Uuid::new_v4(),
+        }),
+        room: None,
+    }));
+
     let glade_src = include_str!("client.glade");
     let builder = gtk::Builder::new_from_string(glade_src);
 
@@ -58,7 +60,11 @@ fn create(gtk_app: &Application, app: Arc<Mutex<VertexApp>>) {
     let text_buffer = messages.get_buffer().unwrap();
 
     let (action_tx, action_rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-    app.lock().unwrap().vertex.login().expect("Error logging in");
+    app.lock()
+        .unwrap()
+        .vertex
+        .login()
+        .expect("Error logging in");
 
     thread::spawn(clone!(app => move || {
         loop {
@@ -72,19 +78,22 @@ fn create(gtk_app: &Application, app: Arc<Mutex<VertexApp>>) {
         }
     }));
 
-    action_rx.attach(None, clone!(text_buffer => move |action| {
-        match action {
-            Action::AddMessage(msg) => {
-                text_buffer.insert(
-                    &mut text_buffer.get_end_iter(),
-                    &format!("{}: {}\n", msg.author, msg.content)
-                );
-            },
-            _ => panic!("unimplemented"),
-        }
+    action_rx.attach(
+        None,
+        clone!(text_buffer => move |action| {
+            match action {
+                Action::AddMessage(msg) => {
+                    text_buffer.insert(
+                        &mut text_buffer.get_end_iter(),
+                        &format!("{}: {}\n", msg.author, msg.content)
+                    );
+                },
+                _ => panic!("unimplemented"),
+            }
 
-        glib::Continue(true)
-    }));
+            glib::Continue(true)
+        }),
+    );
 
     let entry: Entry = builder.get_object("message_entry").unwrap();
     entry.connect_activate(move |entry| {
@@ -98,21 +107,29 @@ fn create(gtk_app: &Application, app: Arc<Mutex<VertexApp>>) {
                 "/join" => {
                     if v.len() == 2 {
                         let room = Uuid::parse_str(v[1]).expect("Invalid room id");
-                        app.vertex.join_room(room.clone()).expect("Error joining room");
-                        text_buffer.insert(&mut text_buffer.get_end_iter(), &format!("Joined room {}\n", room));
+                        app.vertex
+                            .join_room(room.clone())
+                            .expect("Error joining room");
+                        text_buffer.insert(
+                            &mut text_buffer.get_end_iter(),
+                            &format!("Joined room {}\n", room),
+                        );
 
                         app.room = Some(room)
                     } else {
                         text_buffer.insert(&mut text_buffer.get_end_iter(), "Room id required");
                     }
-                },
+                }
                 "/createroom" => {
                     text_buffer.insert(&mut text_buffer.get_end_iter(), "Creating room...\n");
                     let room = app.vertex.create_room().expect("Error creating room");
-                    text_buffer.insert(&mut text_buffer.get_end_iter(), &format!("Joined room {}\n", room));
+                    text_buffer.insert(
+                        &mut text_buffer.get_end_iter(),
+                        &format!("Joined room {}\n", room),
+                    );
 
                     app.room = Some(room)
-                },
+                }
                 _ => {
                     text_buffer.insert(&mut text_buffer.get_end_iter(), "Unknown command\n");
                 }
@@ -123,11 +140,15 @@ fn create(gtk_app: &Application, app: Arc<Mutex<VertexApp>>) {
         }
 
         let room = app.room.expect("Not in a room").clone();
-        app.vertex.send_message(msg.to_string(), room)
+        app.vertex
+            .send_message(msg.to_string(), room)
             .expect("Error sending message"); // todo display error
 
         let name = app.vertex.username();
-        text_buffer.insert(&mut text_buffer.get_end_iter(), &format!("{}: {}\n", name, msg));
+        text_buffer.insert(
+            &mut text_buffer.get_end_iter(),
+            &format!("{}: {}\n", name, msg),
+        );
         entry.set_text("");
     });
 
