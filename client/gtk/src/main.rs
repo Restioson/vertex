@@ -35,7 +35,6 @@ fn main() {
         .expect("Error initializing GTK application");
 
     app.connect_activate(move |app| create(app));
-
     app.run(&std::env::args().collect::<Vec<_>>());
 }
 
@@ -54,6 +53,7 @@ fn create(gtk_app: &Application) {
     let window: ApplicationWindow = builder.get_object("window").unwrap();
     window.set_application(gtk_app);
     window.set_title("Vertex client");
+    window.set_icon_from_file("icon.png").expect("Error setting icon");
     window.set_default_size(640, 480);
 
     let messages: TextView = builder.get_object("messages").unwrap();
