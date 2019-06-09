@@ -49,7 +49,7 @@ impl Vertex {
             ServerMessage::Success(_) => None,
             ServerMessage::Error(e) => Some(Action::Error(Error::ServerError(e))),
             ServerMessage::Message(m) => Some(Action::AddMessage(m.into())),
-            _ => unimplemented!(),
+            _ => panic!("unimplemented"),
         }
     }
 
@@ -114,6 +114,16 @@ impl Vertex {
         }
     }
 
+    pub fn join_room(&mut self, room: Uuid) -> Result<(), Error> {
+        self.send(ClientMessage::JoinRoom(room))?;
+
+        match self.receive_blocking()? {
+            ServerMessage::Success(Success::NoData) => Ok(()),
+            ServerMessage::Error(e) => Err(Error::ServerError(e)),
+            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
+        }
+    }
+
     /// Sends a message, returning whether it was successful
     pub fn send_message(&mut self, msg: String, to_room: Uuid) -> Result<(), Error> {
         if !self.logged_in {
@@ -121,6 +131,10 @@ impl Vertex {
         } else {
             Err(Error::NotLoggedIn)
         }
+    }
+
+    pub fn username(&self) -> String {
+        format!("{}", self.id) // TODO lol
     }
 }
 
