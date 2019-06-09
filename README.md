@@ -24,8 +24,8 @@ To run the client, do `wasm-pack build`
   - [x] Message deletion
   - [ ] Message history
 - [ ] Client:
-  - [ ] Basic GUI electron client
-  - [ ] Web client
+  - [x] Basic GUI client
+  - [ ] Make it nicer to use -- gui, not commands
 - [ ] Login & persistent identity
 - [ ] Federation
 - [ ] Encryption
