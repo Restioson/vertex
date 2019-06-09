@@ -1,5 +1,5 @@
 # Vertex
-<img alt="Vertex logo" style="text-align: center;" src="https://i.imgur.com/HcHTAYS.png"/>
+![Vertex logo](client/gtk/icon.png)
 
 Vertex is a WIP end-to-end encrypted, decentralised, federated chat platform built on top of 
 [MLS](https://messaginglayersecurity.rocks).
@@ -33,7 +33,11 @@ To run the client, do `wasm-pack build`
   - [ ] KeyTransparency or similar for Authentication Service
 - [ ] Voice chat
 
-
 ## Licensing
 
 The project is licensed under the GNU AGPL v3.
+
+## Contributions
+- [@Restioson](https://github.com/Restioson): programming
+- [@gegy1000](https://github.com/gegy1000): programming
+- @oof oof: icon

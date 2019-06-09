@@ -1,7 +1,7 @@
-use url::Url;
-use ccl::dhashmap::DHashMap;
-use actix::prelude::*;
 use super::ServerWsSession;
+use actix::prelude::*;
+use ccl::dhashmap::DHashMap;
+use url::Url;
 
 #[derive(Message)]
 pub struct Connect {

@@ -1,12 +1,12 @@
-use std::io::Cursor;
+use super::*;
+use crate::federation::FederationServer;
+use crate::SendMessage;
 use actix::prelude::*;
 use actix_web::web::Bytes;
 use actix_web_actors::ws::{self, WebsocketContext};
+use std::io::Cursor;
 use uuid::Uuid;
 use vertex_common::*;
-use super::*;
-use crate::SendMessage;
-use crate::federation::FederationServer;
 
 #[derive(Eq, PartialEq)]
 enum SessionState {
@@ -21,7 +21,10 @@ pub struct ClientWsSession {
 }
 
 impl ClientWsSession {
-    pub fn new(client_server: Addr<ClientServer>, federation_server: Addr<FederationServer>) -> Self {
+    pub fn new(
+        client_server: Addr<ClientServer>,
+        federation_server: Addr<FederationServer>,
+    ) -> Self {
         ClientWsSession {
             client_server,
             federation_server,
@@ -41,7 +44,7 @@ impl ClientWsSession {
                 });
                 self.state = SessionState::Ready(login.id);
                 ServerMessage::success()
-            },
+            }
             _ => self.handle_authenticated_message(msg, ctx),
         };
 
@@ -55,23 +58,33 @@ impl ClientWsSession {
         ctx: &mut WebsocketContext<Self>,
     ) -> ServerMessage {
         match self.state {
-            SessionState::WaitingForLogin => ServerMessage::Error(Error::NotLoggedIn),
+            SessionState::WaitingForLogin => ServerMessage::Error(ServerError::NotLoggedIn),
             SessionState::Ready(id) => {
                 match msg {
                     ClientMessage::SendMessage(msg) => {
                         self.client_server.do_send(IdentifiedMessage { id, msg });
                         ServerMessage::success()
-                    },
+                    }
                     ClientMessage::EditMessage(edit) => {
-                        self.client_server.do_send(IdentifiedMessage { id, msg: edit });
+                        self.client_server
+                            .do_send(IdentifiedMessage { id, msg: edit });
                         ServerMessage::success()
-                    },
-                    ClientMessage::JoinRoom(room) => { // TODO check that it worked lol
-                        self.client_server.do_send(IdentifiedMessage { id, msg: Join { room } });
+                    }
+                    ClientMessage::JoinRoom(room) => {
+                        // TODO check that it worked lol
+                        self.client_server.do_send(IdentifiedMessage {
+                            id,
+                            msg: Join { room },
+                        });
                         ServerMessage::success()
-                    },
+                    }
                     ClientMessage::CreateRoom => {
-                        let id = self.client_server.send(IdentifiedMessage { id, msg: CreateRoom })
+                        let id = self
+                            .client_server
+                            .send(IdentifiedMessage {
+                                id,
+                                msg: CreateRoom,
+                            })
                             .wait()
                             .unwrap();
                         ServerMessage::Success(Success::Room { id: *id })
@@ -79,17 +92,17 @@ impl ClientWsSession {
                     ClientMessage::PublishInitKey(publish) => {
                         self.client_server.do_send(publish);
                         ServerMessage::success()
-                    },
+                    }
                     ClientMessage::RequestInitKey(request) => {
                         match self.client_server.send(request).wait() {
                             // Key returned
                             Ok(Some(key)) => ServerMessage::Success(Success::Key(key)),
                             // No key
-                            Ok(None) => ServerMessage::Error(Error::IdNotFound),
+                            Ok(None) => ServerMessage::Error(ServerError::IdNotFound),
                             // Internal error (with actor?)
-                            Err(_) => ServerMessage::Error(Error::Internal),
+                            Err(_) => ServerMessage::Error(ServerError::Internal),
                         }
-                    },
+                    }
                     _ => unimplemented!(),
                 }
             }
@@ -106,23 +119,25 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
         match msg {
             ws::Message::Ping(msg) => ctx.pong(&msg),
             ws::Message::Text(_) => {
-                let error = serde_cbor::to_vec(&ServerMessage::Error(Error::UnexpectedTextFrame))
-                    .unwrap();
+                let error =
+                    serde_cbor::to_vec(&ServerMessage::Error(ServerError::UnexpectedTextFrame))
+                        .unwrap();
                 ctx.binary(error);
-            },
+            }
             ws::Message::Binary(bin) => {
                 let mut bin = Cursor::new(bin);
                 let msg = match serde_cbor::from_reader(&mut bin) {
                     Ok(m) => m,
                     Err(_) => {
-                        let error = serde_cbor::to_vec(&ServerMessage::Error(Error::InvalidMessage))
-                            .unwrap();
+                        let error =
+                            serde_cbor::to_vec(&ServerMessage::Error(ServerError::InvalidMessage))
+                                .unwrap();
                         return ctx.binary(error);
                     }
                 };
 
                 self.handle_message(msg, ctx);
-            },
+            }
             _ => (),
         }
     }
