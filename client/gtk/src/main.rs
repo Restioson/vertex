@@ -31,6 +31,7 @@ struct VertexApp {
     vertex: Vertex,
     room: Option<Uuid>,
     rooms: DHashMap<Uuid, Sender<String>>,
+    room_list: Vec<Uuid>,
 }
 
 fn main() {
@@ -49,6 +50,7 @@ fn create(gtk_app: &Application) {
         }),
         room: None,
         rooms: DHashMap::default(),
+        room_list: Vec::new(),
     }));
 
     let glade_src = include_str!("client.glade");
@@ -102,6 +104,17 @@ fn create(gtk_app: &Application) {
     let entry: Entry = builder.get_object("message_entry").unwrap();
     let rooms: ListBox = builder.get_object("channels").unwrap();
 
+    rooms.connect_row_selected(clone!(app => move |rooms_list, row| {
+        if let Some(row) = row {
+            let idx = row.get_index();
+            assert!(idx >= 0, "channels row index must be >= 0!");
+            let idx = idx as usize;
+
+            let room = app.lock().unwrap().room_list[idx];
+            app.lock().unwrap().room = Some(room);
+        }
+    }));
+
     entry.connect_activate(move |entry| {
         let mut app = app.lock().unwrap();
         let msg = entry.get_text().unwrap().to_string();
@@ -125,6 +138,7 @@ fn create(gtk_app: &Application) {
                         let txt: &str = &format!("#{}", room);
                         let room_label = Label::new(Some(txt));
                         rooms.insert(&room_label, -1);
+                        app.room_list.push(room);
                         room_label.show_all();
 
                         let (msg_tx, msg_rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
@@ -153,6 +167,7 @@ fn create(gtk_app: &Application) {
                     let txt: &str = &format!("#{}", room);
                     let room_label = Label::new(Some(txt));
                     rooms.insert(&room_label, -1);
+                    app.room_list.push(room);
                     room_label.show_all();
 
                     let (msg_tx, msg_rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
@@ -179,10 +194,8 @@ fn create(gtk_app: &Application) {
             .expect("Error sending message"); // todo display error
 
         let name = app.vertex.username();
-        text_buffer.insert(
-            &mut text_buffer.get_end_iter(),
-            &format!("{}: {}\n", name, msg),
-        );
+        app.rooms.get(&room).unwrap().send(format!("{}: {}\n", name, msg))
+            .expect("Error sending message over channel to text view");
         entry.set_text("");
     });
 
