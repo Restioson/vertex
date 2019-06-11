@@ -143,7 +143,6 @@ impl Update for Win {
                 }
             },
             VertexMsg::Heartbeat => {
-                println!("heartbeat");
                 if let Err(_) = self.model.vertex.heartbeat() {
                     eprintln!("Server timed out");
                     std::process::exit(1);
