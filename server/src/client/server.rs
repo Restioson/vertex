@@ -123,7 +123,7 @@ impl Handler<Connect> for ClientServer {
                 .insert(connect.login.id, vec![connect.session_id]);
         }
 
-        self.sessions.insert(connect.session_id, connect.session); // TODO multiple clients per user
+        self.sessions.insert(connect.session_id, connect.session);
     }
 }
 
@@ -141,11 +141,12 @@ impl Handler<Disconnect> for ClientServer {
             sessions.remove(idx);
 
             if sessions.len() == 0 {
+                drop(sessions); // Necessary to stop double lock
                 self.user_to_sessions.remove(&user_id);
             }
         }
 
-        self.sessions.remove(&disconnect.session_id); // TODO multiple clients per user
+        self.sessions.remove(&disconnect.session_id);
     }
 }
 
