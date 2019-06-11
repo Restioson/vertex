@@ -64,7 +64,7 @@ impl ClientWsSession {
                     ClientMessage::SendMessage(msg) => {
                         self.client_server.do_send(IdentifiedMessage { id, msg });
                         ServerMessage::success()
-                    }
+                    },
                     ClientMessage::EditMessage(edit) => {
                         self.client_server
                             .do_send(IdentifiedMessage { id, msg: edit });
@@ -88,21 +88,7 @@ impl ClientWsSession {
                             .wait()
                             .unwrap();
                         ServerMessage::Success(Success::Room { id: *id })
-                    }
-                    ClientMessage::PublishInitKey(publish) => {
-                        self.client_server.do_send(publish);
-                        ServerMessage::success()
-                    }
-                    ClientMessage::RequestInitKey(request) => {
-                        match self.client_server.send(request).wait() {
-                            // Key returned
-                            Ok(Some(key)) => ServerMessage::Success(Success::Key(key)),
-                            // No key
-                            Ok(None) => ServerMessage::Error(ServerError::IdNotFound),
-                            // Internal error (with actor?)
-                            Err(_) => ServerMessage::Error(ServerError::Internal),
-                        }
-                    }
+                    },
                     _ => unimplemented!(),
                 }
             }

@@ -1,6 +1,5 @@
 //! Some type definitions common between server and client
 use bytes::Bytes;
-use std::convert::TryFrom;
 
 #[cfg(feature = "enable-actix")]
 use actix::prelude::*;
@@ -14,8 +13,6 @@ pub trait ClientMessageType {}
 // TODO wrapper newtypes for uuid's e.g messageid, roomid
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
-    PublishInitKey(PublishInitKey),
-    RequestInitKey(RequestInitKey),
     Login(Login),
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
@@ -88,26 +85,6 @@ pub struct Login {
 
 impl ClientMessageType for Login {}
 
-#[cfg_attr(feature = "enable-actix", derive(Message))]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PublishInitKey {
-    pub id: Uuid,
-    pub key: InitKey,
-}
-
-impl ClientMessageType for PublishInitKey {}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RequestInitKey {
-    pub id: Uuid,
-}
-impl ClientMessageType for RequestInitKey {}
-
-#[cfg(feature = "enable-actix")]
-impl Message for RequestInitKey {
-    type Result = Option<InitKey>;
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
     Success(Success),
@@ -138,7 +115,6 @@ impl Into<Vec<u8>> for ServerMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerError {
     InvalidMessage,
-    InvalidInitKey,
     UnexpectedTextFrame,
     IdNotFound,
     Internal,
@@ -150,33 +126,9 @@ pub enum ServerError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Success {
     NoData,
-    Key(InitKey),
     Room { id: Uuid },
     MessageSent { id: Uuid },
 }
-
-/// Dummy type for init key
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct InitKey {
-    bin: Bytes,
-}
-
-impl InitKey {
-    pub fn bytes(&self) -> Bytes {
-        self.bin.clone()
-    }
-}
-
-impl TryFrom<Bytes> for InitKey {
-    type Error = InvalidInitKey;
-
-    fn try_from(bin: Bytes) -> Result<InitKey, InvalidInitKey> {
-        Ok(InitKey { bin })
-    }
-}
-
-#[derive(Debug)]
-pub enum InvalidInitKey {}
 
 #[macro_export]
 macro_rules! catch {

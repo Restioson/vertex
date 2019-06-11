@@ -104,7 +104,7 @@ fn create(gtk_app: &Application) {
     let entry: Entry = builder.get_object("message_entry").unwrap();
     let rooms: ListBox = builder.get_object("channels").unwrap();
 
-    rooms.connect_row_selected(clone!(app => move |rooms_list, row| {
+    rooms.connect_row_selected(clone!(app => move |_rooms_listbox, row| {
         if let Some(row) = row {
             let idx = row.get_index();
             assert!(idx >= 0, "channels row index must be >= 0!");
@@ -194,7 +194,7 @@ fn create(gtk_app: &Application) {
             .expect("Error sending message"); // todo display error
 
         let name = app.vertex.username();
-        app.rooms.get(&room).unwrap().send(format!("{}: {}\n", name, msg))
+        app.rooms.index(&room).send(format!("{}: {}\n", name, msg))
             .expect("Error sending message over channel to text view");
         entry.set_text("");
     });

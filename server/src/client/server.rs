@@ -79,7 +79,6 @@ impl Message for CreateRoom {
 impl ClientMessageType for CreateRoom {}
 
 pub struct ClientServer {
-    init_keys: DHashMap<Uuid, InitKey>,
     sessions: DHashMap<Uuid, Addr<ClientWsSession>>,
     rooms: DHashMap<Uuid, Room>,
 }
@@ -87,14 +86,13 @@ pub struct ClientServer {
 impl ClientServer {
     pub fn new() -> Self {
         ClientServer {
-            init_keys: DHashMap::default(),
             sessions: DHashMap::default(),
             rooms: DHashMap::default(),
         }
     }
 
     fn send_to_room(&mut self, room: &Uuid, message: ServerMessage, sender: Uuid) {
-        let room = self.rooms.get(room).unwrap();
+        let room = self.rooms.index(room);
         for client_id in room.clients.iter().filter(|id| **id != sender) {
             // TODO do not unwrap
             if let Some(client) = self.sessions.get_mut(client_id) {
@@ -108,22 +106,6 @@ impl ClientServer {
 
 impl Actor for ClientServer {
     type Context = Context<Self>;
-}
-
-impl Handler<PublishInitKey> for ClientServer {
-    type Result = ();
-
-    fn handle(&mut self, msg: PublishInitKey, _: &mut Context<Self>) {
-        self.init_keys.insert(msg.id, msg.key);
-    }
-}
-
-impl Handler<RequestInitKey> for ClientServer {
-    type Result = Option<InitKey>;
-
-    fn handle(&mut self, req: RequestInitKey, _: &mut Context<Self>) -> Option<InitKey> {
-        self.init_keys.get(&req.id).map(|x| x.clone())
-    }
 }
 
 impl Handler<Connect> for ClientServer {
