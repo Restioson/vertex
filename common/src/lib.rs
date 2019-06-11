@@ -1,8 +1,8 @@
 //! Some definitions common between server and client
-use std::time::Duration;
-use bytes::Bytes;
 #[cfg(feature = "enable-actix")]
 use actix::prelude::*;
+use bytes::Bytes;
+use std::time::Duration;
 use uuid::Uuid;
 
 #[macro_use]
