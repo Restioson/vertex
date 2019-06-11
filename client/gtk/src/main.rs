@@ -1,5 +1,5 @@
 use gtk::prelude::*;
-use gtk::{Window, Entry, Label, ListBox, TextView, ListBoxRow, Separator, Orientation, Grid};
+use gtk::{Window, Entry, Label, ListBox, Separator, Orientation, Grid};
 use relm::{connect, connect_stream, Relm, Update, Widget};
 use relm_derive::*;
 use url::Url;
@@ -51,6 +51,18 @@ impl Win {
     }
 
     fn push_message(&self, author: &str, content: &str) {
+        let message = self.build_message(author, content);
+
+        let separator = Separator::new(Orientation::Horizontal);
+
+        separator.show_all();
+        message.show_all();
+
+        self.widgets.messages.insert(&separator, -1);
+        self.widgets.messages.insert(&message, -1);
+    }
+
+    fn build_message(&self, author: &str, content: &str) -> Grid {
         let grid = Grid::new();
         grid.insert_column(0);
         grid.insert_column(1);
@@ -66,13 +78,7 @@ impl Win {
         content.set_xalign(0.0);
         grid.attach(&content, 1, 0, 1, 1);
 
-        let separator = Separator::new(Orientation::Horizontal);
-
-        separator.show_all();
-        grid.show_all();
-
-        self.widgets.messages.insert(&separator, -1);
-        self.widgets.messages.insert(&grid, -1);
+        grid
     }
 }
 
@@ -81,7 +87,7 @@ impl Update for Win {
     type ModelParam = VertexArgs;
     type Msg = VertexMsg;
 
-    fn model(relm: &Relm<Win>, args: VertexArgs) -> VertexModel {
+    fn model(_relm: &Relm<Win>, args: VertexArgs) -> VertexModel {
         let mut model = VertexModel {
             vertex: Vertex::new(Config {
                 url: Url::parse("ws://127.0.0.1:8080/client/").unwrap(),
@@ -159,7 +165,7 @@ impl Update for Win {
                 }
             }
             VertexMsg::Heartbeat => {
-                if let Err(_) = self.model.vertex.heartbeat() {
+                if let Err(_) = self.model.vertex.dispatch_heartbeat() {
                     eprintln!("Server timed out");
                     std::process::exit(1);
                 }

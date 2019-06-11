@@ -1,14 +1,11 @@
 use std::convert::Into;
-use std::io::{self, Cursor};
-use std::time::{Duration, Instant};
 use url::Url;
 use vertex_common::*;
-use websocket::client::ClientBuilder;
-use websocket::stream::sync::TcpStream;
-use websocket::sync::Client;
-use websocket::{OwnedMessage, WebSocketError};
+use websocket::WebSocketError;
 
-pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
+mod net;
+
+use net::Net;
 
 pub struct Config {
     pub url: Url,
@@ -16,33 +13,22 @@ pub struct Config {
 }
 
 pub struct Vertex {
-    socket: Client<TcpStream>,
+    net: Net,
     id: UserId,
     logged_in: bool,
-    heartbeat: Instant,
 }
 
 impl Vertex {
     pub fn new(config: Config) -> Self {
-        let socket = ClientBuilder::from_url(&config.url)
-            .connect_insecure()
-            .expect("Error connecting to websocket");
-
-        socket
-            .stream_ref()
-            .set_read_timeout(Some(Duration::from_micros(1)))
-            .unwrap();
-
         Vertex {
-            socket,
+            net: Net::connect(&config.url),
             id: config.client_id,
             logged_in: false,
-            heartbeat: Instant::now(),
         }
     }
 
     pub fn handle(&mut self) -> Option<Action> {
-        let message = match self.receive() {
+        let message = match self.net.receive() {
             Some(Ok(m)) => m,
             Some(Err(e)) => return Some(Action::Error(e)),
             None => return None,
@@ -65,66 +51,11 @@ impl Vertex {
         }
     }
 
-    fn send(&mut self, msg: ClientRequest) -> Result<(), Error> {
-        self.socket
-            .send_message(&OwnedMessage::Binary(msg.into()))
-            .map_err(Error::WebSocketError)
-    }
-
-    fn request(&mut self, msg: ClientMessage) -> Result<RequestId, Error> {
-        let request = ClientRequest::new(msg);
-        let request_id = request.request_id;
-        self.send(request)?;
-        Ok(request_id)
-    }
-
-    fn receive(&mut self) -> Option<Result<ServerMessage, Error>> {
-        if Instant::now().duration_since(self.heartbeat) > HEARTBEAT_TIMEOUT {
-            return Some(Err(Error::ServerTimedOut));
-        }
-
-        let msg = match self.socket.recv_message() {
-            Ok(msg) => Ok(msg),
-            Err(WebSocketError::NoDataAvailable) => return None,
-            Err(WebSocketError::IoError(e)) => {
-                if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut {
-                    return None;
-                } else {
-                    Err(WebSocketError::IoError(e))
-                }
-            }
-            Err(e) => Err(e),
-        };
-
-        let bin = match msg {
-            Ok(OwnedMessage::Binary(bin)) => bin,
-            Ok(OwnedMessage::Pong(_)) => {
-                self.heartbeat = Instant::now();
-                return None;
-            }
-            Ok(_) => return Some(Err(Error::InvalidServerMessage)),
-            Err(e) => return Some(Err(Error::WebSocketError(e))),
-        };
-
-        let mut bin = Cursor::new(bin);
-        Some(serde_cbor::from_reader(&mut bin).map_err(|_| Error::InvalidServerMessage))
-    }
-
-    fn receive_blocking(&mut self) -> Result<ServerMessage, Error> {
-        // TODO eventual timeout
-        loop {
-            match self.receive() {
-                Some(res) => return res,
-                None => (),
-            };
-        }
-    }
-
-    pub fn login(&mut self) -> Result<(), Error> {
+    pub fn login(&mut self) -> Result<()> {
         if !self.logged_in {
-            let request_id = self.request(ClientMessage::Login(Login { id: self.id }))?;
+            let request_id = self.net.request(ClientMessage::Login(Login { id: self.id }))?;
 
-            let msg = self.receive_blocking()?;
+            let msg = self.net.receive_blocking()?;
             match msg.clone() {
                 ServerMessage::Response {
                     response,
@@ -146,10 +77,10 @@ impl Vertex {
         }
     }
 
-    pub fn create_room(&mut self) -> Result<RoomId, Error> {
-        let request_id = self.request(ClientMessage::CreateRoom)?;
+    pub fn create_room(&mut self) -> Result<RoomId> {
+        let request_id = self.net.request(ClientMessage::CreateRoom)?;
 
-        let msg = self.receive_blocking()?;
+        let msg = self.net.receive_blocking()?;
         match msg.clone() {
             ServerMessage::Response {
                 response,
@@ -169,10 +100,10 @@ impl Vertex {
         }
     }
 
-    pub fn join_room(&mut self, room: RoomId) -> Result<(), Error> {
-        let request_id = self.request(ClientMessage::JoinRoom(room))?;
+    pub fn join_room(&mut self, room: RoomId) -> Result<()> {
+        let request_id = self.net.request(ClientMessage::JoinRoom(room))?;
 
-        let msg = self.receive_blocking()?;
+        let msg = self.net.receive_blocking()?;
         match msg.clone() {
             ServerMessage::Response {
                 response,
@@ -193,9 +124,9 @@ impl Vertex {
     }
 
     /// Sends a message, returning the request id if it was sent successfully
-    pub fn send_message(&mut self, msg: String, to_room: RoomId) -> Result<RequestId, Error> {
+    pub fn send_message(&mut self, msg: String, to_room: RoomId) -> Result<RequestId> {
         if !self.logged_in {
-            self.request(ClientMessage::SendMessage(ClientSentMessage {
+            self.net.request(ClientMessage::SendMessage(ClientSentMessage {
                 to_room,
                 content: msg,
             }))
@@ -204,15 +135,14 @@ impl Vertex {
         }
     }
 
-    /// Should be called once every `HEARTBEAT_INTERVAL`
-    pub fn heartbeat(&mut self) -> Result<(), Error> {
-        self.socket
-            .send_message(&OwnedMessage::Ping(vec![]))
-            .map_err(Error::WebSocketError)
-    }
-
     pub fn username(&self) -> String {
         format!("{}", self.id.0) // TODO lol
+    }
+
+    /// Should be called once every `HEARTBEAT_INTERVAL`
+    #[inline]
+    pub fn dispatch_heartbeat(&mut self) -> Result<()> {
+        self.net.dispatch_heartbeat()
     }
 }
 
@@ -239,6 +169,8 @@ pub enum Action {
     AddMessage(Message),
     Error(Error),
 }
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
