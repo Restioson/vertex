@@ -10,6 +10,33 @@ extern crate serde_derive;
 
 pub trait ClientMessageType {}
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClientRequest {
+    pub message: ClientMessage,
+    pub request_id: Uuid,
+}
+
+impl ClientRequest {
+    pub fn new(message: ClientMessage) -> Self {
+        ClientRequest {
+            message,
+            request_id: Uuid::new_v4(),
+        }
+    }
+}
+
+impl Into<Bytes> for ClientRequest {
+    fn into(self) -> Bytes {
+        serde_cbor::to_vec(&self).unwrap().into()
+    }
+}
+
+impl Into<Vec<u8>> for ClientRequest {
+    fn into(self) -> Vec<u8> {
+        serde_cbor::to_vec(&self).unwrap()
+    }
+}
+
 // TODO wrapper newtypes for uuid's e.g messageid, roomid
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
@@ -19,18 +46,6 @@ pub enum ClientMessage {
     CreateRoom,
     JoinRoom(Uuid),
     Delete(Delete),
-}
-
-impl Into<Bytes> for ClientMessage {
-    fn into(self) -> Bytes {
-        serde_cbor::to_vec(&self).unwrap().into()
-    }
-}
-
-impl Into<Vec<u8>> for ClientMessage {
-    fn into(self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
-    }
 }
 
 #[cfg_attr(feature = "enable-actix", derive(Message))]
@@ -87,17 +102,14 @@ impl ClientMessageType for Login {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
-    Success(Success),
+    Response {
+        response: RequestResponse,
+        request_id: Uuid,
+    },
     Error(ServerError),
     Message(ForwardedMessage),
     Edit(Edit),
     Delete(Delete),
-}
-
-impl ServerMessage {
-    pub fn success() -> Self {
-        ServerMessage::Success(Success::NoData)
-    }
 }
 
 impl Into<Bytes> for ServerMessage {
@@ -109,6 +121,18 @@ impl Into<Bytes> for ServerMessage {
 impl Into<Vec<u8>> for ServerMessage {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RequestResponse {
+    Success(Success),
+    Error(ServerError),
+}
+
+impl RequestResponse {
+    pub fn success() -> Self {
+        RequestResponse::Success(Success::NoData)
     }
 }
 

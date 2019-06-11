@@ -1,11 +1,11 @@
+use ccl::dhashmap::DHashMap;
+use gio::prelude::*;
+use glib::Sender;
+use gtk::prelude::*;
+use gtk::{Application, ApplicationWindow, Entry, Label, ListBox, TextBuffer, TextView};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use gio::prelude::*;
-use gtk::prelude::*;
-use glib::Sender;
-use gtk::{Application, ApplicationWindow, Entry, TextView, ListBox, Label, TextBuffer};
-use ccl::dhashmap::DHashMap;
 use url::Url;
 use uuid::Uuid;
 use vertex_client_backend::*;
@@ -59,7 +59,9 @@ fn create(gtk_app: &Application) {
     let window: ApplicationWindow = builder.get_object("window").unwrap();
     window.set_application(gtk_app);
     window.set_title("Vertex client");
-    window.set_icon_from_file("icon.png").expect("Error setting icon");
+    window
+        .set_icon_from_file("icon.png")
+        .expect("Error setting icon");
     window.set_default_size(640, 480);
 
     let messages: TextView = builder.get_object("messages").unwrap();
@@ -143,18 +145,20 @@ fn create(gtk_app: &Application) {
 
                         let (msg_tx, msg_rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
                         app.rooms.insert(room, msg_tx);
-                        msg_rx.attach(None, clone!(text_buffer => move |text| {
+                        msg_rx.attach(
+                            None,
+                            clone!(text_buffer => move |text| {
                                 text_buffer.insert(
                                     &mut text_buffer.get_end_iter(),
                                     &text,
                                 );
                                 glib::Continue(true)
-                            })
+                            }),
                         );
                     } else {
                         text_buffer.insert(&mut text_buffer.get_end_iter(), "Room id required");
                     }
-                },
+                }
                 "/createroom" => {
                     text_buffer.insert(&mut text_buffer.get_end_iter(), "Creating room...\n");
                     let room = app.vertex.create_room().expect("Error creating room");
@@ -172,15 +176,17 @@ fn create(gtk_app: &Application) {
 
                     let (msg_tx, msg_rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
                     app.rooms.insert(room, msg_tx);
-                    msg_rx.attach(None, clone!(text_buffer => move |text| {
+                    msg_rx.attach(
+                        None,
+                        clone!(text_buffer => move |text| {
                             text_buffer.insert(
                                 &mut text_buffer.get_end_iter(),
                                 &text,
                             );
                             glib::Continue(true)
-                        })
+                        }),
                     );
-                },
+                }
                 _ => text_buffer.insert(&mut text_buffer.get_end_iter(), "Unknown command\n"),
             }
 
@@ -194,7 +200,9 @@ fn create(gtk_app: &Application) {
             .expect("Error sending message"); // todo display error
 
         let name = app.vertex.username();
-        app.rooms.index(&room).send(format!("{}: {}\n", name, msg))
+        app.rooms
+            .index(&room)
+            .send(format!("{}: {}\n", name, msg))
             .expect("Error sending message over channel to text view");
         entry.set_text("");
     });

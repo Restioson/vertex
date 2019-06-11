@@ -40,24 +40,40 @@ impl Vertex {
     }
 
     pub fn handle(&mut self) -> Option<Action> {
-        let msg = match self.receive() {
+        let message = match self.receive() {
             Some(Ok(m)) => m,
             Some(Err(e)) => return Some(Action::Error(e)),
             None => return None,
         };
 
-        match msg {
-            ServerMessage::Success(_) => None,
+        match message {
+            ServerMessage::Response {
+                response,
+                request_id: _,
+            } => {
+                match response {
+                    // TODO associate with a particular message id: @gegy1000
+                    RequestResponse::Success(_) => None,
+                    RequestResponse::Error(e) => Some(Action::Error(Error::ServerError(e))),
+                }
+            }
             ServerMessage::Error(e) => Some(Action::Error(Error::ServerError(e))),
             ServerMessage::Message(m) => Some(Action::AddMessage(m.into())),
             _ => panic!("unimplemented"),
         }
     }
 
-    fn send(&mut self, msg: ClientMessage) -> Result<(), Error> {
+    fn send(&mut self, msg: ClientRequest) -> Result<(), Error> {
         self.socket
             .send_message(&OwnedMessage::Binary(msg.into()))
             .map_err(Error::WebSocketError)
+    }
+
+    fn request(&mut self, msg: ClientMessage) -> Result<Uuid, Error> {
+        let request = ClientRequest::new(msg);
+        let request_id = request.request_id.clone();
+        self.send(request)?;
+        Ok(request_id)
     }
 
     fn receive(&mut self) -> Option<Result<ServerMessage, Error>> {
@@ -96,10 +112,23 @@ impl Vertex {
 
     pub fn login(&mut self) -> Result<(), Error> {
         if !self.logged_in {
-            self.send(ClientMessage::Login(Login { id: self.id }))?;
+            let request_id = self.request(ClientMessage::Login(Login { id: self.id }))?;
 
-            match self.receive_blocking()? {
-                ServerMessage::Success(Success::NoData) => Ok(()),
+            let msg = self.receive_blocking()?;
+            match msg.clone() {
+                ServerMessage::Response {
+                    response,
+                    request_id: response_id,
+                } => {
+                    match response {
+                        // TODO do this more asynchronously @gegy1000
+                        RequestResponse::Success(Success::NoData) if response_id == request_id => {
+                            Ok(())
+                        }
+                        RequestResponse::Error(e) => Err(Error::ServerError(e)),
+                        _ => Err(Error::IncorrectServerMessage(msg)),
+                    }
+                }
                 msg @ _ => Err(Error::IncorrectServerMessage(msg)),
             }
         } else {
@@ -108,29 +137,55 @@ impl Vertex {
     }
 
     pub fn create_room(&mut self) -> Result<Uuid, Error> {
-        self.send(ClientMessage::CreateRoom)?;
+        let request_id = self.request(ClientMessage::CreateRoom)?;
 
-        match self.receive_blocking()? {
-            ServerMessage::Success(Success::Room { id }) => Ok(id),
+        let msg = self.receive_blocking()?;
+        match msg.clone() {
+            ServerMessage::Response {
+                response,
+                request_id: response_id,
+            } => {
+                match response {
+                    // TODO do this more asynchronously @gegy1000
+                    RequestResponse::Success(Success::Room { id }) if response_id == request_id => {
+                        Ok(id)
+                    }
+                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
+                    _ => Err(Error::IncorrectServerMessage(msg)),
+                }
+            }
             ServerMessage::Error(e) => Err(Error::ServerError(e)),
-            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
+            _ => Err(Error::IncorrectServerMessage(msg)),
         }
     }
 
     pub fn join_room(&mut self, room: Uuid) -> Result<(), Error> {
-        self.send(ClientMessage::JoinRoom(room))?;
+        let request_id = self.request(ClientMessage::JoinRoom(room))?;
 
-        match self.receive_blocking()? {
-            ServerMessage::Success(Success::NoData) => Ok(()),
+        let msg = self.receive_blocking()?;
+        match msg.clone() {
+            ServerMessage::Response {
+                response,
+                request_id: response_id,
+            } => {
+                match response {
+                    // TODO do this more asynchronously @gegy1000
+                    RequestResponse::Success(Success::NoData) if response_id == request_id => {
+                        Ok(())
+                    }
+                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
+                    _ => Err(Error::IncorrectServerMessage(msg)),
+                }
+            }
             ServerMessage::Error(e) => Err(Error::ServerError(e)),
             msg @ _ => Err(Error::IncorrectServerMessage(msg)),
         }
     }
 
-    /// Sends a message, returning whether it was successful
-    pub fn send_message(&mut self, msg: String, to_room: Uuid) -> Result<(), Error> {
+    /// Sends a message, returning the request id if it was sent successfully
+    pub fn send_message(&mut self, msg: String, to_room: Uuid) -> Result<Uuid, Error> {
         if !self.logged_in {
-            self.send(ClientMessage::SendMessage(ClientSentMessage {
+            self.request(ClientMessage::SendMessage(ClientSentMessage {
                 to_room,
                 content: msg,
             }))
