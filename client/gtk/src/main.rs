@@ -7,6 +7,12 @@ use uuid::Uuid;
 use vertex_client_backend::*;
 use vertex_common::*;
 
+use clap::{Arg, App};
+
+const NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
+
 const GLADE_SRC: &str = include_str!("client.glade");
 
 struct VertexModel {
@@ -15,9 +21,12 @@ struct VertexModel {
     room_list: Vec<RoomId>,
 }
 
+struct VertexArgs {
+    user_id: Option<Uuid>,
+}
+
 #[derive(Msg)]
 enum VertexMsg {
-    Action(Action),
     SetRoom(usize),
     SendMessage(String),
     Lifecycle,
@@ -46,14 +55,14 @@ impl Win {
 
 impl Update for Win {
     type Model = VertexModel;
-    type ModelParam = ();
+    type ModelParam = VertexArgs;
     type Msg = VertexMsg;
 
-    fn model(_relm: &Relm<Win>, _param: ()) -> VertexModel {
+    fn model(relm: &Relm<Win>, args: VertexArgs) -> VertexModel {
         let mut model = VertexModel {
             vertex: Vertex::new(Config {
                 url: Url::parse("ws://127.0.0.1:8080/client/").unwrap(),
-                client_id: UserId(Uuid::new_v4()),
+                client_id: UserId(args.user_id.unwrap_or_else(|| Uuid::new_v4())),
             }),
             room: None,
             room_list: Vec::new(),
@@ -67,7 +76,6 @@ impl Update for Win {
 
     fn update(&mut self, event: VertexMsg) {
         match event {
-            VertexMsg::Action(action) => self.handle_action(action),
             VertexMsg::SetRoom(idx) => {
                 let room = self.model.room_list[idx];
                 self.model.room = Some(room);
@@ -129,7 +137,6 @@ impl Update for Win {
                 text_buffer.insert(&mut text_buffer.get_end_iter(), &format!("{}: {}\n", name, msg));
             }
             VertexMsg::Lifecycle => {
-                println!("lifecycle");
                 if let Some(action) = self.model.vertex.handle() {
                     println!("action {:?}", action);
                     self.handle_action(action);
@@ -197,5 +204,24 @@ struct Widgets {
 }
 
 fn main() {
-    Win::run(()).expect("failed to run window");
+    let matches = App::new(NAME)
+        .version(VERSION)
+        .author(AUTHORS)
+        .arg(Arg::with_name("user-id")
+            .short("i")
+            .long("userid")
+            .value_name("UUID")
+            .help("Sets the user id to login with")
+            .takes_value(true)
+        )
+        .get_matches();
+
+    let user_id = matches.value_of("user-id")
+        .and_then(|id| Uuid::parse_str(id).ok());
+
+    let args = VertexArgs {
+        user_id
+    };
+
+    Win::run(args).expect("failed to run window");
 }

@@ -13,6 +13,7 @@ uuid = { version = "^0.7", features = ["serde", "v4"] }
 gtk = { version = "^0.6", features = ["v3_20"] }
 relm = "^0.16"
 relm-derive = "^0.16"
+clap = "2.33"
 
 vertex_client_backend = { path = "../backend/" }
 vertex_common = { path = "../../common" }
