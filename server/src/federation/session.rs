@@ -143,7 +143,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for IncomingSession {
                     ctx.binary(bin)
                 }
             }
-            _ => println!("wat?"),
+            _ => (),
         }
     }
 }
@@ -221,7 +221,7 @@ impl StreamHandler<OwnedMessage, WebSocketError> for OutgoingSession {
                         .unwrap();
                 }
             }
-            _ => println!("wat?"),
+            _ => (),
         }
     }
 }

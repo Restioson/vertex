@@ -1,22 +1,38 @@
-use super::*;
-use crate::federation::FederationServer;
-use crate::SendMessage;
+use std::io::Cursor;
+use std::time::Instant;
 use actix::prelude::*;
 use actix_web::web::Bytes;
 use actix_web_actors::ws::{self, WebsocketContext};
-use std::io::Cursor;
+use uuid::Uuid;
 use vertex_common::*;
+use super::*;
+use crate::federation::FederationServer;
+use crate::SendMessage;
 
 #[derive(Eq, PartialEq)]
 enum SessionState {
     WaitingForLogin,
-    Ready(UserId), // TODO sessionid?
+    Ready(UserId),
 }
+
+impl SessionState {
+    fn user_id(&self) -> Option<UserId> {
+        match self {
+            SessionState::WaitingForLogin => None,
+            SessionState::Ready(id) => Some(id.clone())
+        }
+    }
+}
+
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
+pub struct SessionId(pub Uuid);
 
 pub struct ClientWsSession {
     client_server: Addr<ClientServer>,
     federation_server: Addr<FederationServer>,
     state: SessionState,
+    heartbeat: Instant,
+    session_id: SessionId,
 }
 
 impl ClientWsSession {
@@ -28,17 +44,24 @@ impl ClientWsSession {
             client_server,
             federation_server,
             state: SessionState::WaitingForLogin,
+            heartbeat: Instant::now(),
+            session_id: SessionId(Uuid::new_v4()),
         }
     }
 }
 
 impl ClientWsSession {
+    fn user_id(&self) -> Option<UserId> {
+        self.state.user_id()
+    }
+
     fn handle_message(&mut self, req: ClientRequest, ctx: &mut WebsocketContext<Self>) {
         let response = match req.message {
             ClientMessage::Login(login) => {
                 // Register with the server
                 self.client_server.do_send(Connect {
                     session: ctx.address(),
+                    session_id: self.session_id,
                     login: login.clone(),
                 });
                 self.state = SessionState::Ready(login.id);
@@ -59,25 +82,34 @@ impl ClientWsSession {
     fn handle_authenticated_message(
         &mut self,
         msg: ClientMessage,
-        ctx: &mut WebsocketContext<Self>,
+        _ctx: &mut WebsocketContext<Self>,
     ) -> RequestResponse {
         match self.state {
             SessionState::WaitingForLogin => RequestResponse::Error(ServerError::NotLoggedIn),
             SessionState::Ready(id) => {
                 match msg {
                     ClientMessage::SendMessage(msg) => {
-                        self.client_server.do_send(IdentifiedMessage { id, msg });
+                        self.client_server.do_send(IdentifiedMessage {
+                            user_id: id,
+                            session_id: self.session_id,
+                            msg,
+                        });
                         RequestResponse::success()
                     }
                     ClientMessage::EditMessage(edit) => {
                         self.client_server
-                            .do_send(IdentifiedMessage { id, msg: edit });
+                            .do_send(IdentifiedMessage {
+                                user_id: id,
+                                session_id: self.session_id,
+                                msg: edit
+                            });
                         RequestResponse::success()
                     }
                     ClientMessage::JoinRoom(room) => {
                         // TODO check that it worked lol
                         self.client_server.do_send(IdentifiedMessage {
-                            id,
+                            user_id: id,
+                            session_id: self.session_id,
                             msg: Join { room },
                         });
                         RequestResponse::success()
@@ -86,7 +118,8 @@ impl ClientWsSession {
                         let id = self
                             .client_server
                             .send(IdentifiedMessage {
-                                id,
+                                user_id: id,
+                                session_id: self.session_id,
                                 msg: CreateRoom,
                             })
                             .wait()
@@ -98,16 +131,41 @@ impl ClientWsSession {
             }
         }
     }
+
+    fn start_heartbeat(&mut self, ctx: &mut WebsocketContext<Self>) {
+        ctx.run_interval(HEARTBEAT_TIMEOUT, |session, ctx| {
+            if Instant::now().duration_since(session.heartbeat) > HEARTBEAT_TIMEOUT {
+                session.client_server.do_send(Disconnect {
+                    session_id: session.session_id, user_id: session.user_id(),
+                });
+                ctx.stop();
+            }
+        });
+    }
 }
 
 impl Actor for ClientWsSession {
     type Context = WebsocketContext<Self>;
+
+    fn started(&mut self, ctx: &mut WebsocketContext<Self>) {
+        self.start_heartbeat(ctx);
+    }
+
+    fn stopped(&mut self, ctx: &mut WebsocketContext<Self>) {
+        self.client_server.do_send(Disconnect { session_id: self.session_id, user_id: self.user_id(), });
+    }
 }
 
 impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
     fn handle(&mut self, msg: ws::Message, ctx: &mut WebsocketContext<Self>) {
         match msg {
-            ws::Message::Ping(msg) => ctx.pong(&msg),
+            ws::Message::Ping(msg) => {
+                self.heartbeat = Instant::now();
+                ctx.pong(&msg);
+            }
+            ws::Message::Pong(_) => {
+                self.heartbeat = Instant::now();
+            },
             ws::Message::Text(_) => {
                 let error =
                     serde_cbor::to_vec(&ServerMessage::Error(ServerError::UnexpectedTextFrame))
@@ -128,7 +186,11 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
 
                 self.handle_message(msg, ctx);
             }
-            _ => (),
+            ws::Message::Close(_) => {
+                self.client_server.do_send(Disconnect { session_id: self.session_id, user_id: self.user_id(), });
+                ctx.stop();
+            }
+            ws::Message::Nop => (),
         }
     }
 }

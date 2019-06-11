@@ -36,7 +36,6 @@ fn dispatch_server_ws(
     stream: Payload,
     srv: Data<Addr<FederationServer>>,
 ) -> Result<HttpResponse, Error> {
-    println!("wow");
     ServerWsSession::start_incoming(request, srv, stream)
 }
 

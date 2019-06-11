@@ -2,7 +2,7 @@ use ccl::dhashmap::DHashMap;
 use gio::prelude::*;
 use glib::Sender;
 use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Entry, Label, ListBox, TextBuffer, TextView};
+use gtk::{Application, ApplicationWindow, Entry, Label, ListBox, TextView};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -87,6 +87,17 @@ fn create(gtk_app: &Application) {
         }
     }));
 
+    thread::spawn(clone!(app => move || { // TODO propaganda panic
+        loop {
+            if let Err(_) = app.lock().unwrap().vertex.heartbeat() {
+                eprintln!("Server timed out");
+                std::process::exit(1);
+            }
+
+            thread::sleep(HEARTBEAT_INTERVAL);
+        }
+    }));
+
     action_rx.attach(
         None,
         clone!(app => move |action| {
@@ -97,7 +108,7 @@ fn create(gtk_app: &Application) {
                         .send(format!("{}: {}\n", msg.author, msg.content))
                         .expect("Error sending message over channel");
                 },
-                _ => panic!("unimplemented"),
+                _ => panic!("unimplemented {:?}", action),
             }
 
             glib::Continue(true)

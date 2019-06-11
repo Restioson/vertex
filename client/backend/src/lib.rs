@@ -1,13 +1,14 @@
 use std::convert::Into;
 use std::io::{self, Cursor};
-use std::time::Duration;
+use std::time::{Instant, Duration};
 use url::Url;
-use uuid::Uuid;
 use vertex_common::*;
 use websocket::client::ClientBuilder;
 use websocket::stream::sync::TcpStream;
 use websocket::sync::Client;
 use websocket::{OwnedMessage, WebSocketError};
+
+pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
 
 pub struct Config {
     pub url: Url,
@@ -18,6 +19,7 @@ pub struct Vertex {
     socket: Client<TcpStream>,
     id: UserId,
     logged_in: bool,
+    heartbeat: Instant,
 }
 
 impl Vertex {
@@ -26,7 +28,6 @@ impl Vertex {
             .connect_insecure()
             .expect("Error connecting to websocket");
 
-        // TODO have a heartbeat
         socket
             .stream_ref()
             .set_read_timeout(Some(Duration::from_micros(1)))
@@ -36,6 +37,7 @@ impl Vertex {
             socket,
             id: config.client_id,
             logged_in: false,
+            heartbeat: Instant::now(),
         }
     }
 
@@ -77,6 +79,10 @@ impl Vertex {
     }
 
     fn receive(&mut self) -> Option<Result<ServerMessage, Error>> {
+        if Instant::now().duration_since(self.heartbeat) > HEARTBEAT_TIMEOUT {
+            return Some(Err(Error::ServerTimedOut));
+        }
+
         let msg = match self.socket.recv_message() {
             Ok(msg) => Ok(msg),
             Err(WebSocketError::NoDataAvailable) => return None,
@@ -92,6 +98,10 @@ impl Vertex {
 
         let bin = match msg {
             Ok(OwnedMessage::Binary(bin)) => bin,
+            Ok(OwnedMessage::Pong(_)) => {
+                self.heartbeat = Instant::now();
+                return None;
+            },
             Ok(_) => return Some(Err(Error::InvalidServerMessage)),
             Err(e) => return Some(Err(Error::WebSocketError(e))),
         };
@@ -194,6 +204,11 @@ impl Vertex {
         }
     }
 
+    /// Should be called once every `HEARTBEAT_INTERVAL`
+    pub fn heartbeat(&mut self) -> Result<(), Error> {
+        self.socket.send_message(&OwnedMessage::Ping(vec![])).map_err(Error::WebSocketError)
+    }
+
     pub fn username(&self) -> String {
         format!("{}", self.id.0) // TODO lol
     }
@@ -233,4 +248,5 @@ pub enum Error {
     /// A message from the server that doesn't make sense in a specific context
     IncorrectServerMessage(ServerMessage),
     ServerError(ServerError),
+    ServerTimedOut,
 }

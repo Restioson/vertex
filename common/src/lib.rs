@@ -1,12 +1,14 @@
-//! Some type definitions common between server and client
+//! Some definitions common between server and client
+use std::time::Duration;
 use bytes::Bytes;
-
 #[cfg(feature = "enable-actix")]
 use actix::prelude::*;
 use uuid::Uuid;
 
 #[macro_use]
 extern crate serde_derive;
+
+pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub trait ClientMessageType {}
 
@@ -49,7 +51,6 @@ impl Into<Vec<u8>> for ClientRequest {
     }
 }
 
-// TODO wrapper newtypes for uuid's e.g messageid, roomid
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
     Login(Login),
