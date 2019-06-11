@@ -10,17 +10,29 @@ extern crate serde_derive;
 
 pub trait ClientMessageType {}
 
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct RequestId(pub Uuid);
+
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct UserId(pub Uuid);
+
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct RoomId(pub Uuid);
+
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct MessageId(pub Uuid);
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientRequest {
     pub message: ClientMessage,
-    pub request_id: Uuid,
+    pub request_id: RequestId,
 }
 
 impl ClientRequest {
     pub fn new(message: ClientMessage) -> Self {
         ClientRequest {
             message,
-            request_id: Uuid::new_v4(),
+            request_id: RequestId(Uuid::new_v4()),
         }
     }
 }
@@ -44,14 +56,14 @@ pub enum ClientMessage {
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
     CreateRoom,
-    JoinRoom(Uuid),
+    JoinRoom(RoomId),
     Delete(Delete),
 }
 
 #[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientSentMessage {
-    pub to_room: Uuid,
+    pub to_room: RoomId,
     pub content: String,
 }
 
@@ -60,13 +72,13 @@ impl ClientMessageType for ClientSentMessage {}
 #[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardedMessage {
-    pub room: Uuid,
-    pub author: Uuid,
+    pub room: RoomId,
+    pub author: UserId,
     pub content: String,
 }
 
 impl ForwardedMessage {
-    pub fn from_message_and_author(msg: ClientSentMessage, author: Uuid) -> Self {
+    pub fn from_message_and_author(msg: ClientSentMessage, author: UserId) -> Self {
         ForwardedMessage {
             room: msg.to_room,
             author,
@@ -78,8 +90,8 @@ impl ForwardedMessage {
 #[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Edit {
-    pub message_id: Uuid,
-    pub room_id: Uuid,
+    pub message_id: MessageId,
+    pub room_id: RoomId,
 }
 
 impl ClientMessageType for Edit {}
@@ -87,15 +99,15 @@ impl ClientMessageType for Edit {}
 #[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delete {
-    pub message_id: Uuid,
-    pub room_id: Uuid,
+    pub message_id: MessageId,
+    pub room_id: RoomId,
 }
 
 impl ClientMessageType for Delete {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
-    pub id: Uuid,
+    pub id: UserId,
 }
 
 impl ClientMessageType for Login {}
@@ -104,7 +116,7 @@ impl ClientMessageType for Login {}
 pub enum ServerMessage {
     Response {
         response: RequestResponse,
-        request_id: Uuid,
+        request_id: RequestId,
     },
     Error(ServerError),
     Message(ForwardedMessage),
@@ -150,8 +162,8 @@ pub enum ServerError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Success {
     NoData,
-    Room { id: Uuid },
-    MessageSent { id: Uuid },
+    Room { id: RoomId },
+    MessageSent { id: MessageId },
 }
 
 #[macro_export]

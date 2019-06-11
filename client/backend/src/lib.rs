@@ -11,12 +11,12 @@ use websocket::{OwnedMessage, WebSocketError};
 
 pub struct Config {
     pub url: Url,
-    pub client_id: Uuid,
+    pub client_id: UserId,
 }
 
 pub struct Vertex {
     socket: Client<TcpStream>,
-    id: Uuid,
+    id: UserId,
     logged_in: bool,
 }
 
@@ -69,9 +69,9 @@ impl Vertex {
             .map_err(Error::WebSocketError)
     }
 
-    fn request(&mut self, msg: ClientMessage) -> Result<Uuid, Error> {
+    fn request(&mut self, msg: ClientMessage) -> Result<RequestId, Error> {
         let request = ClientRequest::new(msg);
-        let request_id = request.request_id.clone();
+        let request_id = request.request_id;
         self.send(request)?;
         Ok(request_id)
     }
@@ -136,7 +136,7 @@ impl Vertex {
         }
     }
 
-    pub fn create_room(&mut self) -> Result<Uuid, Error> {
+    pub fn create_room(&mut self) -> Result<RoomId, Error> {
         let request_id = self.request(ClientMessage::CreateRoom)?;
 
         let msg = self.receive_blocking()?;
@@ -159,7 +159,7 @@ impl Vertex {
         }
     }
 
-    pub fn join_room(&mut self, room: Uuid) -> Result<(), Error> {
+    pub fn join_room(&mut self, room: RoomId) -> Result<(), Error> {
         let request_id = self.request(ClientMessage::JoinRoom(room))?;
 
         let msg = self.receive_blocking()?;
@@ -183,7 +183,7 @@ impl Vertex {
     }
 
     /// Sends a message, returning the request id if it was sent successfully
-    pub fn send_message(&mut self, msg: String, to_room: Uuid) -> Result<Uuid, Error> {
+    pub fn send_message(&mut self, msg: String, to_room: RoomId) -> Result<RequestId, Error> {
         if !self.logged_in {
             self.request(ClientMessage::SendMessage(ClientSentMessage {
                 to_room,
@@ -195,21 +195,21 @@ impl Vertex {
     }
 
     pub fn username(&self) -> String {
-        format!("{}", self.id) // TODO lol
+        format!("{}", self.id.0) // TODO lol
     }
 }
 
 #[derive(Debug)]
 pub struct Message {
     pub author: String,
-    pub room: Uuid,
+    pub room: RoomId,
     pub content: String,
 }
 
 impl From<ForwardedMessage> for Message {
     fn from(msg: ForwardedMessage) -> Self {
         Message {
-            author: format!("{}", msg.author),
+            author: format!("{}", msg.author.0),
             room: msg.room,
             content: msg.content,
         }
@@ -227,7 +227,6 @@ pub enum Action {
 pub enum Error {
     NotLoggedIn,
     AlreadyLoggedIn,
-    InvalidUuid,
     WebSocketError(WebSocketError),
     /// A message from the server that doesn't deserialize correctly
     InvalidServerMessage,

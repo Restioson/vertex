@@ -5,13 +5,12 @@ use actix::prelude::*;
 use actix_web::web::Bytes;
 use actix_web_actors::ws::{self, WebsocketContext};
 use std::io::Cursor;
-use uuid::Uuid;
 use vertex_common::*;
 
 #[derive(Eq, PartialEq)]
 enum SessionState {
     WaitingForLogin,
-    Ready(Uuid),
+    Ready(UserId), // TODO sessionid?
 }
 
 pub struct ClientWsSession {
@@ -92,7 +91,7 @@ impl ClientWsSession {
                             })
                             .wait()
                             .unwrap();
-                        RequestResponse::Success(Success::Room { id: *id })
+                        RequestResponse::Success(Success::Room { id })
                     }
                     _ => unimplemented!(),
                 }

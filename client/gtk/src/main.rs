@@ -9,6 +9,7 @@ use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
 use vertex_client_backend::*;
+use vertex_common::*;
 
 macro_rules! clone {
     (@param _) => ( _ );
@@ -29,9 +30,9 @@ macro_rules! clone {
 
 struct VertexApp {
     vertex: Vertex,
-    room: Option<Uuid>,
-    rooms: DHashMap<Uuid, Sender<String>>,
-    room_list: Vec<Uuid>,
+    room: Option<RoomId>,
+    rooms: DHashMap<RoomId, Sender<String>>,
+    room_list: Vec<RoomId>,
 }
 
 fn main() {
@@ -46,7 +47,7 @@ fn create(gtk_app: &Application) {
     let app = Arc::new(Mutex::new(VertexApp {
         vertex: Vertex::new(Config {
             url: Url::parse("ws://127.0.0.1:8080/client/").unwrap(),
-            client_id: Uuid::new_v4(),
+            client_id: UserId(Uuid::new_v4()),
         }),
         room: None,
         rooms: DHashMap::default(),
@@ -127,17 +128,15 @@ fn create(gtk_app: &Application) {
             match v[0] {
                 "/join" => {
                     if v.len() == 2 {
-                        let room = Uuid::parse_str(v[1]).expect("Invalid room id");
-                        app.vertex
-                            .join_room(room.clone())
-                            .expect("Error joining room");
+                        let room = RoomId(Uuid::parse_str(v[1]).expect("Invalid room id"));
+                        app.vertex.join_room(room).expect("Error joining room");
                         text_buffer.insert(
                             &mut text_buffer.get_end_iter(),
-                            &format!("Joined room {}\n", room),
+                            &format!("Joined room {}\n", room.0),
                         );
 
                         app.room = Some(room);
-                        let txt: &str = &format!("#{}", room);
+                        let txt: &str = &format!("#{}", room.0);
                         let room_label = Label::new(Some(txt));
                         rooms.insert(&room_label, -1);
                         app.room_list.push(room);
@@ -164,11 +163,11 @@ fn create(gtk_app: &Application) {
                     let room = app.vertex.create_room().expect("Error creating room");
                     text_buffer.insert(
                         &mut text_buffer.get_end_iter(),
-                        &format!("Joined room {}\n", room),
+                        &format!("Joined room {}\n", room.0),
                     );
 
                     app.room = Some(room);
-                    let txt: &str = &format!("#{}", room);
+                    let txt: &str = &format!("#{}", room.0);
                     let room_label = Label::new(Some(txt));
                     rooms.insert(&room_label, -1);
                     app.room_list.push(room);

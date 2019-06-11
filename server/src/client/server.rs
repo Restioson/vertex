@@ -3,23 +3,23 @@ use crate::SendMessage;
 use actix::dev::{MessageResponse, ResponseChannel};
 use actix::prelude::*;
 use ccl::dhashmap::DHashMap;
-use std::{fmt::Debug, ops::Deref};
+use std::fmt::Debug;
 use uuid::Uuid;
 use vertex_common::*;
 
 struct Room {
-    clients: Vec<Uuid>,
+    users: Vec<UserId>,
 }
 
 impl Room {
-    fn new(creator: Uuid) -> Self {
+    fn new(creator: UserId) -> Self {
         Room {
-            clients: vec![creator],
+            users: vec![creator],
         }
     }
 
-    fn add(&mut self, client: Uuid) {
-        self.clients.push(client)
+    fn add(&mut self, user: UserId) {
+        self.users.push(user)
     }
 }
 
@@ -31,23 +31,12 @@ pub struct Connect {
 
 #[derive(Debug, Message)]
 pub struct Join {
-    pub room: Uuid,
+    pub room: RoomId,
 }
 
 impl ClientMessageType for Join {}
 
-/// A wrapper for `Uuid` that allows it to be sent as a message
-pub struct SendableUuid(Uuid);
-
-impl Deref for SendableUuid {
-    type Target = Uuid;
-
-    fn deref(&self) -> &Uuid {
-        &self.0
-    }
-}
-
-impl MessageResponse<ClientServer, IdentifiedMessage<CreateRoom>> for SendableUuid {
+impl MessageResponse<ClientServer, IdentifiedMessage<CreateRoom>> for RoomId {
     fn handle<R: ResponseChannel<IdentifiedMessage<CreateRoom>>>(
         self,
         _: &mut Context<ClientServer>,
@@ -61,7 +50,7 @@ impl MessageResponse<ClientServer, IdentifiedMessage<CreateRoom>> for SendableUu
 
 #[derive(Debug)]
 pub struct IdentifiedMessage<T: Message + ClientMessageType + Debug> {
-    pub id: Uuid,
+    pub id: UserId,
     pub msg: T,
 }
 
@@ -73,14 +62,17 @@ impl<T: Message + ClientMessageType + Debug> Message for IdentifiedMessage<T> {
 pub struct CreateRoom;
 
 impl Message for CreateRoom {
-    type Result = SendableUuid;
+    type Result = RoomId;
 }
 
 impl ClientMessageType for CreateRoom {}
 
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+struct SessionId(pub Uuid);
+
 pub struct ClientServer {
-    sessions: DHashMap<Uuid, Addr<ClientWsSession>>,
-    rooms: DHashMap<Uuid, Room>,
+    sessions: DHashMap<SessionId, Addr<ClientWsSession>>,
+    rooms: DHashMap<RoomId, Room>,
 }
 
 impl ClientServer {
@@ -91,11 +83,12 @@ impl ClientServer {
         }
     }
 
-    fn send_to_room(&mut self, room: &Uuid, message: ServerMessage, sender: Uuid) {
+    fn send_to_room(&mut self, room: &RoomId, message: ServerMessage, sender: &UserId) {
         let room = self.rooms.index(room);
-        for client_id in room.clients.iter().filter(|id| **id != sender) {
+        for user_id in room.users.iter().filter(|id| **id != *sender) {
             // TODO do not unwrap
-            if let Some(client) = self.sessions.get_mut(client_id) {
+            if let Some(client) = self.sessions.get_mut(&SessionId(user_id.0)) {
+                // TODO multiple clients per user
                 client.do_send(SendMessage {
                     message: message.clone(),
                 });
@@ -112,7 +105,8 @@ impl Handler<Connect> for ClientServer {
     type Result = ();
 
     fn handle(&mut self, connect: Connect, _: &mut Context<Self>) {
-        self.sessions.insert(connect.login.id, connect.session);
+        self.sessions
+            .insert(SessionId(connect.login.id.0), connect.session); // TODO multiple clients per user
     }
 }
 
@@ -121,22 +115,23 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
 
     fn handle(&mut self, m: IdentifiedMessage<ClientSentMessage>, _: &mut Context<Self>) {
         println!("msg: {:?}", m);
+        let author_id = m.id;
         self.send_to_room(
             &m.msg.to_room.clone(),
             ServerMessage::Message(ForwardedMessage::from_message_and_author(m.msg, m.id)),
-            m.id,
+            &author_id,
         );
     }
 }
 
 impl Handler<IdentifiedMessage<CreateRoom>> for ClientServer {
-    type Result = SendableUuid;
+    type Result = RoomId;
 
-    fn handle(&mut self, m: IdentifiedMessage<CreateRoom>, _: &mut Context<Self>) -> SendableUuid {
-        let id = Uuid::new_v4();
-        self.rooms.insert(id.clone(), Room::new(m.id));
+    fn handle(&mut self, m: IdentifiedMessage<CreateRoom>, _: &mut Context<Self>) -> RoomId {
+        let id = RoomId(Uuid::new_v4());
+        self.rooms.insert(id, Room::new(m.id));
 
-        SendableUuid(id)
+        id
     }
 }
 
@@ -152,7 +147,7 @@ impl Handler<IdentifiedMessage<Edit>> for ClientServer {
     type Result = ();
 
     fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) {
-        self.send_to_room(&m.msg.room_id.clone(), ServerMessage::Edit(m.msg), m.id);
+        self.send_to_room(&m.msg.room_id, ServerMessage::Edit(m.msg), &m.id);
     }
 }
 
@@ -160,6 +155,6 @@ impl Handler<IdentifiedMessage<Delete>> for ClientServer {
     type Result = ();
 
     fn handle(&mut self, m: IdentifiedMessage<Delete>, _: &mut Context<Self>) {
-        self.send_to_room(&m.msg.room_id.clone(), ServerMessage::Delete(m.msg), m.id);
+        self.send_to_room(&m.msg.room_id, ServerMessage::Delete(m.msg), &m.id);
     }
 }
