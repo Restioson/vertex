@@ -1,5 +1,5 @@
 use gtk::prelude::*;
-use gtk::{Window, Entry, Label, ListBox, TextView, ListBoxRow, Separator, Orientation};
+use gtk::{Window, Entry, Label, ListBox, TextView, ListBoxRow, Separator, Orientation, Grid};
 use relm::{Relm, Update, Widget, connect, connect_stream};
 use relm_derive::*;
 use url::Url;
@@ -51,22 +51,28 @@ impl Win {
     }
 
     fn push_message(&self, author: &str, content: &str) {
-        let row = ListBoxRow::new();
-        row.set_selectable(false);
+        let grid = Grid::new();
+        grid.insert_column(0);
+        grid.insert_column(1);
+        grid.insert_column(2);
 
-        let label = format!("{}: {}", author, content);
-        let label = Label::new(Some(label.as_str()));
-        label.set_xalign(0.0);
+        grid.set_column_spacing(10);
 
-        row.add(&label);
+        let author = Label::new(Some(author));
+        author.set_xalign(0.0);
+        grid.attach(&author, 0, 0, 1, 1);
+
+        let content = Label::new(Some(content));
+        content.set_xalign(0.0);
+        grid.attach(&content, 1, 0, 1, 1);
 
         let separator = Separator::new(Orientation::Horizontal);
 
         separator.show_all();
-        row.show_all();
+        grid.show_all();
 
         self.widgets.messages.insert(&separator, -1);
-        self.widgets.messages.insert(&row, -1);
+        self.widgets.messages.insert(&grid, -1);
     }
 }
 
