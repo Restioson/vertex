@@ -1,13 +1,13 @@
-use std::io::Cursor;
-use std::time::Instant;
-use actix::prelude::*;
-use actix_web::web::Bytes;
-use actix_web_actors::ws::{self, WebsocketContext};
-use uuid::Uuid;
-use vertex_common::*;
 use super::*;
 use crate::federation::FederationServer;
 use crate::SendMessage;
+use actix::prelude::*;
+use actix_web::web::Bytes;
+use actix_web_actors::ws::{self, WebsocketContext};
+use std::io::Cursor;
+use std::time::Instant;
+use uuid::Uuid;
+use vertex_common::*;
 
 #[derive(Eq, PartialEq)]
 enum SessionState {
@@ -19,7 +19,7 @@ impl SessionState {
     fn user_id(&self) -> Option<UserId> {
         match self {
             SessionState::WaitingForLogin => None,
-            SessionState::Ready(id) => Some(id.clone())
+            SessionState::Ready(id) => Some(id.clone()),
         }
     }
 }
@@ -97,12 +97,11 @@ impl ClientWsSession {
                         RequestResponse::success()
                     }
                     ClientMessage::EditMessage(edit) => {
-                        self.client_server
-                            .do_send(IdentifiedMessage {
-                                user_id: id,
-                                session_id: self.session_id,
-                                msg: edit
-                            });
+                        self.client_server.do_send(IdentifiedMessage {
+                            user_id: id,
+                            session_id: self.session_id,
+                            msg: edit,
+                        });
                         RequestResponse::success()
                     }
                     ClientMessage::JoinRoom(room) => {
@@ -136,7 +135,8 @@ impl ClientWsSession {
         ctx.run_interval(HEARTBEAT_TIMEOUT, |session, ctx| {
             if Instant::now().duration_since(session.heartbeat) > HEARTBEAT_TIMEOUT {
                 session.client_server.do_send(Disconnect {
-                    session_id: session.session_id, user_id: session.user_id(),
+                    session_id: session.session_id,
+                    user_id: session.user_id(),
                 });
                 ctx.stop();
             }
@@ -152,7 +152,10 @@ impl Actor for ClientWsSession {
     }
 
     fn stopped(&mut self, ctx: &mut WebsocketContext<Self>) {
-        self.client_server.do_send(Disconnect { session_id: self.session_id, user_id: self.user_id(), });
+        self.client_server.do_send(Disconnect {
+            session_id: self.session_id,
+            user_id: self.user_id(),
+        });
     }
 }
 
@@ -165,7 +168,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
             }
             ws::Message::Pong(_) => {
                 self.heartbeat = Instant::now();
-            },
+            }
             ws::Message::Text(_) => {
                 let error =
                     serde_cbor::to_vec(&ServerMessage::Error(ServerError::UnexpectedTextFrame))
@@ -187,7 +190,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                 self.handle_message(msg, ctx);
             }
             ws::Message::Close(_) => {
-                self.client_server.do_send(Disconnect { session_id: self.session_id, user_id: self.user_id(), });
+                self.client_server.do_send(Disconnect {
+                    session_id: self.session_id,
+                    user_id: self.user_id(),
+                });
                 ctx.stop();
             }
             ws::Message::Nop => (),

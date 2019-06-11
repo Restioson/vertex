@@ -1,6 +1,6 @@
 use std::convert::Into;
 use std::io::{self, Cursor};
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 use url::Url;
 use vertex_common::*;
 use websocket::client::ClientBuilder;
@@ -101,7 +101,7 @@ impl Vertex {
             Ok(OwnedMessage::Pong(_)) => {
                 self.heartbeat = Instant::now();
                 return None;
-            },
+            }
             Ok(_) => return Some(Err(Error::InvalidServerMessage)),
             Err(e) => return Some(Err(Error::WebSocketError(e))),
         };
@@ -206,7 +206,9 @@ impl Vertex {
 
     /// Should be called once every `HEARTBEAT_INTERVAL`
     pub fn heartbeat(&mut self) -> Result<(), Error> {
-        self.socket.send_message(&OwnedMessage::Ping(vec![])).map_err(Error::WebSocketError)
+        self.socket
+            .send_message(&OwnedMessage::Ping(vec![]))
+            .map_err(Error::WebSocketError)
     }
 
     pub fn username(&self) -> String {

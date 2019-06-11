@@ -1,11 +1,11 @@
+use super::{ClientWsSession, SessionId};
+use crate::SendMessage;
 use actix::dev::{MessageResponse, ResponseChannel};
 use actix::prelude::*;
 use ccl::dhashmap::DHashMap;
 use std::fmt::Debug;
 use uuid::Uuid;
 use vertex_common::*;
-use super::{ClientWsSession, SessionId};
-use crate::SendMessage;
 
 struct Room {
     users: Vec<UserId>,
@@ -98,7 +98,11 @@ impl ClientServer {
                     .iter()
                     .filter(|id| **id != *sender)
                     .map(|id| self.sessions.get_mut(id).unwrap())
-                    .for_each(|s| s.do_send(SendMessage { message: message.clone() }));
+                    .for_each(|s| {
+                        s.do_send(SendMessage {
+                            message: message.clone(),
+                        })
+                    });
             }
         }
     }
@@ -115,10 +119,11 @@ impl Handler<Connect> for ClientServer {
         if let Some(mut sessions) = self.user_to_sessions.get_mut(&connect.login.id) {
             sessions.push(connect.session_id);
         } else {
-            self.user_to_sessions.insert(connect.login.id, vec![connect.session_id]);
+            self.user_to_sessions
+                .insert(connect.login.id, vec![connect.session_id]);
         }
 
-        self.sessions.insert(connect.session_id, connect.session); // TODO multiple clients per user
+        self.sessions.insert(connect.session_id, connect.session);
     }
 }
 
@@ -129,15 +134,19 @@ impl Handler<Disconnect> for ClientServer {
         if let Some(user_id) = disconnect.user_id {
             let mut sessions = self.user_to_sessions.get_mut(&user_id).unwrap();
 
-            let idx = sessions.iter().position(|i| *i == disconnect.session_id).unwrap();
+            let idx = sessions
+                .iter()
+                .position(|i| *i == disconnect.session_id)
+                .unwrap();
             sessions.remove(idx);
 
             if sessions.len() == 0 {
+                drop(sessions); // Necessary to stop double lock
                 self.user_to_sessions.remove(&user_id);
             }
         }
 
-        self.sessions.remove(&disconnect.session_id); // TODO multiple clients per user
+        self.sessions.remove(&disconnect.session_id);
     }
 }
 

@@ -1,13 +1,13 @@
 use gtk::prelude::*;
 use gtk::{Window, Entry, Label, ListBox, TextView, ListBoxRow, Separator, Orientation, Grid};
-use relm::{Relm, Update, Widget, connect, connect_stream};
+use relm::{connect, connect_stream, Relm, Update, Widget};
 use relm_derive::*;
 use url::Url;
 use uuid::Uuid;
 use vertex_client_backend::*;
 use vertex_common::*;
 
-use clap::{Arg, App};
+use clap::{App, Arg};
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -143,7 +143,9 @@ impl Update for Win {
                 }
 
                 let room = self.model.room.expect("Not in a room").clone();
-                self.model.vertex.send_message(msg.to_string(), room)
+                self.model
+                    .vertex
+                    .send_message(msg.to_string(), room)
                     .expect("Error sending message"); // todo display error
 
                 let name = self.model.vertex.username();
@@ -155,9 +157,8 @@ impl Update for Win {
                     println!("action {:?}", action);
                     self.handle_action(action);
                 }
-            },
+            }
             VertexMsg::Heartbeat => {
-                println!("heartbeat");
                 if let Err(_) = self.model.vertex.heartbeat() {
                     eprintln!("Server timed out");
                     std::process::exit(1);
@@ -183,9 +184,15 @@ impl Widget for Win {
         let entry: Entry = builder.get_object("message_entry").unwrap();
         let rooms: ListBox = builder.get_object("rooms").unwrap();
 
-        connect!(relm, window, connect_delete_event(_, _), return (Some(VertexMsg::Quit), Inhibit(false)));
+        connect!(
+            relm,
+            window,
+            connect_delete_event(_, _),
+            return (Some(VertexMsg::Quit), Inhibit(false))
+        );
         connect!(relm, rooms, connect_row_selected(_, row), {
-            row.as_ref().map(|row| VertexMsg::SetRoom(row.get_index() as usize))
+            row.as_ref()
+                .map(|row| VertexMsg::SetRoom(row.get_index() as usize))
         });
 
         connect!(relm, entry, connect_activate(entry), {
@@ -221,21 +228,21 @@ fn main() {
     let matches = App::new(NAME)
         .version(VERSION)
         .author(AUTHORS)
-        .arg(Arg::with_name("user-id")
-            .short("i")
-            .long("userid")
-            .value_name("UUID")
-            .help("Sets the user id to login with")
-            .takes_value(true)
+        .arg(
+            Arg::with_name("user-id")
+                .short("i")
+                .long("userid")
+                .value_name("UUID")
+                .help("Sets the user id to login with")
+                .takes_value(true),
         )
         .get_matches();
 
-    let user_id = matches.value_of("user-id")
+    let user_id = matches
+        .value_of("user-id")
         .and_then(|id| Uuid::parse_str(id).ok());
 
-    let args = VertexArgs {
-        user_id
-    };
+    let args = VertexArgs { user_id };
 
     Win::run(args).expect("failed to run window");
 }
