@@ -41,7 +41,7 @@ fn dispatch_server_ws(
 
 fn main() -> std::io::Result<()> {
     let args = env::args().collect::<Vec<_>>();
-    let port = args.get(1).cloned().unwrap_or("8080".to_string());
+    let port = args.get(1).cloned().unwrap_or("127.0.0.1:8080".to_string());
 
     let sys = System::new("chat-server");
     let client_server = ClientServer::new().start();
@@ -54,8 +54,10 @@ fn main() -> std::io::Result<()> {
             .service(web::resource("/client/").route(web::get().to(dispatch_client_ws)))
             .service(web::resource("/server/").route(web::get().to(dispatch_server_ws)))
     })
-    .bind(format!("127.0.0.1:{}", port))?
+    .bind(port.clone())?
     .start();
+
+    println!("Server started on port {}", port);
 
     sys.run()
 }

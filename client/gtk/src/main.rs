@@ -23,6 +23,7 @@ struct VertexModel {
 
 struct VertexArgs {
     user_id: Option<Uuid>,
+    ip: Option<String>,
 }
 
 #[derive(Msg)]
@@ -59,9 +60,11 @@ impl Update for Win {
     type Msg = VertexMsg;
 
     fn model(relm: &Relm<Win>, args: VertexArgs) -> VertexModel {
+        println!("Connecting to {}", args.ip.clone().unwrap_or("127.0.0.1:8080".to_string()));
         let mut model = VertexModel {
             vertex: Vertex::new(Config {
-                url: Url::parse("ws://127.0.0.1:8080/client/").unwrap(),
+                url: Url::parse(&format!("ws://{}/client/", args.ip.unwrap_or("127.0.0.1:8080".to_string())))
+                    .unwrap(),
                 client_id: UserId(args.user_id.unwrap_or_else(|| Uuid::new_v4())),
             }),
             room: None,
@@ -230,10 +233,18 @@ fn main() {
         .author(AUTHORS)
         .arg(
             Arg::with_name("user-id")
-                .short("i")
-                .long("userid")
+                .short("u")
+                .long("user-id")
                 .value_name("UUID")
                 .help("Sets the user id to login with")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("ip")
+                .short("i")
+                .long("ip")
+                .value_name("IP")
+                .help("Sets the homeserver to connect to")
                 .takes_value(true),
         )
         .get_matches();
@@ -242,7 +253,9 @@ fn main() {
         .value_of("user-id")
         .and_then(|id| Uuid::parse_str(id).ok());
 
-    let args = VertexArgs { user_id };
+    let ip = matches.value_of("ip").map(|ip| ip.to_string());
+
+    let args = VertexArgs { user_id, ip };
 
     Win::run(args).expect("failed to run window");
 }
