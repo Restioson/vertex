@@ -13,7 +13,5 @@ RUN cargo build --release
 COPY server/src src
 RUN cargo build --release
 RUN cp ./target/release/vertex_server ./vertex_server
-
-RUN cp /vertex/server/vertex_server ./vertex_server || :
 EXPOSE 8080/tcp
 CMD ["./vertex_server", "0.0.0.0:8080"]

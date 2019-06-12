@@ -1,13 +1,12 @@
-use super::*;
-use crate::federation::FederationServer;
-use crate::SendMessage;
 use actix::prelude::*;
-use actix_web::web::Bytes;
 use actix_web_actors::ws::{self, WebsocketContext};
 use std::io::Cursor;
 use std::time::Instant;
 use uuid::Uuid;
 use vertex_common::*;
+use super::*;
+use crate::federation::FederationServer;
+use crate::{SendMessage, LoggedIn};
 
 #[derive(Eq, PartialEq)]
 enum SessionState {
@@ -56,74 +55,71 @@ impl ClientWsSession {
     }
 
     fn handle_message(&mut self, req: ClientRequest, ctx: &mut WebsocketContext<Self>) {
-        let response = match req.message {
+        let fut = match req.message {
             ClientMessage::Login(login) => {
                 // Register with the server
-                self.client_server.do_send(Connect {
+                Box::new(self.client_server.send(Connect {
                     session: ctx.address(),
                     session_id: self.session_id,
+                    request_id: req.request_id,
                     login: login.clone(),
-                });
-                self.state = SessionState::Ready(login.id);
-                RequestResponse::success()
-            }
-            _ => self.handle_authenticated_message(req.message, ctx),
+                }))
+            },
+            _ => self.handle_authenticated_message(req.message, req.request_id, ctx),
         };
 
-        let response = ServerMessage::Response {
-            response,
-            request_id: req.request_id,
-        };
-
-        let binary: Bytes = response.into();
-        ctx.binary(binary);
+        Arbiter::spawn(fut.map_err(|e| panic!("Mailbox error {:?}", e)));
     }
 
     fn handle_authenticated_message(
         &mut self,
         msg: ClientMessage,
-        _ctx: &mut WebsocketContext<Self>,
-    ) -> RequestResponse {
+        request_id: RequestId,
+        ctx: &mut WebsocketContext<Self>,
+    ) -> Box<dyn Future<Item = (), Error = actix::MailboxError>> {
         match self.state {
-            SessionState::WaitingForLogin => RequestResponse::Error(ServerError::NotLoggedIn),
+            SessionState::WaitingForLogin => {
+                ctx.binary(ServerMessage::Response {
+                    response: RequestResponse::Error(ServerError::NotLoggedIn),
+                    request_id,
+                });
+                Box::new(futures::future::ok(()))
+            },
             SessionState::Ready(id) => {
                 match msg {
                     ClientMessage::SendMessage(msg) => {
-                        self.client_server.do_send(IdentifiedMessage {
+                        Box::new(self.client_server.send(IdentifiedMessage {
                             user_id: id,
                             session_id: self.session_id,
+                            request_id,
                             msg,
-                        });
-                        RequestResponse::success()
+                        }))
                     }
                     ClientMessage::EditMessage(edit) => {
-                        self.client_server.do_send(IdentifiedMessage {
+                        Box::new(self.client_server.send(IdentifiedMessage {
                             user_id: id,
                             session_id: self.session_id,
+                            request_id,
                             msg: edit,
-                        });
-                        RequestResponse::success()
+                        }))
                     }
                     ClientMessage::JoinRoom(room) => {
                         // TODO check that it worked lol
-                        self.client_server.do_send(IdentifiedMessage {
+                        Box::new(self.client_server.send(IdentifiedMessage {
                             user_id: id,
                             session_id: self.session_id,
+                            request_id,
                             msg: Join { room },
-                        });
-                        RequestResponse::success()
+                        }))
                     }
                     ClientMessage::CreateRoom => {
-                        let id = self
-                            .client_server
+                        Box::new(self.client_server
                             .send(IdentifiedMessage {
                                 user_id: id,
                                 session_id: self.session_id,
+                                request_id,
                                 msg: CreateRoom,
-                            })
-                            .wait()
-                            .unwrap();
-                        RequestResponse::Success(Success::Room { id })
+                        }))
                     }
                     _ => unimplemented!(),
                 }
@@ -206,5 +202,13 @@ impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
 
     fn handle(&mut self, msg: SendMessage<ServerMessage>, ctx: &mut WebsocketContext<Self>) {
         ctx.binary(msg);
+    }
+}
+
+impl Handler<LoggedIn> for ClientWsSession {
+    type Result = ();
+
+    fn handle(&mut self, logged_in: LoggedIn, ctx: &mut WebsocketContext<Self>) {
+        self.state = SessionState::Ready(logged_in.0);
     }
 }

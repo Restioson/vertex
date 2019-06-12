@@ -5,9 +5,15 @@ Vertex is a WIP end-to-end encrypted, decentralised, federated chat platform bui
 [MLS](https://messaginglayersecurity.rocks).
 
 ## Installation
+
+### Development
 1. Install the latest Rust stable compiler
 2. Install gtk+, cairo, and glib development libraries
 3. Install the openssl development package
+
+### Server - Docker
+To install the server via Docker, you will require Docker and Docker Compose. Once they are
+installed, simply run `docker-compose up`.
 
 ## Running
 To run the server, do `cargo run` in the `server/` directory. You can pass it a port to run on,

@@ -147,6 +147,7 @@ impl RequestResponse {
     pub fn success() -> Self {
         RequestResponse::Success(Success::NoData)
     }
+    pub fn room(id: RoomId) -> Self { RequestResponse::Success(Success::Room { id })}
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

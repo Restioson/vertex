@@ -1,8 +1,9 @@
+use std::{env, fmt::Debug};
 use actix::prelude::*;
 use actix_web::web::{Data, Payload};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
-use std::{env, fmt::Debug};
+use vertex_common::UserId;
 
 mod client;
 mod federation;
@@ -14,6 +15,9 @@ use federation::{FederationServer, ServerWsSession};
 pub struct SendMessage<T: Debug> {
     message: T,
 }
+
+#[derive(Debug, Message)]
+pub struct LoggedIn(pub UserId);
 
 fn dispatch_client_ws(
     request: HttpRequest,
