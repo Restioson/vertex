@@ -15,6 +15,9 @@ Vertex is a WIP end-to-end encrypted, decentralised, federated chat platform bui
 To install the server via Docker, you will require Docker and Docker Compose. Once they are
 installed, simply run `docker-compose up`.
 
+**Warning:** *First time* compilation may take very long for the server (~10min). Grab a cup of coffee ;).
+Luckily, you only need to do this once, except *if* the dependencies change *and* you are using Docker.
+
 ## Running
 To run the server, do `cargo run` in the `server/` directory. You can pass it a port to run on,
 e.g `cargo run -- 8081`.

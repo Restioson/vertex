@@ -24,7 +24,7 @@ pub struct RoomId(pub Uuid);
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct MessageId(pub Uuid);
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientRequest {
     pub message: ClientMessage,
     pub request_id: RequestId,
@@ -51,9 +51,10 @@ impl Into<Vec<u8>> for ClientRequest {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
     Login(Login),
+    CreateUser { name: String, password: String },
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
     CreateRoom,
@@ -61,14 +62,18 @@ pub enum ClientMessage {
     Delete(Delete),
 }
 
-#[cfg_attr(feature = "enable-actix", derive(Message))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientSentMessage {
     pub to_room: RoomId,
     pub content: String,
 }
 
 impl ClientMessageType for ClientSentMessage {}
+
+#[cfg(feature = "enable-actix")]
+impl Message for ClientSentMessage {
+    type Result = RequestResponse;
+}
 
 #[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,7 +93,6 @@ impl ForwardedMessage {
     }
 }
 
-#[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Edit {
     pub message_id: MessageId,
@@ -97,7 +101,11 @@ pub struct Edit {
 
 impl ClientMessageType for Edit {}
 
-#[cfg_attr(feature = "enable-actix", derive(Message))]
+#[cfg(feature = "enable-actix")]
+impl Message for Edit {
+    type Result = RequestResponse;
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delete {
     pub message_id: MessageId,
@@ -106,9 +114,15 @@ pub struct Delete {
 
 impl ClientMessageType for Delete {}
 
+#[cfg(feature = "enable-actix")]
+impl Message for Delete {
+    type Result = RequestResponse;
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
-    pub id: UserId,
+    pub name: String,
+    pub password: String,
 }
 
 impl ClientMessageType for Login {}
@@ -137,7 +151,7 @@ impl Into<Vec<u8>> for ServerMessage {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum RequestResponse {
     Success(Success),
     Error(ServerError),
@@ -147,10 +161,28 @@ impl RequestResponse {
     pub fn success() -> Self {
         RequestResponse::Success(Success::NoData)
     }
-    pub fn room(id: RoomId) -> Self { RequestResponse::Success(Success::Room { id })}
+    pub fn room(id: RoomId) -> Self {
+        RequestResponse::Success(Success::Room { id })
+    }
+    pub fn user(id: UserId) -> Self {
+        RequestResponse::Success(Success::User { id })
+    }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(feature = "enable-actix")]
+impl<A, M> actix::dev::MessageResponse<A, M> for RequestResponse
+where
+    A: actix::Actor,
+    M: actix::Message<Result = Self>,
+{
+    fn handle<R: actix::dev::ResponseChannel<M>>(self, ctx: &mut A::Context, tx: Option<R>) {
+        if let Some(tx) = tx {
+            tx.send(self);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ServerError {
     InvalidMessage,
     UnexpectedTextFrame,
@@ -159,13 +191,17 @@ pub enum ServerError {
     InvalidUrl,
     WsConnectionError,
     NotLoggedIn,
+    UsernameAlreadyExists,
+    UserDoesNotExist,
+    IncorrectPassword,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Success {
     NoData,
     Room { id: RoomId },
     MessageSent { id: MessageId },
+    User { id: UserId },
 }
 
 #[macro_export]

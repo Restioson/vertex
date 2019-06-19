@@ -22,7 +22,6 @@ struct VertexModel {
 }
 
 struct VertexArgs {
-    user_id: Option<Uuid>,
     ip: Option<String>,
 }
 
@@ -60,19 +59,21 @@ impl Update for Win {
     type Msg = VertexMsg;
 
     fn model(relm: &Relm<Win>, args: VertexArgs) -> VertexModel {
-        println!("Connecting to {}", args.ip.clone().unwrap_or("127.0.0.1:8080".to_string()));
+        println!(
+            "Connecting to {}",
+            args.ip.clone().unwrap_or("127.0.0.1:8080".to_string())
+        );
         let mut model = VertexModel {
             vertex: Vertex::new(Config {
-                url: Url::parse(&format!("ws://{}/client/", args.ip.unwrap_or("127.0.0.1:8080".to_string())))
-                    .unwrap(),
-                client_id: UserId(args.user_id.unwrap_or_else(|| Uuid::new_v4())),
+                url: Url::parse(&format!(
+                    "ws://{}/client/",
+                    args.ip.unwrap_or("127.0.0.1:8080".to_string())
+                ))
+                .unwrap(),
             }),
             room: None,
             room_list: Vec::new(),
         };
-
-        // TODO: Where should this go?
-        model.vertex.login().expect("Error logging in");
 
         model
     }
@@ -87,7 +88,7 @@ impl Update for Win {
                 let text_buffer = self.widgets.messages.get_buffer().unwrap();
 
                 if msg.starts_with("/") {
-                    let v: Vec<&str> = msg.splitn(2, ' ').collect();
+                    let v: Vec<&str> = msg.splitn(3, ' ').collect();
 
                     match v[0] {
                         "/join" => {
@@ -116,6 +117,7 @@ impl Update for Win {
                         "/createroom" => {
                             text_buffer
                                 .insert(&mut text_buffer.get_end_iter(), "Creating room...\n");
+
                             let room = self
                                 .model
                                 .vertex
@@ -133,6 +135,52 @@ impl Update for Win {
                             self.model.room_list.push(room);
                             room_label.show_all();
                         }
+                        "/login" => {
+                            if v.len() == 3 {
+                                text_buffer
+                                    .insert(&mut text_buffer.get_end_iter(), "Logging in...\n");
+
+                                match self.model.vertex.login(v[1], v[2]) {
+                                    Ok(_) => text_buffer.insert(
+                                        &mut text_buffer.get_end_iter(),
+                                        "Sucessfully logged in.\n",
+                                    ),
+                                    Err(e) => text_buffer.insert(
+                                        &mut text_buffer.get_end_iter(),
+                                        &format!("Error logging in: {:?}\n", e),
+                                    ),
+                                }
+                            } else {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Username and password required\n",
+                                );
+                            }
+                        }
+                        "/register" => {
+                            if v.len() == 3 {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Registering user...\n",
+                                );
+
+                                let id = self
+                                    .model
+                                    .vertex
+                                    .create_user(v[1], v[2])
+                                    .expect("Error registering user");
+
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    &format!("Registered user with id {}.\n", id.0),
+                                );
+                            } else {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Username and password required\n",
+                                );
+                            }
+                        }
                         _ => {
                             text_buffer.insert(&mut text_buffer.get_end_iter(), "Unknown command\n")
                         }
@@ -147,7 +195,7 @@ impl Update for Win {
                     .send_message(msg.to_string(), room)
                     .expect("Error sending message"); // todo display error
 
-                let name = self.model.vertex.username();
+                let name = self.model.vertex.name.as_ref().expect("Not logged in");
 
                 // TODO: Unify
                 text_buffer.insert(
@@ -232,14 +280,6 @@ fn main() {
         .version(VERSION)
         .author(AUTHORS)
         .arg(
-            Arg::with_name("user-id")
-                .short("u")
-                .long("user-id")
-                .value_name("UUID")
-                .help("Sets the user id to login with")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("ip")
                 .short("i")
                 .long("ip")
@@ -255,7 +295,7 @@ fn main() {
 
     let ip = matches.value_of("ip").map(|ip| ip.to_string());
 
-    let args = VertexArgs { user_id, ip };
+    let args = VertexArgs { ip };
 
     Win::run(args).expect("failed to run window");
 }

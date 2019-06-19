@@ -1,10 +1,10 @@
+use super::{ClientWsSession, SessionId};
+use crate::{database::DatabaseServer, SendMessage};
 use actix::prelude::*;
 use ccl::dhashmap::DHashMap;
 use std::fmt::Debug;
 use uuid::Uuid;
 use vertex_common::*;
-use super::{ClientWsSession, SessionId};
-use crate::{SendMessage, LoggedIn};
 
 struct Room {
     users: Vec<UserId>,
@@ -26,8 +26,7 @@ impl Room {
 pub struct Connect {
     pub session: Addr<ClientWsSession>,
     pub session_id: SessionId,
-    pub request_id: RequestId,
-    pub login: Login,
+    pub user_id: UserId,
 }
 
 #[derive(Message)]
@@ -36,9 +35,13 @@ pub struct Disconnect {
     pub user_id: Option<UserId>,
 }
 
-#[derive(Debug, Message)]
+#[derive(Debug)]
 pub struct Join {
     pub room: RoomId,
+}
+
+impl Message for Join {
+    type Result = RequestResponse;
 }
 
 impl ClientMessageType for Join {}
@@ -55,20 +58,26 @@ impl<T: Message + ClientMessageType + Debug> Message for IdentifiedMessage<T> {
     type Result = T::Result;
 }
 
-#[derive(Debug, Message)]
+#[derive(Debug)]
 pub struct CreateRoom;
 
 impl ClientMessageType for CreateRoom {}
 
+impl Message for CreateRoom {
+    type Result = RequestResponse;
+}
+
 pub struct ClientServer {
+    db: Addr<DatabaseServer>,
     sessions: DHashMap<SessionId, Addr<ClientWsSession>>,
     user_to_sessions: DHashMap<UserId, Vec<SessionId>>,
     rooms: DHashMap<RoomId, Room>,
 }
 
 impl ClientServer {
-    pub fn new() -> Self {
+    pub fn new(db: Addr<DatabaseServer>) -> Self {
         ClientServer {
+            db,
             sessions: DHashMap::default(),
             user_to_sessions: DHashMap::default(),
             rooms: DHashMap::default(),
@@ -91,17 +100,6 @@ impl ClientServer {
             }
         }
     }
-
-    fn respond(
-        &mut self,
-        client: SessionId,
-        response: RequestResponse,
-        request_id: RequestId,
-    ) {
-        self.sessions.index(&client).do_send(SendMessage {
-            message: ServerMessage::Response { response, request_id }
-        }) // TODO? mailboxerror
-    }
 }
 
 impl Actor for ClientServer {
@@ -112,17 +110,14 @@ impl Handler<Connect> for ClientServer {
     type Result = ();
 
     fn handle(&mut self, connect: Connect, _: &mut Context<Self>) {
-        if let Some(mut sessions) = self.user_to_sessions.get_mut(&connect.login.id) {
+        if let Some(mut sessions) = self.user_to_sessions.get_mut(&connect.user_id) {
             sessions.push(connect.session_id);
         } else {
             self.user_to_sessions
-                .insert(connect.login.id, vec![connect.session_id]);
+                .insert(connect.user_id, vec![connect.session_id]);
         }
 
         self.sessions.insert(connect.session_id, connect.session);
-        self.sessions.index(&connect.session_id).do_send(LoggedIn(connect.login.id)); // TODO
-        self.respond(connect.session_id, RequestResponse::success(), connect.request_id);
-
     }
 }
 
@@ -150,9 +145,13 @@ impl Handler<Disconnect> for ClientServer {
 }
 
 impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
-    type Result = ();
+    type Result = RequestResponse;
 
-    fn handle(&mut self, m: IdentifiedMessage<ClientSentMessage>, _: &mut Context<Self>) {
+    fn handle(
+        &mut self,
+        m: IdentifiedMessage<ClientSentMessage>,
+        _: &mut Context<Self>,
+    ) -> RequestResponse {
         println!("msg: {:?}", m);
         let author_id = m.session_id;
         self.send_to_room(
@@ -160,45 +159,49 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
             ServerMessage::Message(ForwardedMessage::from_message_and_author(m.msg, m.user_id)),
             &author_id,
         );
-        self.respond(m.session_id, RequestResponse::success(), m.request_id);
+        RequestResponse::success()
     }
 }
 
 impl Handler<IdentifiedMessage<CreateRoom>> for ClientServer {
-    type Result = ();
+    type Result = RequestResponse;
 
-    fn handle(&mut self, m: IdentifiedMessage<CreateRoom>, _: &mut Context<Self>) {
+    fn handle(
+        &mut self,
+        m: IdentifiedMessage<CreateRoom>,
+        _: &mut Context<Self>,
+    ) -> RequestResponse {
         let id = RoomId(Uuid::new_v4());
         self.rooms.insert(id, Room::new(m.user_id));
-        self.respond(m.session_id, RequestResponse::room(id), m.request_id);
+        RequestResponse::room(id)
     }
 }
 
 impl Handler<IdentifiedMessage<Join>> for ClientServer {
-    type Result = ();
+    type Result = RequestResponse;
 
-    fn handle(&mut self, m: IdentifiedMessage<Join>, _: &mut Context<Self>) {
-        self.rooms.get_mut(&m.msg.room).unwrap().add(m.user_id); // TODO don't unwrap
-        self.respond(m.session_id, RequestResponse::success(), m.request_id);
+    fn handle(&mut self, m: IdentifiedMessage<Join>, _: &mut Context<Self>) -> RequestResponse {
+        self.rooms.get_mut(&m.msg.room).unwrap().add(m.user_id);
+        RequestResponse::success()
     }
 }
 
 impl Handler<IdentifiedMessage<Edit>> for ClientServer {
-    type Result = ();
+    type Result = RequestResponse;
 
-    fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) {
+    fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) -> RequestResponse {
         let room_id = m.msg.room_id;
         self.send_to_room(&room_id, ServerMessage::Edit(m.msg), &m.session_id);
-        self.respond(m.session_id, RequestResponse::success(), m.request_id);
+        RequestResponse::success()
     }
 }
 
 impl Handler<IdentifiedMessage<Delete>> for ClientServer {
-    type Result = ();
+    type Result = RequestResponse;
 
-    fn handle(&mut self, m: IdentifiedMessage<Delete>, _: &mut Context<Self>) {
+    fn handle(&mut self, m: IdentifiedMessage<Delete>, _: &mut Context<Self>) -> RequestResponse {
         let room_id = m.msg.room_id;
         self.send_to_room(&room_id, ServerMessage::Delete(m.msg), &m.session_id);
-        self.respond(m.session_id, RequestResponse::success(), m.request_id);
+        RequestResponse::success()
     }
 }

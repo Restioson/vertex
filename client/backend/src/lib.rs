@@ -12,12 +12,11 @@ pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
 
 pub struct Config {
     pub url: Url,
-    pub client_id: UserId,
 }
 
 pub struct Vertex {
     socket: Client<TcpStream>,
-    id: UserId,
+    pub name: Option<String>,
     logged_in: bool,
     heartbeat: Instant,
 }
@@ -35,7 +34,7 @@ impl Vertex {
 
         Vertex {
             socket,
-            id: config.client_id,
+            name: None,
             logged_in: false,
             heartbeat: Instant::now(),
         }
@@ -120,9 +119,12 @@ impl Vertex {
         }
     }
 
-    pub fn login(&mut self) -> Result<(), Error> {
+    pub fn create_user(&mut self, name: &str, password: &str) -> Result<UserId, Error> {
         if !self.logged_in {
-            let request_id = self.request(ClientMessage::Login(Login { id: self.id }))?;
+            let request_id = self.request(ClientMessage::CreateUser {
+                name: name.to_string(),
+                password: password.to_string(),
+            })?;
 
             let msg = self.receive_blocking()?;
             match msg.clone() {
@@ -132,7 +134,41 @@ impl Vertex {
                 } => {
                     match response {
                         // TODO do this more asynchronously @gegy1000
-                        RequestResponse::Success(Success::NoData) if response_id == request_id => {
+                        RequestResponse::Success(Success::User { id })
+                            if response_id == request_id =>
+                        {
+                            Ok(id)
+                        }
+                        RequestResponse::Error(e) => Err(Error::ServerError(e)),
+                        _ => Err(Error::IncorrectServerMessage(msg)),
+                    }
+                }
+                msg @ _ => Err(Error::IncorrectServerMessage(msg)),
+            }
+        } else {
+            Err(Error::AlreadyLoggedIn)
+        }
+    }
+
+    pub fn login(&mut self, name: &str, password: &str) -> Result<(), Error> {
+        if !self.logged_in {
+            let request_id = self.request(ClientMessage::Login(Login {
+                name: name.clone().to_string(),
+                password: password.to_string(),
+            }))?;
+
+            let msg = self.receive_blocking()?;
+            match msg.clone() {
+                ServerMessage::Response {
+                    response,
+                    request_id: response_id,
+                } => {
+                    match response {
+                        // TODO do this more asynchronously @gegy1000
+                        RequestResponse::Success(Success::User { id: _ })
+                            if response_id == request_id =>
+                        {
+                            self.name = Some(name.to_string());
                             Ok(())
                         }
                         RequestResponse::Error(e) => Err(Error::ServerError(e)),
@@ -209,10 +245,6 @@ impl Vertex {
         self.socket
             .send_message(&OwnedMessage::Ping(vec![]))
             .map_err(Error::WebSocketError)
-    }
-
-    pub fn username(&self) -> String {
-        format!("{}", self.id.0) // TODO lol
     }
 }
 
