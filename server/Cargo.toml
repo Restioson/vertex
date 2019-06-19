@@ -19,6 +19,8 @@ l337 = { git = "https://github.com/OneSignal/L3-37", rev = "369454b7312ef68a60f5
 l337-postgres = { git = "https://github.com/OneSignal/L3-37", rev = "369454b7312ef68a60f5d2df30ad2544fec50359" }
 tokio = "^0.1"
 tokio-postgres = { version = "0.4.0-rc.2", features = ["with-uuid-0_7"] }
-rust-argon2 = "0.4.0"
+tokio-threadpool = "^0.1"
+rust-argon2 = "^0.4"
 rand = "0.7.0-pre.1"
 vertex_common = { path = "../common/", features = ["enable-actix"] }
+lazy_static = "^1"

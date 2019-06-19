@@ -5,12 +5,18 @@ use crate::SendMessage;
 use actix::prelude::*;
 use actix_web_actors::ws::{self, WebsocketContext};
 use futures::future;
+use lazy_static::lazy_static;
 use rand::RngCore;
 use std::io::Cursor;
 use std::time::Instant;
 use tokio_postgres::error::SqlState;
+use tokio_threadpool::ThreadPool;
 use uuid::Uuid;
 use vertex_common::*;
+
+lazy_static! {
+    static ref THREAD_POOL: ThreadPool = ThreadPool::new();
+}
 
 #[derive(Eq, PartialEq)]
 enum SessionState {
@@ -157,27 +163,49 @@ impl ClientWsSession {
             .send(GetUserByName(login.name.clone()))
             .and_then(move |user_opt| match user_opt {
                 Ok(Some(user)) => {
-                    let matches =
-                        argon2::verify_encoded(&user.password_hash, login.password.as_bytes())
-                            .expect("Error verifying password hash");
-
-                    let fut: Box<dyn Future<Item = RequestResponse, Error = MailboxError>> =
-                        if matches {
-                            Box::new(
-                                client_server
-                                    .send(Connect {
-                                        session,
-                                        session_id,
-                                        user_id: user.id,
-                                    })
-                                    .and_then(move |_| future::ok(RequestResponse::user(user.id))),
-                            )
-                        } else {
-                            Box::new(future::ok(RequestResponse::Error(
-                                ServerError::IncorrectPassword,
-                            )))
-                        };
-                    fut
+                    let hash = user.password_hash.clone();
+                    Box::new(
+                        THREAD_POOL
+                            .spawn_handle(future::poll_fn(move || {
+                                tokio_threadpool::blocking(|| {
+                                    argon2::verify_encoded(&hash, login.password.as_bytes())
+                                        .expect("Error verifying password hash")
+                                })
+                                .map_err(|_| panic!("the threadpool shut down"))
+                            }))
+                            .and_then(move |matches| {
+                                if matches {
+                                    Box::new(
+                                        client_server
+                                            .send(Connect {
+                                                session,
+                                                session_id,
+                                                user_id: user.id,
+                                            })
+                                            .and_then(move |_| {
+                                                future::ok(RequestResponse::user(user.id))
+                                            }),
+                                    )
+                                        as Box<
+                                            dyn Future<
+                                                Item = RequestResponse,
+                                                Error = MailboxError,
+                                            >,
+                                        >
+                                } else {
+                                    Box::new(future::ok(RequestResponse::Error(
+                                        ServerError::IncorrectPassword,
+                                    )))
+                                        as Box<
+                                            dyn Future<
+                                                Item = RequestResponse,
+                                                Error = MailboxError,
+                                            >,
+                                        >
+                                }
+                            }),
+                    )
+                        as Box<dyn Future<Item = RequestResponse, Error = MailboxError>>
                 }
                 Ok(None) => Box::new(future::ok(RequestResponse::Error(
                     ServerError::UserDoesNotExist,
@@ -208,19 +236,27 @@ impl ClientWsSession {
 
         let mut config = Default::default();
         // TODO configure this more ^? Not really sure what to do...
-
-        let password_hash = argon2::hash_encoded(password.as_bytes(), &salt, &config)
-            .expect("Error generating password hash");
-
         let id = UserId(Uuid::new_v4());
 
-        self.database_server
-            .send(CreateUser(User {
-                id,
-                name,
-                password_hash,
+        THREAD_POOL
+            .spawn_handle(future::poll_fn(move || {
+                tokio_threadpool::blocking(|| {
+                    argon2::hash_encoded(password.as_bytes(), &salt, &config)
+                        .expect("Error generating password hash")
+                })
+                .map_err(|_| panic!("the threadpool shut down"))
             }))
-            .map(move |res| match res {
+            .into_actor(self)
+            .and_then(move |password_hash, act, ctx| {
+                act.database_server
+                    .send(CreateUser(User {
+                        id,
+                        name,
+                        password_hash,
+                    }))
+                    .into_actor(act)
+            })
+            .map(move |res, _act, _ctx| match res {
                 Ok(_) => RequestResponse::user(id),
                 Err(l337_err) => match l337_err {
                     l337::Error::Internal(_) => RequestResponse::Error(ServerError::Internal),
@@ -236,7 +272,6 @@ impl ClientWsSession {
                     }
                 },
             })
-            .into_actor(self)
     }
 
     fn start_heartbeat(&mut self, ctx: &mut WebsocketContext<Self>) {
