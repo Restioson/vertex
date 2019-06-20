@@ -72,10 +72,10 @@ impl DatabaseServer {
                 conn.client
                     .prepare(
                         "CREATE TABLE IF NOT EXISTS users (
-                        id            UUID PRIMARY KEY,
-                        name          VARCHAR(64) NOT NULL UNIQUE,
-                        password_hash VARCHAR NOT NULL
-                    )",
+                            id            UUID PRIMARY KEY,
+                            name          VARCHAR(64) NOT NULL UNIQUE,
+                            password_hash VARCHAR NOT NULL
+                        )",
                     )
                     .and_then(move |stmt| conn.client.execute(&stmt, &[]))
                     .map(|code| {
@@ -92,7 +92,7 @@ impl DatabaseServer {
 impl Actor for DatabaseServer {
     type Context = Context<Self>;
 
-    fn started(&mut self, ctx: &mut Context<Self>) {
+    fn started(&mut self, _ctx: &mut Context<Self>) {
         Arbiter::spawn(self.create_tables());
     }
 }
