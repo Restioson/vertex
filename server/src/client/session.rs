@@ -4,7 +4,7 @@ use crate::federation::FederationServer;
 use crate::SendMessage;
 use actix::prelude::*;
 use actix_web_actors::ws::{self, WebsocketContext};
-use futures::future;
+use futures::future::{self, Either};
 use lazy_static::lazy_static;
 use rand::RngCore;
 use std::io::Cursor;
@@ -65,18 +65,10 @@ impl ClientWsSession {
         self.state.user_id()
     }
 
-    fn handle_message(&mut self, req: ClientRequest, ctx: &mut WebsocketContext<Self>) {
-        let request_id = req.request_id.clone();
-
-        let fut: Box<dyn ActorFuture<Item = RequestResponse, Error = MailboxError, Actor = Self>> =
-            match req.message {
-                ClientMessage::Login(login) => Box::new(self.login(login, ctx)),
-                ClientMessage::CreateUser { name, password } => {
-                    Box::new(self.create_user(name, password, ctx))
-                }
-                m => self.handle_authenticated_message(m, req.request_id, ctx),
-            };
-
+    fn respond<F>(&mut self, fut: F, request_id: RequestId, ctx: &mut WebsocketContext<Self>)
+    where
+        F: ActorFuture<Item = RequestResponse, Error = MailboxError, Actor = Self> + 'static,
+    {
         fut.then(move |response, act, ctx| {
             let response = ServerMessage::Response {
                 response: if let Ok(r) = response {
@@ -93,19 +85,33 @@ impl ClientWsSession {
         .wait(ctx);
     }
 
+    fn handle_message(&mut self, req: ClientRequest, ctx: &mut WebsocketContext<Self>) {
+        let request_id = req.request_id.clone();
+
+        match req.message {
+            ClientMessage::Login(login) => self.login(login, req.request_id, ctx),
+            ClientMessage::CreateUser { name, password } => {
+                self.create_user(name, password, req.request_id, ctx)
+            }
+            m => self.handle_authenticated_message(m, req.request_id, ctx),
+        };
+    }
+
     fn handle_authenticated_message(
         &mut self,
         msg: ClientMessage,
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
-    ) -> Box<dyn ActorFuture<Item = RequestResponse, Error = MailboxError, Actor = Self>> {
+    ) {
         match self.state {
-            SessionState::WaitingForLogin => Box::new(
+            SessionState::WaitingForLogin => self.respond(
                 futures::future::ok(RequestResponse::Error(ServerError::NotLoggedIn))
                     .into_actor(self),
+                request_id,
+                ctx,
             ),
             SessionState::Ready(id) => match msg {
-                ClientMessage::SendMessage(msg) => Box::new(
+                ClientMessage::SendMessage(msg) => self.respond(
                     self.client_server
                         .send(IdentifiedMessage {
                             user_id: id,
@@ -114,8 +120,10 @@ impl ClientWsSession {
                             msg,
                         })
                         .into_actor(self),
+                    request_id,
+                    ctx,
                 ),
-                ClientMessage::EditMessage(edit) => Box::new(
+                ClientMessage::EditMessage(edit) => self.respond(
                     self.client_server
                         .send(IdentifiedMessage {
                             user_id: id,
@@ -124,8 +132,10 @@ impl ClientWsSession {
                             msg: edit,
                         })
                         .into_actor(self),
+                    request_id,
+                    ctx,
                 ),
-                ClientMessage::JoinRoom(room) => Box::new(
+                ClientMessage::JoinRoom(room) => self.respond(
                     self.client_server
                         .send(IdentifiedMessage {
                             user_id: id,
@@ -134,8 +144,10 @@ impl ClientWsSession {
                             msg: Join { room },
                         })
                         .into_actor(self),
+                    request_id,
+                    ctx,
                 ),
-                ClientMessage::CreateRoom => Box::new(
+                ClientMessage::CreateRoom => self.respond(
                     self.client_server
                         .send(IdentifiedMessage {
                             user_id: id,
@@ -144,27 +156,26 @@ impl ClientWsSession {
                             msg: CreateRoom,
                         })
                         .into_actor(self),
+                    request_id,
+                    ctx,
                 ),
                 _ => unimplemented!(),
             },
         }
     }
 
-    fn login(
-        &mut self,
-        login: Login,
-        ctx: &mut WebsocketContext<Self>,
-    ) -> impl ActorFuture<Item = RequestResponse, Error = MailboxError, Actor = Self> {
+    fn login(&mut self, login: Login, request_id: RequestId, ctx: &mut WebsocketContext<Self>) {
         let client_server = self.client_server.clone();
         let session_id = self.session_id.clone();
         let session = ctx.address().clone();
 
-        self.database_server
+        let fut = self
+            .database_server
             .send(GetUserByName(login.name.clone()))
             .and_then(move |user_opt| match user_opt {
                 Ok(Some(user)) => {
                     let hash = user.password_hash.clone();
-                    Box::new(
+                    Either::A(
                         THREAD_POOL
                             .spawn_handle(future::poll_fn(move || {
                                 tokio_threadpool::blocking(|| {
@@ -175,7 +186,7 @@ impl ClientWsSession {
                             }))
                             .and_then(move |matches| {
                                 if matches {
-                                    Box::new(
+                                    Either::A(
                                         client_server
                                             .send(Connect {
                                                 session,
@@ -186,33 +197,20 @@ impl ClientWsSession {
                                                 future::ok(RequestResponse::user(user.id))
                                             }),
                                     )
-                                        as Box<
-                                            dyn Future<
-                                                Item = RequestResponse,
-                                                Error = MailboxError,
-                                            >,
-                                        >
                                 } else {
-                                    Box::new(future::ok(RequestResponse::Error(
+                                    Either::B(future::ok(RequestResponse::Error(
                                         ServerError::IncorrectPassword,
                                     )))
-                                        as Box<
-                                            dyn Future<
-                                                Item = RequestResponse,
-                                                Error = MailboxError,
-                                            >,
-                                        >
                                 }
                             }),
                     )
-                        as Box<dyn Future<Item = RequestResponse, Error = MailboxError>>
                 }
-                Ok(None) => Box::new(future::ok(RequestResponse::Error(
+                Ok(None) => Either::B(future::ok(RequestResponse::Error(
                     ServerError::UserDoesNotExist,
                 ))),
                 Err(e) => {
                     eprintln!("Database error: {:?}", e);
-                    Box::new(future::ok(RequestResponse::Error(ServerError::Internal)))
+                    Either::B(future::ok(RequestResponse::Error(ServerError::Internal)))
                 }
             })
             .into_actor(self)
@@ -222,15 +220,18 @@ impl ClientWsSession {
                 }
 
                 actix::fut::ok(res)
-            })
+            });
+
+        self.respond(fut, request_id, ctx);
     }
 
     fn create_user(
         &mut self,
         name: String,
         password: String,
+        request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
-    ) -> impl ActorFuture<Item = RequestResponse, Error = MailboxError, Actor = Self> {
+    ) {
         let mut salt: [u8; 32] = [0; 32];
         rand::thread_rng().fill_bytes(&mut salt);
 
@@ -238,7 +239,7 @@ impl ClientWsSession {
         // TODO configure this more ^? Not really sure what to do...
         let id = UserId(Uuid::new_v4());
 
-        THREAD_POOL
+        let fut = THREAD_POOL
             .spawn_handle(future::poll_fn(move || {
                 tokio_threadpool::blocking(|| {
                     argon2::hash_encoded(password.as_bytes(), &salt, &config)
@@ -271,7 +272,9 @@ impl ClientWsSession {
                         }
                     }
                 },
-            })
+            });
+
+        self.respond(fut, request_id, ctx)
     }
 
     fn start_heartbeat(&mut self, ctx: &mut WebsocketContext<Self>) {
