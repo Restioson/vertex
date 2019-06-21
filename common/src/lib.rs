@@ -194,6 +194,7 @@ pub enum ServerError {
     UsernameAlreadyExists,
     UserDoesNotExist,
     IncorrectPassword,
+    InvalidPassword,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

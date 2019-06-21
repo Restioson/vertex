@@ -9,7 +9,7 @@ port="$2"
 shift 2
 cmd="$@"
 
-until PGPASSWORD=$POSTGRES_PASSWORD nc $host $port &> /dev/null; do
+until PGPASSWORD=$POSTGRES_PASSWORD nc -z $host $port &> /dev/null; do
   >&2 echo "Postgres is unavailable - sleeping"
   sleep 2
 done

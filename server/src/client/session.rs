@@ -1,22 +1,16 @@
 use super::*;
+use crate::auth;
 use crate::database::*;
 use crate::federation::FederationServer;
 use crate::SendMessage;
 use actix::prelude::*;
 use actix_web_actors::ws::{self, WebsocketContext};
 use futures::future::{self, Either};
-use lazy_static::lazy_static;
-use rand::RngCore;
 use std::io::Cursor;
 use std::time::Instant;
 use tokio_postgres::error::SqlState;
-use tokio_threadpool::ThreadPool;
 use uuid::Uuid;
 use vertex_common::*;
-
-lazy_static! {
-    static ref THREAD_POOL: ThreadPool = ThreadPool::new();
-}
 
 #[derive(Eq, PartialEq)]
 enum SessionState {
@@ -109,7 +103,6 @@ impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
         ctx.binary(msg);
     }
 }
-
 
 impl ClientWsSession {
     pub fn new(
@@ -242,51 +235,56 @@ impl ClientWsSession {
         let session_id = self.session_id.clone();
         let session = ctx.address().clone();
 
-        let fut = self
-            .database_server
-            .send(GetUserByName(login.name.clone()))
-            .and_then(move |user_opt| match user_opt {
-                Ok(Some(user)) => {
-                    let User { id: user_id, name: _, password_hash } = user;
-                    Either::A(
-                        verify(login.password, password_hash)
-                            .and_then(move |matches| {
-                                if matches {
-                                    Either::A(
-                                        client_server
-                                            .send(Connect {
-                                                session,
-                                                session_id,
-                                                user_id,
-                                            })
-                                            .and_then(move |_| {
-                                                future::ok(RequestResponse::user(user_id))
-                                            }),
-                                    )
-                                } else {
-                                    Either::B(future::ok(RequestResponse::Error(
-                                        ServerError::IncorrectPassword,
-                                    )))
-                                }
-                            }),
-                    )
-                }
-                Ok(None) => Either::B(future::ok(RequestResponse::Error(
-                    ServerError::UserDoesNotExist,
-                ))),
-                Err(e) => {
-                    eprintln!("Database error: {:?}", e);
-                    Either::B(future::ok(RequestResponse::Error(ServerError::Internal)))
-                }
-            })
-            .into_actor(self)
-            .and_then(|res, act, _ctx| {
-                if let RequestResponse::Success(Success::User { id }) = res {
-                    act.state = SessionState::Ready(id);
-                }
+        let fut =
+            self.database_server
+                .send(GetUserByName(login.name.clone()))
+                .and_then(move |user_opt| match user_opt {
+                    Ok(Some(user)) => {
+                        let User {
+                            id: user_id,
+                            password_hash,
+                            hash_scheme_version,
+                            ..
+                        } = user;
+                        Either::A(
+                            auth::verify(login.password, password_hash, hash_scheme_version)
+                                .and_then(move |matches| {
+                                    if matches {
+                                        Either::A(
+                                            client_server
+                                                .send(Connect {
+                                                    session,
+                                                    session_id,
+                                                    user_id,
+                                                })
+                                                .and_then(move |_| {
+                                                    future::ok(RequestResponse::user(user_id))
+                                                }),
+                                        )
+                                    } else {
+                                        Either::B(future::ok(RequestResponse::Error(
+                                            ServerError::IncorrectPassword,
+                                        )))
+                                    }
+                                }),
+                        )
+                    }
+                    Ok(None) => Either::B(future::ok(RequestResponse::Error(
+                        ServerError::UserDoesNotExist,
+                    ))),
+                    Err(e) => {
+                        eprintln!("Database error: {:?}", e);
+                        Either::B(future::ok(RequestResponse::Error(ServerError::Internal)))
+                    }
+                })
+                .into_actor(self)
+                .and_then(|res, act, _ctx| {
+                    if let RequestResponse::Success(Success::User { id }) = res {
+                        act.state = SessionState::Ready(id);
+                    }
 
-                actix::fut::ok(res)
-            });
+                    actix::fut::ok(res)
+                });
 
         self.respond(fut, request_id, ctx);
     }
@@ -298,35 +296,38 @@ impl ClientWsSession {
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
     ) {
+        if !auth::valid_password(&password) {
+            return ctx.binary(ServerMessage::Response {
+                response: RequestResponse::Error(ServerError::InvalidPassword),
+                request_id,
+            });
+        }
 
-        // TODO configure this more ^? Not really sure what to do...
-        let id = UserId(Uuid::new_v4());
-
-        let fut = hash(password)
+        let fut = auth::hash(password)
             .into_actor(self)
-            .and_then(move |password_hash, act, _ctx| {
+            .and_then(move |(hash, hash_version), act, _ctx| {
+                let user = User::new(name, hash, hash_version);
+                let id = user.id.clone();
+
                 act.database_server
-                    .send(CreateUser(User {
-                        id,
-                        name,
-                        password_hash,
-                    }))
+                    .send(CreateUser(user))
+                    .map(move |res| res.map(|_| id))
                     .into_actor(act)
             })
             .map(move |res, _act, _ctx| match res {
-                Ok(_) => RequestResponse::user(id),
+                Ok(id) => RequestResponse::user(id),
                 Err(l337_err) => match l337_err {
                     l337::Error::Internal(e) => {
                         eprintln!("Database connection pooling error: {:?}", e);
                         RequestResponse::Error(ServerError::Internal)
-                    },
+                    }
                     l337::Error::External(sql_error) => {
                         if sql_error.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
                             || sql_error.code() == Some(&SqlState::UNIQUE_VIOLATION)
                         {
                             RequestResponse::Error(ServerError::UsernameAlreadyExists)
                         } else {
-                            eprintln!("Database error: {:?}", sql_error.code());
+                            eprintln!("Database error: {:?}", sql_error);
                             RequestResponse::Error(ServerError::Internal)
                         }
                     }
@@ -335,28 +336,4 @@ impl ClientWsSession {
 
         self.respond(fut, request_id, ctx)
     }
-}
-
-fn hash<E: Send + 'static>(pass: String) -> impl Future<Item = String, Error = E> {
-    THREAD_POOL
-        .spawn_handle(future::poll_fn(move || {
-            tokio_threadpool::blocking(|| {
-                let mut salt: [u8; 32] = [0; 32];
-                rand::thread_rng().fill_bytes(&mut salt);
-                let config = Default::default();
-
-                argon2::hash_encoded(pass.as_bytes(), &salt, &config)
-                    .expect("Error generating password hash")
-            }).map_err(|_| panic!("the threadpool shut down"))
-        }))
-}
-
-fn verify<E: Send + 'static>(pass: String, hash: String) -> impl Future<Item = bool, Error = E> {
-    THREAD_POOL
-        .spawn_handle(future::poll_fn(move || {
-            tokio_threadpool::blocking(|| {
-                argon2::verify_encoded(&hash, pass.as_bytes())
-                    .expect("Error verifying password hash")
-            }).map_err(|_| panic!("the threadpool shut down"))
-        }))
 }

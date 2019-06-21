@@ -1,11 +1,11 @@
 FROM rust:1.35.0-slim as build
 
 WORKDIR /vertex/server
+RUN apt-get update && apt-get install libssl-dev pkg-config -y
 COPY server/Cargo.* .
 COPY common ../common
 
 # Build deps
-RUN apt-get update && apt-get install libssl-dev pkg-config -y
 RUN mkdir src/ && echo "fn main() {}" > src/main.rs && cargo build --release
 
 # Build project
@@ -15,6 +15,7 @@ RUN cargo build --release
 # Run
 FROM debian:stretch
 
+RUN apt-get update && apt-get install netcat -y && rm -r /var/lib/apt/lists/*
 COPY --from=build /vertex/server/target/release/vertex_server ./vertex_server
 COPY server/db.conf.docker db.conf
 COPY wait-for-postgres.sh .

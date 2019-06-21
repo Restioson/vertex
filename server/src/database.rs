@@ -1,3 +1,4 @@
+use crate::auth::HashSchemeVersion;
 use actix::prelude::*;
 use futures::stream::Stream;
 use l337_postgres::PostgresConnectionManager;
@@ -5,6 +6,7 @@ use std::convert::TryFrom;
 use std::fs;
 use tokio_postgres::row::Row;
 use tokio_postgres::NoTls;
+use uuid::Uuid;
 use vertex_common::UserId;
 
 pub struct GetUserById(pub UserId);
@@ -25,10 +27,42 @@ impl Message for CreateUser {
     type Result = Result<(), l337::Error<tokio_postgres::Error>>;
 }
 
+pub struct ChangeUsername {
+    new_name: String,
+}
+
+impl Message for ChangeUsername {
+    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
+}
+
+pub struct ChangePassword {
+    new_password_hash: String,
+}
+
 pub struct User {
     pub id: UserId,
     pub name: String,
     pub password_hash: String,
+    pub hash_scheme_version: HashSchemeVersion,
+    pub compromised: bool,
+    pub banned: bool,
+}
+
+impl User {
+    pub fn new(
+        name: String,
+        password_hash: String,
+        hash_scheme_version: HashSchemeVersion,
+    ) -> Self {
+        User {
+            id: UserId(Uuid::new_v4()),
+            name,
+            password_hash,
+            hash_scheme_version,
+            compromised: false,
+            banned: false,
+        }
+    }
 }
 
 impl TryFrom<Row> for User {
@@ -39,6 +73,11 @@ impl TryFrom<Row> for User {
             id: UserId(row.try_get("id")?),
             name: row.try_get("name")?,
             password_hash: row.try_get("password_hash")?,
+            hash_scheme_version: HashSchemeVersion::from(
+                row.try_get::<&str, i16>("hash_scheme_version")?,
+            ),
+            compromised: row.try_get("compromised")?,
+            banned: row.try_get("banned")?,
         })
     }
 }
@@ -72,9 +111,12 @@ impl DatabaseServer {
                 conn.client
                     .prepare(
                         "CREATE TABLE IF NOT EXISTS users (
-                            id            UUID PRIMARY KEY,
-                            name          VARCHAR(64) NOT NULL UNIQUE,
-                            password_hash VARCHAR NOT NULL
+                            id                   UUID PRIMARY KEY,
+                            name                 VARCHAR(64) NOT NULL UNIQUE,
+                            password_hash        VARCHAR NOT NULL,
+                            hash_scheme_version  SMALLINT NOT NULL,
+                            compromised          BOOLEAN NOT NULL,
+                            banned               BOOLEAN NOT NULL
                         )",
                     )
                     .and_then(move |stmt| conn.client.execute(&stmt, &[]))
@@ -104,10 +146,23 @@ impl Handler<CreateUser> for DatabaseServer {
         let user = create.0;
         Box::new(self.pool.connection().and_then(|mut conn| {
             conn.client
-                .prepare("INSERT INTO users (id, name, password_hash) VALUES ($1, $2, $3)")
+                .prepare(
+                    "INSERT INTO users
+                        (id, name, password_hash, hash_scheme_version, compromised, banned)
+                    VALUES ($1, $2, $3, $4, $5, $6)",
+                )
                 .and_then(move |stmt| {
-                    conn.client
-                        .execute(&stmt, &[&user.id.0, &user.name, &user.password_hash])
+                    conn.client.execute(
+                        &stmt,
+                        &[
+                            &user.id.0,
+                            &user.name,
+                            &user.password_hash,
+                            &(user.hash_scheme_version as u8 as i16),
+                            &user.compromised,
+                            &user.banned,
+                        ],
+                    )
                 })
                 .map_err(l337::Error::External)
                 .map(|_| ())
