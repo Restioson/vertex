@@ -225,6 +225,12 @@ impl ClientWsSession {
                     request_id,
                     ctx,
                 ),
+                ClientMessage::ChangePassword { new_password } => self.change_password(
+                    new_password,
+                    id,
+                    request_id,
+                    ctx,
+                ),
                 _ => unimplemented!(),
             },
         }
@@ -331,6 +337,45 @@ impl ClientWsSession {
                             RequestResponse::Error(ServerError::Internal)
                         }
                     }
+                },
+            });
+
+        self.respond(fut, request_id, ctx)
+    }
+
+    fn change_password(
+        &mut self,
+        password: String,
+        user_id: UserId,
+        request_id: RequestId,
+        ctx: &mut WebsocketContext<Self>,
+    ) {
+        if !auth::valid_password(&password) {
+            return ctx.binary(ServerMessage::Response {
+                response: RequestResponse::Error(ServerError::InvalidPassword),
+                request_id,
+            });
+        }
+
+        let fut = auth::hash(password)
+            .into_actor(self)
+            .and_then(move |(new_password_hash, hash_version), act, _ctx| {
+                act.database_server
+                    .send(ChangePassword { user_id, new_password_hash, hash_version })
+                    .map(move |res| res.map(|_| ()))
+                    .into_actor(act)
+            })
+            .map(move |res, _act, _ctx| match res {
+                Ok(_) => RequestResponse::success(),
+                Err(l337_err) => match l337_err {
+                    l337::Error::Internal(e) => {
+                        eprintln!("Database connection pooling error: {:?}", e);
+                        RequestResponse::Error(ServerError::Internal)
+                    }
+                    l337::Error::External(sql_error) => {
+                        eprintln!("Database error: {:?}", sql_error);
+                        RequestResponse::Error(ServerError::Internal)
+                    },
                 },
             });
 

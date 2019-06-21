@@ -28,6 +28,7 @@ impl Message for CreateUser {
 }
 
 pub struct ChangeUsername {
+    user_id: UserId,
     new_name: String,
 }
 
@@ -36,7 +37,13 @@ impl Message for ChangeUsername {
 }
 
 pub struct ChangePassword {
-    new_password_hash: String,
+    pub user_id: UserId,
+    pub new_password_hash: String,
+    pub hash_version: HashSchemeVersion,
+}
+
+impl Message for ChangePassword {
+    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
 }
 
 pub struct User {
@@ -211,6 +218,48 @@ impl Handler<GetUserByName> for DatabaseServer {
                         .map_err(|(err, _stream)| err)
                 })
                 .and_then(|x| x.transpose()) // Fut<Opt<Res<Usr, Err>>, Err> -> Fut<Opt<Usr>, Err>
+                .map_err(l337::Error::External)
+        }))
+    }
+}
+
+impl Handler<ChangeUsername> for DatabaseServer {
+    type Result = ResponseFuture<(), l337::Error<tokio_postgres::Error>>;
+
+    fn handle(&mut self, change: ChangeUsername, _: &mut Context<Self>) -> Self::Result {
+        Box::new(self.pool.connection().and_then(move |mut conn| {
+            conn.client
+                .prepare("UPDATE users SET name = $1 WHERE id = $2")
+                .and_then(move |stmt| {
+                    conn.client
+                        .execute(&stmt, &[&change.new_name, &change.user_id.0])
+                })
+                .map(|_| ())
+                .map_err(l337::Error::External)
+        }))
+    }
+}
+
+impl Handler<ChangePassword> for DatabaseServer {
+    type Result = ResponseFuture<(), l337::Error<tokio_postgres::Error>>;
+
+    fn handle(&mut self, change: ChangePassword, _: &mut Context<Self>) -> Self::Result {
+        Box::new(self.pool.connection().and_then(move |mut conn| {
+            conn.client
+                .prepare(
+                    "UPDATE users SET password_hash = $1, hash_scheme_version = $2 WHERE id = $3",
+                )
+                .and_then(move |stmt| {
+                    conn.client.execute(
+                        &stmt,
+                        &[
+                            &change.new_password_hash,
+                            &(change.hash_version as u8 as i16),
+                            &change.user_id.0,
+                        ],
+                    )
+                })
+                .map(|_| ())
                 .map_err(l337::Error::External)
         }))
     }

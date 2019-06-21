@@ -60,6 +60,8 @@ pub enum ClientMessage {
     CreateRoom,
     JoinRoom(RoomId),
     Delete(Delete),
+    ChangePassword { new_password: String },
+    ChangeUsername { new_username: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,7 +177,7 @@ where
     A: actix::Actor,
     M: actix::Message<Result = Self>,
 {
-    fn handle<R: actix::dev::ResponseChannel<M>>(self, ctx: &mut A::Context, tx: Option<R>) {
+    fn handle<R: actix::dev::ResponseChannel<M>>(self, _ctx: &mut A::Context, tx: Option<R>) {
         if let Some(tx) = tx {
             tx.send(self);
         }
