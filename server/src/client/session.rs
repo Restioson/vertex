@@ -225,12 +225,9 @@ impl ClientWsSession {
                     request_id,
                     ctx,
                 ),
-                ClientMessage::ChangePassword { new_password } => self.change_password(
-                    new_password,
-                    id,
-                    request_id,
-                    ctx,
-                ),
+                ClientMessage::ChangePassword { new_password } => {
+                    self.change_password(new_password, id, request_id, ctx)
+                }
                 _ => unimplemented!(),
             },
         }
@@ -361,7 +358,11 @@ impl ClientWsSession {
             .into_actor(self)
             .and_then(move |(new_password_hash, hash_version), act, _ctx| {
                 act.database_server
-                    .send(ChangePassword { user_id, new_password_hash, hash_version })
+                    .send(ChangePassword {
+                        user_id,
+                        new_password_hash,
+                        hash_version,
+                    })
                     .map(move |res| res.map(|_| ()))
                     .into_actor(act)
             })
@@ -375,7 +376,7 @@ impl ClientWsSession {
                     l337::Error::External(sql_error) => {
                         eprintln!("Database error: {:?}", sql_error);
                         RequestResponse::Error(ServerError::Internal)
-                    },
+                    }
                 },
             });
 

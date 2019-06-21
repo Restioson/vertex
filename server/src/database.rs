@@ -112,7 +112,7 @@ impl DatabaseServer {
 
 impl DatabaseServer {
     fn create_tables(&mut self) -> impl Future<Item = (), Error = ()> {
-        self.pool
+        let users = self.pool
             .connection()
             .and_then(|mut conn| {
                 conn.client
@@ -127,14 +127,40 @@ impl DatabaseServer {
                         )",
                     )
                     .and_then(move |stmt| conn.client.execute(&stmt, &[]))
+                    .map(move |code| {
+                        if code != 0 {
+                            panic!("nonzero sql return code {}", code)
+                        }
+                    })
+                    .map_err(|e| panic!("db error: {:?}", e))
+            })
+            .map_err(|e| panic!("db connection pool error: {:?}", e));
+
+        let login_tokens = self.pool
+            .connection()
+            .and_then(|mut conn| {
+                conn.client
+                    .prepare(
+                        "CREATE TABLE IF NOT EXISTS login_tokens (
+                            macaroon         BYTEA PRIMARY KEY,
+                            user_id          UUID NOT NULL,
+                            device           UUID NOT NULL,
+                            last_used        TIMESTAMP WITH TIME ZONE,
+                            expiration_date  TIMESTAMP WITH TIME ZONE
+                        )",
+                    )
+                    .and_then(move |stmt| conn.client.execute(&stmt, &[]))
                     .map(|code| {
                         if code != 0 {
                             panic!("nonzero sql return code {}", code)
                         }
                     })
-                    .map_err(|e| l337::Error::External(e))
+                    .map_err(|e| panic!("db error: {:?}", e))
             })
-            .map_err(|e| panic!("db error: {:?}", e))
+            .map_err(|e| panic!("db connection pool error: {:?}", e));
+
+        users
+            .and_then(|_| login_tokens)
     }
 }
 
