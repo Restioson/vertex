@@ -1,50 +1,9 @@
+use super::*;
 use crate::auth::HashSchemeVersion;
-use actix::prelude::*;
-use futures::stream::Stream;
-use l337_postgres::PostgresConnectionManager;
 use std::convert::TryFrom;
-use std::fs;
 use tokio_postgres::row::Row;
-use tokio_postgres::NoTls;
 use uuid::Uuid;
 use vertex_common::UserId;
-
-pub struct GetUserById(pub UserId);
-
-impl Message for GetUserById {
-    type Result = Result<Option<User>, l337::Error<tokio_postgres::Error>>;
-}
-
-pub struct GetUserByName(pub String);
-
-impl Message for GetUserByName {
-    type Result = Result<Option<User>, l337::Error<tokio_postgres::Error>>;
-}
-
-pub struct CreateUser(pub User);
-
-impl Message for CreateUser {
-    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
-}
-
-pub struct ChangeUsername {
-    user_id: UserId,
-    new_name: String,
-}
-
-impl Message for ChangeUsername {
-    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
-}
-
-pub struct ChangePassword {
-    pub user_id: UserId,
-    pub new_password_hash: String,
-    pub hash_version: HashSchemeVersion,
-}
-
-impl Message for ChangePassword {
-    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
-}
 
 pub struct User {
     pub id: UserId,
@@ -89,87 +48,41 @@ impl TryFrom<Row> for User {
     }
 }
 
-pub struct DatabaseServer {
-    pool: l337::Pool<PostgresConnectionManager<NoTls>>,
+pub struct GetUserById(pub UserId);
+
+impl Message for GetUserById {
+    type Result = Result<Option<User>, l337::Error<tokio_postgres::Error>>;
 }
 
-impl DatabaseServer {
-    pub fn new(sys: &mut SystemRunner) -> Self {
-        let mgr = PostgresConnectionManager::new(
-            fs::read_to_string("db.conf")
-                .expect("db.conf not found")
-                .parse()
-                .unwrap(),
-            NoTls,
-        );
+pub struct GetUserByName(pub String);
 
-        let pool = sys
-            .block_on(l337::Pool::new(mgr, Default::default()))
-            .expect("db error");
-        DatabaseServer { pool }
-    }
+impl Message for GetUserByName {
+    type Result = Result<Option<User>, l337::Error<tokio_postgres::Error>>;
 }
 
-impl DatabaseServer {
-    fn create_tables(&mut self) -> impl Future<Item = (), Error = ()> {
-        let users = self.pool
-            .connection()
-            .and_then(|mut conn| {
-                conn.client
-                    .prepare(
-                        "CREATE TABLE IF NOT EXISTS users (
-                            id                   UUID PRIMARY KEY,
-                            name                 VARCHAR(64) NOT NULL UNIQUE,
-                            password_hash        VARCHAR NOT NULL,
-                            hash_scheme_version  SMALLINT NOT NULL,
-                            compromised          BOOLEAN NOT NULL,
-                            banned               BOOLEAN NOT NULL
-                        )",
-                    )
-                    .and_then(move |stmt| conn.client.execute(&stmt, &[]))
-                    .map(move |code| {
-                        if code != 0 {
-                            panic!("nonzero sql return code {}", code)
-                        }
-                    })
-                    .map_err(|e| panic!("db error: {:?}", e))
-            })
-            .map_err(|e| panic!("db connection pool error: {:?}", e));
+pub struct CreateUser(pub User);
 
-        let login_tokens = self.pool
-            .connection()
-            .and_then(|mut conn| {
-                conn.client
-                    .prepare(
-                        "CREATE TABLE IF NOT EXISTS login_tokens (
-                            macaroon         BYTEA PRIMARY KEY,
-                            user_id          UUID NOT NULL,
-                            device           UUID NOT NULL,
-                            last_used        TIMESTAMP WITH TIME ZONE,
-                            expiration_date  TIMESTAMP WITH TIME ZONE
-                        )",
-                    )
-                    .and_then(move |stmt| conn.client.execute(&stmt, &[]))
-                    .map(|code| {
-                        if code != 0 {
-                            panic!("nonzero sql return code {}", code)
-                        }
-                    })
-                    .map_err(|e| panic!("db error: {:?}", e))
-            })
-            .map_err(|e| panic!("db connection pool error: {:?}", e));
-
-        users
-            .and_then(|_| login_tokens)
-    }
+impl Message for CreateUser {
+    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
 }
 
-impl Actor for DatabaseServer {
-    type Context = Context<Self>;
+pub struct ChangeUsername {
+    pub user_id: UserId,
+    pub new_name: String,
+}
 
-    fn started(&mut self, _ctx: &mut Context<Self>) {
-        Arbiter::spawn(self.create_tables());
-    }
+impl Message for ChangeUsername {
+    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
+}
+
+pub struct ChangePassword {
+    pub user_id: UserId,
+    pub new_password_hash: String,
+    pub hash_version: HashSchemeVersion,
+}
+
+impl Message for ChangePassword {
+    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
 }
 
 impl Handler<CreateUser> for DatabaseServer {

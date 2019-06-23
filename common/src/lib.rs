@@ -1,7 +1,9 @@
 //! Some definitions common between server and client
 #[cfg(feature = "enable-actix")]
 use actix::prelude::*;
+use bitflags::bitflags;
 use bytes::Bytes;
+use chrono::{DateTime, Utc};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -23,6 +25,12 @@ pub struct RoomId(pub Uuid);
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct MessageId(pub Uuid);
+
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct DeviceId(pub Uuid);
+
+#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct AuthToken(pub String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientRequest {
@@ -53,7 +61,8 @@ impl Into<Vec<u8>> for ClientRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
-    Login(Login),
+    Login(AuthToken),
+    CreateToken(CreateToken),
     CreateUser { name: String, password: String },
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
@@ -123,11 +132,38 @@ impl Message for Delete {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
-    pub name: String,
-    pub password: String,
+    pub token: String,
 }
 
 impl ClientMessageType for Login {}
+
+bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct TokenPermissionFlags: i64 {
+        /// Send messages
+        const SEND_MESSAGES = 1 << 0;
+        /// Edit any messages sent by this user
+        const EDIT_ANY_MESSAGES = 1 << 1;
+        /// Edit only messages sent by this device/from this token
+        const EDIT_OWN_MESSAGES = 1 << 2;
+        /// Delete any messages sent by this user
+        const DELETE_ANY_MESSAGES = 1 << 3;
+        /// Edit only messages sent by this device/from this token
+        const DELETE_OWN_MESSAGES = 1 << 4;
+        /// Change the user's name
+        const CHANGE_USERNAME = 1 << 5;
+        /// Join rooms
+        const JOIN_ROOM = 1 << 6;
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateToken {
+    pub name: String,
+    pub password: String,
+    pub expiration_date: Option<DateTime<Utc>>,
+    pub permission_flags: TokenPermissionFlags,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
@@ -169,6 +205,9 @@ impl RequestResponse {
     pub fn user(id: UserId) -> Self {
         RequestResponse::Success(Success::User { id })
     }
+    pub fn token(token: AuthToken) -> Self {
+        RequestResponse::Success(Success::Token { token })
+    }
 }
 
 #[cfg(feature = "enable-actix")]
@@ -193,8 +232,11 @@ pub enum ServerError {
     InvalidUrl,
     WsConnectionError,
     NotLoggedIn,
+    AlreadyLoggedIn,
     UsernameAlreadyExists,
     UserDoesNotExist,
+    InvalidUsername,
+    InvalidDisplayName,
     IncorrectPassword,
     InvalidPassword,
 }
@@ -205,6 +247,7 @@ pub enum Success {
     Room { id: RoomId },
     MessageSent { id: MessageId },
     User { id: UserId },
+    Token { token: AuthToken },
 }
 
 #[macro_export]

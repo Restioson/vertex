@@ -32,7 +32,7 @@ pub fn hash<E: Send + 'static>(
 ) -> impl Future<Item = (String, HashSchemeVersion), Error = E> {
     THREAD_POOL.spawn_handle(future::poll_fn(move || {
         tokio_threadpool::blocking(|| {
-            let mut salt: [u8; 32] = [0; 32];
+            let mut salt: [u8; 32] = [0; 32]; // 256 bits
             rand::thread_rng().fill_bytes(&mut salt);
             let config = Default::default();
 
