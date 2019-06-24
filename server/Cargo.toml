@@ -23,9 +23,10 @@ chrono = { version = "0.4", features = ["serde"] }
 tokio-threadpool = "^0.1"
 rust-argon2 = "^0.4"
 rand = "0.7.0-pre.1"
-vertex_common = { path = "../common/", features = ["enable-actix"] }
 lazy_static = "^1"
 bitflags = "^1"
 base64 = "^0.10"
-confy = "^0.3"
+directories = "^2"
+toml = "0.5"
 unicode-normalization = "0.1.8"
+vertex_common = { path = "../common/", features = ["enable-actix"] }

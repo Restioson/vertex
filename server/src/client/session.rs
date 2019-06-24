@@ -1,8 +1,8 @@
 use super::*;
 use crate::auth;
+use crate::config::Config;
 use crate::database::*;
 use crate::federation::FederationServer;
-use crate::Config;
 use crate::SendMessage;
 use actix::prelude::*;
 use actix_web::web::Data;

@@ -1,4 +1,4 @@
-use crate::Config;
+use crate::config::Config;
 use futures::{future, Future};
 use lazy_static::lazy_static;
 use rand::RngCore;
@@ -25,12 +25,18 @@ impl From<i16> for HashSchemeVersion {
 }
 
 pub fn valid_password(password: &str, config: &Config) -> bool {
-    password.len() <= config.max_password_len as usize &&
-        password.len() <= config.min_password_len as usize
+    password.len() <= config.max_password_len as usize
+        && password.len() >= config.min_password_len as usize
 }
 
 pub fn valid_display_name(display_name: &str, config: &Config) -> bool {
     display_name.len() <= config.max_display_name_len as usize
+        && display_name.len() >= config.min_display_name_len as usize
+}
+
+fn valid_username(username: &str, config: &Config) -> bool {
+    username.len() <= config.max_username_len as usize
+        && username.len() >= config.min_username_len as usize
 }
 
 pub struct TooShort;
@@ -44,7 +50,7 @@ pub fn process_username(username: &str, config: &Config) -> String {
 }
 
 pub fn prepare_username(username: &str, config: &Config) -> Result<String, TooShort> {
-    if username.len() <= config.max_username_len as usize {
+    if valid_username(username, config) {
         Ok(process_username(username, config))
     } else {
         Err(TooShort)

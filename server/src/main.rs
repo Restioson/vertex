@@ -7,6 +7,7 @@ use std::{env, fmt::Debug};
 
 mod auth;
 mod client;
+mod config;
 mod database;
 mod federation;
 
@@ -19,32 +20,13 @@ pub struct SendMessage<T: Debug> {
     message: T,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Config {
-    max_password_len: u32,
-    max_username_len: u16,
-    max_display_name_len: u16,
-    min_password_len: u16,
-}
-
-impl Default for Config {
-    fn default() -> Config {
-        Config {
-            max_password_len: 1000,
-            max_username_len: 64,
-            max_display_name_len: 64,
-            min_password_len: 12,
-        }
-    }
-}
-
 fn dispatch_client_ws(
     request: HttpRequest,
     stream: Payload,
     client_server: Data<Addr<ClientServer>>,
     federation_server: Data<Addr<FederationServer>>,
     db_server: Data<Addr<DatabaseServer>>,
-    config: Data<Config>,
+    config: Data<config::Config>,
 ) -> Result<HttpResponse, Error> {
     let client_server = client_server.get_ref().clone();
     let federation_server = federation_server.get_ref().clone();
@@ -69,7 +51,7 @@ fn main() -> std::io::Result<()> {
     let args = env::args().collect::<Vec<_>>();
     let addr = args.get(1).cloned().unwrap_or("127.0.0.1:8080".to_string());
 
-    let config: Config = confy::load("vertex_server").expect("Error loading config");
+    let config = config::load_config();
 
     let mut sys = System::new("vertex_server");
     let db_server = DatabaseServer::new(&mut sys).start();
