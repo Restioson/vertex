@@ -58,12 +58,12 @@ impl Update for Win {
     type ModelParam = VertexArgs;
     type Msg = VertexMsg;
 
-    fn model(relm: &Relm<Win>, args: VertexArgs) -> VertexModel {
+    fn model(_relm: &Relm<Win>, args: VertexArgs) -> VertexModel {
         println!(
             "Connecting to {}",
             args.ip.clone().unwrap_or("127.0.0.1:8080".to_string())
         );
-        let mut model = VertexModel {
+        let model = VertexModel {
             vertex: Vertex::new(Config {
                 url: Url::parse(&format!(
                     "ws://{}/client/",
@@ -140,10 +140,11 @@ impl Update for Win {
                                 text_buffer
                                     .insert(&mut text_buffer.get_end_iter(), "Logging in...\n");
 
-                                match self.model.vertex.login(v[1], v[2]) {
-                                    Ok(_) => text_buffer.insert(
+                                match self.model.vertex.login(None, v[1], v[2]) {
+                                    // TODO store token
+                                    Ok((device_id, token)) => text_buffer.insert(
                                         &mut text_buffer.get_end_iter(),
-                                        "Sucessfully logged in.\n",
+                                        &format!("Sucessfully logged in. Token: {}.\n", token.0),
                                     ),
                                     Err(e) => text_buffer.insert(
                                         &mut text_buffer.get_end_iter(),
@@ -167,7 +168,7 @@ impl Update for Win {
                                 let id = self
                                     .model
                                     .vertex
-                                    .create_user(v[1], v[2])
+                                    .create_user(v[1], v[1], v[2])
                                     .expect("Error registering user");
 
                                 text_buffer.insert(
@@ -195,7 +196,7 @@ impl Update for Win {
                     .send_message(msg.to_string(), room)
                     .expect("Error sending message"); // todo display error
 
-                let name = self.model.vertex.name.as_ref().expect("Not logged in");
+                let name = self.model.vertex.username.as_ref().expect("Not logged in");
 
                 // TODO: Unify
                 text_buffer.insert(
@@ -289,12 +290,7 @@ fn main() {
         )
         .get_matches();
 
-    let user_id = matches
-        .value_of("user-id")
-        .and_then(|id| Uuid::parse_str(id).ok());
-
     let ip = matches.value_of("ip").map(|ip| ip.to_string());
-
     let args = VertexArgs { ip };
 
     Win::run(args).expect("failed to run window");

@@ -10,7 +10,7 @@ use uuid::Uuid;
 #[macro_use]
 extern crate serde_derive;
 
-pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(5);
+pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub trait ClientMessageType {}
 
@@ -61,16 +61,35 @@ impl Into<Vec<u8>> for ClientRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
-    Login(AuthToken),
-    CreateToken(CreateToken),
-    CreateUser { name: String, password: String },
+    Login {
+        device_id: DeviceId,
+        token: AuthToken,
+    },
+    CreateToken {
+        username: String,
+        password: String,
+        expiration_date: Option<DateTime<Utc>>,
+        permission_flags: TokenPermissionFlags,
+    },
+    CreateUser {
+        username: String,
+        display_name: String,
+        password: String,
+    },
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
     CreateRoom,
     JoinRoom(RoomId),
     Delete(Delete),
-    ChangePassword { new_password: String },
-    ChangeUsername { new_username: String },
+    ChangeUsername {
+        new_username: String,
+    },
+    ChangeDisplayName {
+        new_display_name: String,
+    },
+    ChangePassword {
+        new_password: String,
+    }, // TODO old_password
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,13 +149,6 @@ impl Message for Delete {
     type Result = RequestResponse;
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Login {
-    pub token: String,
-}
-
-impl ClientMessageType for Login {}
-
 bitflags! {
     #[derive(Serialize, Deserialize)]
     pub struct TokenPermissionFlags: i64 {
@@ -155,14 +167,6 @@ bitflags! {
         /// Join rooms
         const JOIN_ROOM = 1 << 6;
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateToken {
-    pub name: String,
-    pub password: String,
-    pub expiration_date: Option<DateTime<Utc>>,
-    pub permission_flags: TokenPermissionFlags,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -205,8 +209,8 @@ impl RequestResponse {
     pub fn user(id: UserId) -> Self {
         RequestResponse::Success(Success::User { id })
     }
-    pub fn token(token: AuthToken) -> Self {
-        RequestResponse::Success(Success::Token { token })
+    pub fn token(device_id: DeviceId, token: AuthToken) -> Self {
+        RequestResponse::Success(Success::Token { device_id, token })
     }
 }
 
@@ -238,16 +242,26 @@ pub enum ServerError {
     InvalidUsername,
     InvalidDisplayName,
     IncorrectPassword,
+    InvalidToken,
     InvalidPassword,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Success {
     NoData,
-    Room { id: RoomId },
-    MessageSent { id: MessageId },
-    User { id: UserId },
-    Token { token: AuthToken },
+    Room {
+        id: RoomId,
+    },
+    MessageSent {
+        id: MessageId,
+    },
+    User {
+        id: UserId,
+    },
+    Token {
+        device_id: DeviceId,
+        token: AuthToken,
+    },
 }
 
 #[macro_export]

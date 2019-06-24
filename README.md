@@ -24,6 +24,18 @@ e.g `cargo run -- 8081`.
 
 To run the client, do `wasm-pack build`
 
+## Configuration
+
+### Server
+
+The configuration file will be located in the standard configuration directories per platform, or in a similar location:
+
+| Linux                                                             | Windows                                          | macOS                                      |
+|-------------------------------------------------------------------|--------------------------------------------------|--------------------------------------------|
+| `$XDG_CONFIG_HOME/vertex_server` or `$HOME/.config/vertex_server` | `{FOLDERID_RoamingAppData}/vertex_server/config` | `$HOME/Library/Preferences/<project_path>` |
+
+On Docker, it should be located at ``
+
 ## Objectives
 
 - [ ] Basic Messaging:

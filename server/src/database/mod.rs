@@ -41,8 +41,8 @@ impl DatabaseServer {
                         // TODO configure max length of display name/username
                         "CREATE TABLE IF NOT EXISTS users (
                             id                   UUID PRIMARY KEY,
-                            display_name         VARCHAR NOT NULL UNIQUE,
                             username             VARCHAR NOT NULL UNIQUE,
+                            display_name         VARCHAR NOT NULL UNIQUE,
                             password_hash        VARCHAR NOT NULL,
                             hash_scheme_version  SMALLINT NOT NULL,
                             compromised          BOOLEAN NOT NULL,
@@ -62,10 +62,10 @@ impl DatabaseServer {
                 conn.client
                     .prepare(
                         "CREATE TABLE IF NOT EXISTS login_tokens (
-                            token_hash           VARCHAR PRIMARY KEY,
+                            device_id            UUID PRIMARY KEY,
+                            token_hash           VARCHAR NOT NULL,
                             hash_scheme_version  SMALLINT NOT NULL,
                             user_id              UUID NOT NULL,
-                            device_id            UUID NOT NULL,
                             last_used            TIMESTAMP WITH TIME ZONE NOT NULL,
                             expiration_date      TIMESTAMP WITH TIME ZONE,
                             permission_flags     BIGINT NOT NULL

@@ -10,6 +10,8 @@ services:
       - "8080"
     labels:
       - "net.gegy1000.vertex=server"
+    environment:
+      - XDG_CONFIG_HOME="/vertex/server/config"
     links:
       - db:db
     depends_on:

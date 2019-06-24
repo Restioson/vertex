@@ -8,6 +8,7 @@ use std::convert::TryFrom;
 use tokio_postgres::Row;
 use vertex_common::{DeviceId, TokenPermissionFlags, UserId};
 
+#[derive(Debug)]
 pub struct Token {
     pub token_hash: String,
     pub hash_scheme_version: HashSchemeVersion,
@@ -39,7 +40,7 @@ impl TryFrom<Row> for Token {
 }
 
 pub struct GetToken {
-    pub token_hash: String,
+    pub device_id: DeviceId,
 }
 
 impl Message for GetToken {
@@ -58,10 +59,10 @@ impl Handler<GetToken> for DatabaseServer {
     fn handle(&mut self, get: GetToken, _: &mut Context<Self>) -> Self::Result {
         Box::new(self.pool.connection().and_then(move |mut conn| {
             conn.client
-                .prepare("SELECT * FROM login_tokens WHERE token_hash=$1")
+                .prepare("SELECT * FROM login_tokens WHERE device_id=$1")
                 .and_then(move |stmt| {
                     conn.client
-                        .query(&stmt, &[&get.token_hash])
+                        .query(&stmt, &[&get.device_id.0])
                         .map(|row| Token::try_from(row))
                         .into_future()
                         .map(|(user, _stream)| user)
@@ -81,26 +82,27 @@ impl Handler<CreateToken> for DatabaseServer {
         Box::new(self.pool.connection().and_then(|mut conn| {
             conn.client
                 .prepare(
-                    "INSERT INTO users
+                    "INSERT INTO login_tokens
                         (
+                            device_id,
                             token_hash,
                             hash_scheme_version,
                             user_id,
-                            device_id,
                             last_used,
                             expiration_date,
                             permission_flags
                         )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ON CONFLICT DO NOTHING",
                 )
                 .and_then(move |stmt| {
                     conn.client.execute(
                         &stmt,
                         &[
+                            &token.device_id.0,
                             &token.token_hash,
                             &(token.hash_scheme_version as u8 as i16),
                             &token.user_id.0,
-                            &token.device_id.0,
                             &token.last_used,
                             &token.expiration_date,
                             &token.permission_flags.bits(),

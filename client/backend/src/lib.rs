@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use std::convert::Into;
 use std::io::{self, Cursor};
 use std::time::{Duration, Instant};
@@ -16,7 +17,8 @@ pub struct Config {
 
 pub struct Vertex {
     socket: Client<TcpStream>,
-    pub name: Option<String>,
+    pub username: Option<String>,
+    // TODO displayname
     logged_in: bool,
     heartbeat: Instant,
 }
@@ -34,7 +36,7 @@ impl Vertex {
 
         Vertex {
             socket,
-            name: None,
+            username: None,
             logged_in: false,
             heartbeat: Instant::now(),
         }
@@ -119,10 +121,16 @@ impl Vertex {
         }
     }
 
-    pub fn create_user(&mut self, name: &str, password: &str) -> Result<UserId, Error> {
+    pub fn create_user(
+        &mut self,
+        username: &str,
+        display_name: &str,
+        password: &str,
+    ) -> Result<UserId, Error> {
         if !self.logged_in {
             let request_id = self.request(ClientMessage::CreateUser {
-                name: name.to_string(),
+                username: username.to_string(),
+                display_name: display_name.to_string(),
                 password: password.to_string(),
             })?;
 
@@ -150,12 +158,23 @@ impl Vertex {
         }
     }
 
-    pub fn login(&mut self, name: &str, password: &str) -> Result<(), Error> {
+    pub fn login(
+        &mut self,
+        token: Option<(DeviceId, AuthToken)>,
+        username: &str,
+        password: &str,
+    ) -> Result<(DeviceId, AuthToken), Error> {
         if !self.logged_in {
-            let request_id = self.request(ClientMessage::Login(Login {
-                name: name.clone().to_string(),
-                password: password.to_string(),
-            }))?;
+            let (device_id, token) = match token {
+                Some(token) => token,
+                // TODO flags, None
+                None => self.create_token(username, password, None, TokenPermissionFlags::all())?,
+            };
+
+            let request_id = self.request(ClientMessage::Login {
+                device_id: device_id.clone(),
+                token: token.clone(),
+            })?;
 
             let msg = self.receive_blocking()?;
             match msg.clone() {
@@ -168,8 +187,8 @@ impl Vertex {
                         RequestResponse::Success(Success::User { id: _ })
                             if response_id == request_id =>
                         {
-                            self.name = Some(name.to_string());
-                            Ok(())
+                            self.username = Some(username.to_string());
+                            Ok((device_id, token))
                         }
                         RequestResponse::Error(e) => Err(Error::ServerError(e)),
                         _ => Err(Error::IncorrectServerMessage(msg)),
@@ -245,6 +264,43 @@ impl Vertex {
         self.socket
             .send_message(&OwnedMessage::Ping(vec![]))
             .map_err(Error::WebSocketError)
+    }
+
+    fn create_token(
+        &mut self,
+        username: &str,
+        password: &str,
+        expiration_date: Option<DateTime<Utc>>,
+        permission_flags: TokenPermissionFlags,
+    ) -> Result<(DeviceId, AuthToken), Error> {
+        let request_id = self.request(ClientMessage::CreateToken {
+            username: username.to_string(),
+            password: password.to_string(),
+            expiration_date,
+            permission_flags,
+        })?;
+
+        let msg = self.receive_blocking()?;
+        match msg.clone() {
+            ServerMessage::Response {
+                response,
+                request_id: response_id,
+            } => {
+                match response {
+                    // TODO do this more asynchronously @gegy1000
+                    RequestResponse::Success(Success::Token { device_id, token }) => {
+                        if response_id == request_id {
+                            Ok((device_id, token))
+                        } else {
+                            Err(Error::IncorrectServerMessage(msg))
+                        }
+                    }
+                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
+                    _ => Err(Error::IncorrectServerMessage(msg)),
+                }
+            }
+            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
+        }
     }
 }
 

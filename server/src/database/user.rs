@@ -7,7 +7,8 @@ use vertex_common::UserId;
 
 pub struct User {
     pub id: UserId,
-    pub name: String,
+    pub username: String,
+    pub display_name: String,
     pub password_hash: String,
     pub hash_scheme_version: HashSchemeVersion,
     pub compromised: bool,
@@ -16,13 +17,15 @@ pub struct User {
 
 impl User {
     pub fn new(
-        name: String,
+        username: String,
+        display_name: String,
         password_hash: String,
         hash_scheme_version: HashSchemeVersion,
     ) -> Self {
         User {
             id: UserId(Uuid::new_v4()),
-            name,
+            username,
+            display_name,
             password_hash,
             hash_scheme_version,
             compromised: false,
@@ -37,7 +40,8 @@ impl TryFrom<Row> for User {
     fn try_from(row: Row) -> Result<User, tokio_postgres::Error> {
         Ok(User {
             id: UserId(row.try_get("id")?),
-            name: row.try_get("name")?,
+            username: row.try_get("username")?,
+            display_name: row.try_get("display_name")?,
             password_hash: row.try_get("password_hash")?,
             hash_scheme_version: HashSchemeVersion::from(
                 row.try_get::<&str, i16>("hash_scheme_version")?,
@@ -63,15 +67,24 @@ impl Message for GetUserByName {
 pub struct CreateUser(pub User);
 
 impl Message for CreateUser {
-    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
+    type Result = Result<bool, l337::Error<tokio_postgres::Error>>;
 }
 
 pub struct ChangeUsername {
     pub user_id: UserId,
-    pub new_name: String,
+    pub new_username: String,
 }
 
 impl Message for ChangeUsername {
+    type Result = Result<bool, l337::Error<tokio_postgres::Error>>;
+}
+
+pub struct ChangeDisplayName {
+    pub user_id: UserId,
+    pub new_display_name: String,
+}
+
+impl Message for ChangeDisplayName {
     type Result = Result<(), l337::Error<tokio_postgres::Error>>;
 }
 
@@ -86,7 +99,7 @@ impl Message for ChangePassword {
 }
 
 impl Handler<CreateUser> for DatabaseServer {
-    type Result = ResponseFuture<(), l337::Error<tokio_postgres::Error>>;
+    type Result = ResponseFuture<bool, l337::Error<tokio_postgres::Error>>;
 
     fn handle(&mut self, create: CreateUser, _: &mut Context<Self>) -> Self::Result {
         let user = create.0;
@@ -94,15 +107,25 @@ impl Handler<CreateUser> for DatabaseServer {
             conn.client
                 .prepare(
                     "INSERT INTO users
-                        (id, name, password_hash, hash_scheme_version, compromised, banned)
-                    VALUES ($1, $2, $3, $4, $5, $6)",
+                        (
+                            id,
+                            username,
+                            display_name,
+                            password_hash,
+                            hash_scheme_version,
+                            compromised,
+                            banned
+                        )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ON CONFLICT DO NOTHING",
                 )
                 .and_then(move |stmt| {
                     conn.client.execute(
                         &stmt,
                         &[
                             &user.id.0,
-                            &user.name,
+                            &user.username,
+                            &user.display_name,
                             &user.password_hash,
                             &(user.hash_scheme_version as u8 as i16),
                             &user.compromised,
@@ -111,7 +134,7 @@ impl Handler<CreateUser> for DatabaseServer {
                     )
                 })
                 .map_err(l337::Error::External)
-                .map(|_| ())
+                .map(|ret| ret == 1) // Return true if 1 item was inserted (insert was sucessful)
         }))
     }
 }
@@ -147,7 +170,7 @@ impl Handler<GetUserByName> for DatabaseServer {
 
         Box::new(self.pool.connection().and_then(move |mut conn| {
             conn.client
-                .prepare("SELECT * FROM users WHERE name=$1")
+                .prepare("SELECT * FROM users WHERE username=$1")
                 .and_then(move |stmt| {
                     conn.client
                         .query(&stmt, &[&name])
@@ -163,15 +186,32 @@ impl Handler<GetUserByName> for DatabaseServer {
 }
 
 impl Handler<ChangeUsername> for DatabaseServer {
-    type Result = ResponseFuture<(), l337::Error<tokio_postgres::Error>>;
+    type Result = ResponseFuture<bool, l337::Error<tokio_postgres::Error>>;
 
     fn handle(&mut self, change: ChangeUsername, _: &mut Context<Self>) -> Self::Result {
         Box::new(self.pool.connection().and_then(move |mut conn| {
             conn.client
-                .prepare("UPDATE users SET name = $1 WHERE id = $2")
+                .prepare("UPDATE users SET username = $1 WHERE id = $2") // TODO where username not exists?
                 .and_then(move |stmt| {
                     conn.client
-                        .execute(&stmt, &[&change.new_name, &change.user_id.0])
+                        .execute(&stmt, &[&change.new_username, &change.user_id.0])
+                })
+                .map(|ret| ret == 1) // Return true if 1 item was updated (update was sucessful)
+                .map_err(l337::Error::External)
+        }))
+    }
+}
+
+impl Handler<ChangeDisplayName> for DatabaseServer {
+    type Result = ResponseFuture<(), l337::Error<tokio_postgres::Error>>;
+
+    fn handle(&mut self, change: ChangeDisplayName, _: &mut Context<Self>) -> Self::Result {
+        Box::new(self.pool.connection().and_then(move |mut conn| {
+            conn.client
+                .prepare("UPDATE users SET display_name = $1 WHERE id = $2")
+                .and_then(move |stmt| {
+                    conn.client
+                        .execute(&stmt, &[&change.new_display_name, &change.user_id.0])
                 })
                 .map(|_| ())
                 .map_err(l337::Error::External)

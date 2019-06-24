@@ -27,3 +27,5 @@ vertex_common = { path = "../common/", features = ["enable-actix"] }
 lazy_static = "^1"
 bitflags = "^1"
 base64 = "^0.10"
+confy = "^0.3"
+unicode-normalization = "0.1.8"
