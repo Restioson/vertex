@@ -612,13 +612,13 @@ impl ClientWsSession {
                                 if matches {
                                     Ok(user_id)
                                 } else {
-                                    Err(ServerError::IncorrectPassword)
+                                    Err(ServerError::IncorrectUsernameOrPassword)
                                 }
                             },
                         ),
                     )
                 }
-                Ok(None) => Either::B(future::ok(Err(ServerError::UserDoesNotExist))),
+                Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
                 Err(e) => {
                     eprintln!("Database error: {:?}", e);
                     Either::B(future::ok(Err(ServerError::Internal)))

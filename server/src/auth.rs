@@ -25,7 +25,8 @@ impl From<i16> for HashSchemeVersion {
 }
 
 pub fn valid_password(password: &str, config: &Config) -> bool {
-    password.len() <= config.max_password_len as usize
+    password.len() <= config.max_password_len as usize &&
+        password.len() <= config.min_password_len as usize
 }
 
 pub fn valid_display_name(display_name: &str, config: &Config) -> bool {

@@ -21,9 +21,10 @@ pub struct SendMessage<T: Debug> {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
-    max_password_len: u64,
-    max_username_len: u64,
-    max_display_name_len: u64,
+    max_password_len: u32,
+    max_username_len: u16,
+    max_display_name_len: u16,
+    min_password_len: u16,
 }
 
 impl Default for Config {
@@ -32,6 +33,7 @@ impl Default for Config {
             max_password_len: 1000,
             max_username_len: 64,
             max_display_name_len: 64,
+            min_password_len: 12,
         }
     }
 }

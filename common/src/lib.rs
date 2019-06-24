@@ -235,12 +235,11 @@ pub enum ServerError {
     NotLoggedIn,
     AlreadyLoggedIn,
     UsernameAlreadyExists,
-    UserDoesNotExist,
     InvalidUsername,
     InvalidDisplayName,
     InvalidToken,
     InvalidPassword,
-    IncorrectPassword,
+    IncorrectUsernameOrPassword,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
