@@ -38,7 +38,6 @@ impl DatabaseServer {
             .and_then(|mut conn| {
                 conn.client
                     .prepare(
-                        // TODO configure max length of display name/username
                         "CREATE TABLE IF NOT EXISTS users (
                             id                   UUID PRIMARY KEY,
                             username             VARCHAR NOT NULL UNIQUE,

@@ -196,7 +196,7 @@ impl Update for Win {
                     .send_message(msg.to_string(), room)
                     .expect("Error sending message"); // todo display error
 
-                let name = self.model.vertex.username.as_ref().expect("Not logged in");
+                let name = self.model.vertex.display_name.as_ref().expect("Not logged in");
 
                 // TODO: Unify
                 text_buffer.insert(

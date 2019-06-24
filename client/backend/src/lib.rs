@@ -18,7 +18,7 @@ pub struct Config {
 pub struct Vertex {
     socket: Client<TcpStream>,
     pub username: Option<String>,
-    // TODO displayname
+    pub display_name: Option<String>,
     logged_in: bool,
     heartbeat: Instant,
 }
@@ -37,6 +37,7 @@ impl Vertex {
         Vertex {
             socket,
             username: None,
+            display_name: None,
             logged_in: false,
             heartbeat: Instant::now(),
         }
@@ -188,6 +189,7 @@ impl Vertex {
                             if response_id == request_id =>
                         {
                             self.username = Some(username.to_string());
+                            self.display_name = Some(username.to_string()); // TODO configure this
                             Ok((device_id, token))
                         }
                         RequestResponse::Error(e) => Err(Error::ServerError(e)),
