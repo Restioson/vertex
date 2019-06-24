@@ -14,7 +14,6 @@ use rand::RngCore;
 use std::io::Cursor;
 use std::time::Instant;
 use tokio_postgres::error::SqlState;
-use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 use vertex_common::*;
 
@@ -319,7 +318,7 @@ impl ClientWsSession {
                         .send(Connect {
                             session: ctx.address(),
                             session_id: act.session_id,
-                            user_id: user_id,
+                            user_id,
                         })
                         .map(move |_| Ok(user_id))
                         .into_actor(act),
@@ -404,8 +403,20 @@ impl ClientWsSession {
             });
         }
 
-        // Normalize the name
-        let username: String = username.nfkc().collect();
+        let username = match auth::process_username(&username, self.config.get_ref()) {
+            Ok(name) => name,
+            Err(auth::TooShort) => return ctx.binary(ServerMessage::Response {
+                response: RequestResponse::Error(ServerError::InvalidUsername),
+                request_id,
+            })
+        };
+
+        if !auth::valid_display_name(&display_name, self.config.get_ref()) {
+            return ctx.binary(ServerMessage::Response {
+                response: RequestResponse::Error(ServerError::InvalidDisplayName),
+                request_id,
+            });
+        }
 
         let fut = auth::hash(password)
             .into_actor(self)
@@ -448,8 +459,13 @@ impl ClientWsSession {
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
     ) {
-        // Normalize the username
-        let new_username: String = new_username.nfkc().collect();
+        let new_username = match auth::process_username(&new_username, self.config.get_ref()) {
+            Ok(name) => name,
+            Err(auth::TooShort) => return ctx.binary(ServerMessage::Response {
+                response: RequestResponse::Error(ServerError::InvalidUsername),
+                request_id,
+            })
+        };
 
         let fut = self
             .database_server
@@ -494,6 +510,13 @@ impl ClientWsSession {
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
     ) {
+        if !auth::valid_display_name(&new_display_name, self.config.get_ref()) {
+            return ctx.binary(ServerMessage::Response {
+                response: RequestResponse::Error(ServerError::InvalidDisplayName),
+                request_id,
+            });
+        }
+
         let fut = self
             .database_server
             .send(ChangeDisplayName {

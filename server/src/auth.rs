@@ -3,6 +3,7 @@ use futures::{future, Future};
 use lazy_static::lazy_static;
 use rand::RngCore;
 use tokio_threadpool::ThreadPool;
+use unicode_normalization::UnicodeNormalization;
 
 lazy_static! {
     static ref THREAD_POOL: ThreadPool = ThreadPool::new();
@@ -25,6 +26,20 @@ impl From<i16> for HashSchemeVersion {
 
 pub fn valid_password(password: &str, config: &Config) -> bool {
     password.len() <= config.max_password_len as usize
+}
+
+pub fn valid_display_name(display_name: &str, config: &Config) -> bool {
+    display_name.len() <= config.max_display_name_len as usize
+}
+
+pub struct TooShort;
+
+pub fn process_username(username: &str, config: &Config) -> Result<String, TooShort> {
+    if username.len() <= config.max_username_len as usize {
+        Ok(username.nfkc().map(|c| c.to_lowercase()).flatten().collect())
+    } else {
+        Err(TooShort)
+    }
 }
 
 pub fn hash<E: Send + 'static>(
