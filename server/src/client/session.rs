@@ -349,6 +349,7 @@ impl ClientWsSession {
         rand::thread_rng().fill_bytes(&mut token_bytes);
         let token_string = base64::encode(&token_bytes);
         let auth_token = AuthToken(token_string.clone());
+        let username = auth::process_username(&username, self.config.get_ref());
 
         let fut = self
             .verify_username_password(username, password)
@@ -403,12 +404,14 @@ impl ClientWsSession {
             });
         }
 
-        let username = match auth::process_username(&username, self.config.get_ref()) {
+        let username = match auth::prepare_username(&username, self.config.get_ref()) {
             Ok(name) => name,
-            Err(auth::TooShort) => return ctx.binary(ServerMessage::Response {
-                response: RequestResponse::Error(ServerError::InvalidUsername),
-                request_id,
-            })
+            Err(auth::TooShort) => {
+                return ctx.binary(ServerMessage::Response {
+                    response: RequestResponse::Error(ServerError::InvalidUsername),
+                    request_id,
+                })
+            }
         };
 
         if !auth::valid_display_name(&display_name, self.config.get_ref()) {
@@ -459,12 +462,14 @@ impl ClientWsSession {
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
     ) {
-        let new_username = match auth::process_username(&new_username, self.config.get_ref()) {
+        let new_username = match auth::prepare_username(&new_username, self.config.get_ref()) {
             Ok(name) => name,
-            Err(auth::TooShort) => return ctx.binary(ServerMessage::Response {
-                response: RequestResponse::Error(ServerError::InvalidUsername),
-                request_id,
-            })
+            Err(auth::TooShort) => {
+                return ctx.binary(ServerMessage::Response {
+                    response: RequestResponse::Error(ServerError::InvalidUsername),
+                    request_id,
+                })
+            }
         };
 
         let fut = self
@@ -590,6 +595,7 @@ impl ClientWsSession {
         username: String,
         password: String,
     ) -> impl Future<Item = Result<UserId, ServerError>, Error = MailboxError> {
+        let username = auth::process_username(&username, self.config.get_ref());
         self.database_server.send(GetUserByName(username)).and_then(
             move |user_opt| match user_opt {
                 Ok(Some(user)) => {

@@ -34,9 +34,17 @@ pub fn valid_display_name(display_name: &str, config: &Config) -> bool {
 
 pub struct TooShort;
 
-pub fn process_username(username: &str, config: &Config) -> Result<String, TooShort> {
+pub fn process_username(username: &str, config: &Config) -> String {
+    username
+        .nfkc()
+        .map(|c| c.to_lowercase())
+        .flatten()
+        .collect()
+}
+
+pub fn prepare_username(username: &str, config: &Config) -> Result<String, TooShort> {
     if username.len() <= config.max_username_len as usize {
-        Ok(username.nfkc().map(|c| c.to_lowercase()).flatten().collect())
+        Ok(process_username(username, config))
     } else {
         Err(TooShort)
     }
