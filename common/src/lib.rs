@@ -231,19 +231,16 @@ where
 pub enum ServerError {
     InvalidMessage,
     UnexpectedTextFrame,
-    IdNotFound,
     Internal,
-    InvalidUrl,
-    WsConnectionError,
     NotLoggedIn,
     AlreadyLoggedIn,
     UsernameAlreadyExists,
     UserDoesNotExist,
     InvalidUsername,
     InvalidDisplayName,
-    IncorrectPassword,
     InvalidToken,
     InvalidPassword,
+    IncorrectPassword,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
