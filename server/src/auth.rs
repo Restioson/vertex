@@ -1,11 +1,11 @@
 use crate::config::Config;
+use crate::database::User;
 use futures::{future, Future};
 use lazy_static::lazy_static;
 use rand::RngCore;
 use tokio_threadpool::ThreadPool;
 use unicode_normalization::UnicodeNormalization;
-use crate::database::User;
-use vertex_common::{UserId, ServerError};
+use vertex_common::{ServerError, UserId};
 
 lazy_static! {
     static ref THREAD_POOL: ThreadPool = ThreadPool::new();
@@ -100,7 +100,7 @@ pub fn verify<E: Send + 'static>(
 
 pub fn verify_user_password<E: Send + 'static>(
     user: User,
-    password: String
+    password: String,
 ) -> impl Future<Item = Result<UserId, ServerError>, Error = E> {
     let User {
         id: user_id,

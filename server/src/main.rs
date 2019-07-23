@@ -79,16 +79,20 @@ fn main() -> std::io::Result<()> {
             .data(db_server.clone())
             .data(config.clone())
             .service(
-                actix_files::Files::new("/images/profile_pictures/", config.profile_pictures.clone())
-                    .default_handler(
-                        actix_service::service_fn(|req: ServiceRequest| {
-                            req.into_response(HttpResponse::NotFound().finish())
-                        })
-                    )
-                    .files_listing_renderer(|_dir, req| {
-                        Ok(ServiceResponse::new(req.clone(), HttpResponse::Forbidden().finish()))
-                    })
-                    .show_files_listing(),
+                actix_files::Files::new(
+                    "/images/profile_pictures/",
+                    config.profile_pictures.clone(),
+                )
+                .default_handler(actix_service::service_fn(|req: ServiceRequest| {
+                    req.into_response(HttpResponse::NotFound().finish())
+                }))
+                .files_listing_renderer(|_dir, req| {
+                    Ok(ServiceResponse::new(
+                        req.clone(),
+                        HttpResponse::Forbidden().finish(),
+                    ))
+                })
+                .show_files_listing(),
             )
             .service(web::resource("/client/").route(web::get().to(dispatch_client_ws)))
             .service(web::resource("/server/").route(web::get().to(dispatch_server_ws)))

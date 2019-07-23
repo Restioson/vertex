@@ -4,6 +4,7 @@ use crate::config::Config;
 use crate::database::*;
 use crate::federation::FederationServer;
 use crate::SendMessage;
+use actix::fut;
 use actix::prelude::*;
 use actix_web::web::Data;
 use actix_web_actors::ws::{self, WebsocketContext};
@@ -20,20 +21,17 @@ use vertex_common::*;
 #[derive(Eq, PartialEq)]
 enum SessionState {
     WaitingForLogin,
-    Ready(UserId),
+    Ready(UserId, DeviceId),
 }
 
 impl SessionState {
-    fn user_id(&self) -> Option<UserId> {
+    fn user_and_device_ids(&self) -> Option<(UserId, DeviceId)> {
         match self {
             SessionState::WaitingForLogin => None,
-            SessionState::Ready(id) => Some(id.clone()),
+            SessionState::Ready(user_id, device_id) => Some((*user_id, *device_id)),
         }
     }
 }
-
-#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
-pub struct SessionId(pub Uuid);
 
 pub struct ClientWsSession {
     client_server: Addr<ClientServer>,
@@ -41,7 +39,7 @@ pub struct ClientWsSession {
     federation_server: Addr<FederationServer>,
     state: SessionState,
     heartbeat: Instant,
-    session_id: SessionId,
+    device_id: Option<DeviceId>,
     config: Data<Config>,
 }
 
@@ -53,10 +51,10 @@ impl Actor for ClientWsSession {
     }
 
     fn stopped(&mut self, _ctx: &mut WebsocketContext<Self>) {
-        self.client_server.do_send(Disconnect {
-            session_id: self.session_id,
-            user_id: self.state.user_id(),
-        });
+        if let Some((user_id, device_id)) = self.state.user_and_device_ids() {
+            self.client_server
+                .do_send(Disconnect { user_id, device_id });
+        }
     }
 }
 
@@ -91,10 +89,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                 self.handle_message(msg, ctx);
             }
             ws::Message::Close(_) => {
-                self.client_server.do_send(Disconnect {
-                    session_id: self.session_id,
-                    user_id: self.state.user_id(),
-                });
+                if let Some((user_id, device_id)) = self.state.user_and_device_ids() {
+                    self.client_server
+                        .do_send(Disconnect { user_id, device_id });
+                }
                 ctx.stop();
             }
             ws::Message::Nop => (),
@@ -123,22 +121,23 @@ impl ClientWsSession {
             federation_server,
             state: SessionState::WaitingForLogin,
             heartbeat: Instant::now(),
-            session_id: SessionId(Uuid::new_v4()),
+            device_id: None,
             config,
         }
     }
 
     fn logged_in(&self) -> bool {
-        self.state.user_id().is_some()
+        self.state.user_and_device_ids().is_some()
     }
 
     fn start_heartbeat(&mut self, ctx: &mut WebsocketContext<Self>) {
         ctx.run_interval(HEARTBEAT_TIMEOUT, |session, ctx| {
             if Instant::now().duration_since(session.heartbeat) > HEARTBEAT_TIMEOUT {
-                session.client_server.do_send(Disconnect {
-                    session_id: session.session_id,
-                    user_id: session.state.user_id(),
-                });
+                if let Some((user_id, device_id)) = session.state.user_and_device_ids() {
+                    session
+                        .client_server
+                        .do_send(Disconnect { user_id, device_id });
+                }
                 ctx.stop();
             }
         });
@@ -160,7 +159,7 @@ impl ClientWsSession {
             };
 
             ctx.binary(response);
-            actix::fut::ok(())
+            fut::ok(())
         })
         .wait(ctx);
     }
@@ -205,12 +204,12 @@ impl ClientWsSession {
                 request_id,
                 ctx,
             ),
-            SessionState::Ready(id) => match msg {
+            SessionState::Ready(user_id, device_id) => match msg {
                 ClientMessage::SendMessage(msg) => self.respond(
                     self.client_server
                         .send(IdentifiedMessage {
-                            user_id: id,
-                            session_id: self.session_id,
+                            user_id,
+                            device_id,
                             request_id,
                             msg,
                         })
@@ -221,8 +220,8 @@ impl ClientWsSession {
                 ClientMessage::EditMessage(edit) => self.respond(
                     self.client_server
                         .send(IdentifiedMessage {
-                            user_id: id,
-                            session_id: self.session_id,
+                            user_id,
+                            device_id,
                             request_id,
                             msg: edit,
                         })
@@ -233,8 +232,8 @@ impl ClientWsSession {
                 ClientMessage::JoinRoom(room) => self.respond(
                     self.client_server
                         .send(IdentifiedMessage {
-                            user_id: id,
-                            session_id: self.session_id,
+                            user_id,
+                            device_id,
                             request_id,
                             msg: Join { room },
                         })
@@ -245,8 +244,8 @@ impl ClientWsSession {
                 ClientMessage::CreateRoom => self.respond(
                     self.client_server
                         .send(IdentifiedMessage {
-                            user_id: id,
-                            session_id: self.session_id,
+                            user_id,
+                            device_id,
                             request_id,
                             msg: CreateRoom,
                         })
@@ -254,15 +253,20 @@ impl ClientWsSession {
                     request_id,
                     ctx,
                 ),
+                ClientMessage::RevokeToken {
+                    device_id: to_revoke,
+                    password,
+                } => self.revoke_token(to_revoke, password, user_id, device_id, request_id, ctx),
                 ClientMessage::ChangeUsername { new_username } => {
-                    self.change_username(new_username, id, request_id, ctx)
+                    self.change_username(new_username, user_id, request_id, ctx)
                 }
                 ClientMessage::ChangeDisplayName { new_display_name } => {
-                    self.change_display_name(new_display_name, id, request_id, ctx)
+                    self.change_display_name(new_display_name, user_id, request_id, ctx)
                 }
-                ClientMessage::ChangePassword { old_password, new_password } => {
-                    self.change_password(old_password, new_password, id, request_id, ctx)
-                }
+                ClientMessage::ChangePassword {
+                    old_password,
+                    new_password,
+                } => self.change_password(old_password, new_password, user_id, request_id, ctx),
                 _ => unimplemented!(),
             },
         }
@@ -312,23 +316,24 @@ impl ClientWsSession {
                 }
             })
             .into_actor(self)
-            .and_then(|res, act, ctx| match res {
-                Ok(user_id) => actix::fut::Either::A(
+            .and_then(move |res, act, ctx| match res {
+                Ok(user_id) => fut::Either::A(
                     act.client_server
                         .send(Connect {
                             session: ctx.address(),
-                            session_id: act.session_id,
+                            device_id,
                             user_id,
                         })
                         .map(move |_| Ok(user_id))
                         .into_actor(act),
                 ),
-                Err(e) => actix::fut::Either::B(actix::fut::ok(Err(e))),
+                Err(e) => fut::Either::B(fut::ok(Err(e))),
             })
             .map(move |res, act, _ctx| match res {
-                Ok(id) => {
-                    act.state = SessionState::Ready(id);
-                    RequestResponse::user(id)
+                Ok(user_id) => {
+                    act.state = SessionState::Ready(user_id, device_id);
+                    act.device_id = Some(device_id);
+                    RequestResponse::user(user_id)
                 }
                 Err(e) => RequestResponse::Error(e),
             });
@@ -371,20 +376,80 @@ impl ClientWsSession {
                             permission_flags,
                         };
 
-                        actix::fut::Either::A(
+                        fut::Either::A(
                             act.database_server
                                 .send(CreateToken(token))
                                 .map(move |_| Ok((device_id, auth_token)))
                                 .into_actor(act),
                         )
                     }
-                    Err(e) => actix::fut::Either::B(actix::fut::ok(Err(e))),
+                    Err(e) => fut::Either::B(fut::ok(Err(e))),
                 },
             )
             .map(move |res, _act, _ctx| match res {
                 Ok((device_id, token)) => RequestResponse::token(device_id, token),
                 Err(e) => RequestResponse::Error(e),
             });
+
+        self.respond(fut, request_id, ctx)
+    }
+
+    fn revoke_token(
+        &mut self,
+        to_revoke: DeviceId,
+        password: Option<String>,
+        user_id: UserId,
+        current_device_id: DeviceId,
+        request_id: RequestId,
+        ctx: &mut WebsocketContext<Self>,
+    ) {
+        let fut = if to_revoke == current_device_id {
+            Either::A(self.verify_user_id_password(user_id, password.unwrap()))
+        } else {
+            Either::B(future::ok(Ok(())))
+        }
+        .into_actor(self)
+        .and_then(move |res, act, _ctx| match res {
+            Ok(()) => fut::Either::A(
+                act.database_server
+                    .send(RevokeToken(to_revoke))
+                    .map(|res| match res {
+                        Ok(()) => Ok(()),
+                        Err(l337::Error::Internal(e)) => {
+                            eprintln!("Database connection pooling error: {:?}", e);
+                            Err(ServerError::Internal)
+                        }
+                        Err(l337::Error::External(sql_error)) => {
+                            eprintln!("Database error: {:?}", sql_error);
+                            Err(ServerError::Internal)
+                        }
+                    })
+                    .into_actor(act),
+            ),
+            Err(e) => fut::Either::B(fut::ok(Err(e))),
+        })
+        .and_then(move |res, act, _ctx| match res {
+            Ok(()) => {
+                if to_revoke == current_device_id {
+                    fut::Either::A(
+                        act.client_server
+                            .send(Disconnect {
+                                user_id,
+                                device_id: current_device_id,
+                            })
+                            .map(|_| Ok(()))
+                            .into_actor(act),
+                    )
+                } else {
+                    fut::Either::B(fut::ok(Ok(())))
+                }
+            }
+            Err(e) => fut::Either::B(fut::ok(Err(e))),
+        })
+        .map(|res, _act, _ctx| match res {
+            Ok(()) => RequestResponse::success(),
+            Err(e) => RequestResponse::Error(e),
+        });
 
         self.respond(fut, request_id, ctx)
     }
@@ -440,16 +505,14 @@ impl ClientWsSession {
                         RequestResponse::Error(ServerError::UsernameAlreadyExists)
                     }
                 }
-                Err(l337_err) => match l337_err {
-                    l337::Error::Internal(e) => {
-                        eprintln!("Database connection pooling error: {:?}", e);
-                        RequestResponse::Error(ServerError::Internal)
-                    }
-                    l337::Error::External(sql_error) => {
-                        eprintln!("Database error: {:?}", sql_error);
-                        RequestResponse::Error(ServerError::Internal)
-                    }
-                },
+                Err(l337::Error::Internal(e)) => {
+                    eprintln!("Database connection pooling error: {:?}", e);
+                    RequestResponse::Error(ServerError::Internal)
+                }
+                Err(l337::Error::External(sql_error)) => {
+                    eprintln!("Database error: {:?}", sql_error);
+                    RequestResponse::Error(ServerError::Internal)
+                }
             });
 
         self.respond(fut, request_id, ctx)
@@ -487,22 +550,20 @@ impl ClientWsSession {
                         RequestResponse::Error(ServerError::UsernameAlreadyExists)
                     }
                 }
-                Err(l337_err) => match l337_err {
-                    l337::Error::Internal(e) => {
-                        eprintln!("Database connection pooling error: {:?}", e);
+                Err(l337::Error::Internal(e)) => {
+                    eprintln!("Database connection pooling error: {:?}", e);
+                    RequestResponse::Error(ServerError::Internal)
+                }
+                Err(l337::Error::External(sql_error)) => {
+                    if sql_error.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
+                        || sql_error.code() == Some(&SqlState::UNIQUE_VIOLATION)
+                    {
+                        RequestResponse::Error(ServerError::UsernameAlreadyExists)
+                    } else {
+                        eprintln!("Database error: {:?}", sql_error);
                         RequestResponse::Error(ServerError::Internal)
                     }
-                    l337::Error::External(sql_error) => {
-                        if sql_error.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
-                            || sql_error.code() == Some(&SqlState::UNIQUE_VIOLATION)
-                        {
-                            RequestResponse::Error(ServerError::UsernameAlreadyExists)
-                        } else {
-                            eprintln!("Database error: {:?}", sql_error);
-                            RequestResponse::Error(ServerError::Internal)
-                        }
-                    }
-                },
+                }
             });
 
         self.respond(fut, request_id, ctx)
@@ -532,16 +593,14 @@ impl ClientWsSession {
             .into_actor(self)
             .map(move |res, _act, _ctx| match res {
                 Ok(_) => RequestResponse::success(),
-                Err(l337_err) => match l337_err {
-                    l337::Error::Internal(e) => {
-                        eprintln!("Database connection pooling error: {:?}", e);
-                        RequestResponse::Error(ServerError::Internal)
-                    }
-                    l337::Error::External(sql_error) => {
-                        eprintln!("Database error: {:?}", sql_error);
-                        RequestResponse::Error(ServerError::Internal)
-                    }
-                },
+                Err(l337::Error::Internal(e)) => {
+                    eprintln!("Database connection pooling error: {:?}", e);
+                    RequestResponse::Error(ServerError::Internal)
+                }
+                Err(l337::Error::External(sql_error)) => {
+                    eprintln!("Database error: {:?}", sql_error);
+                    RequestResponse::Error(ServerError::Internal)
+                }
             });
 
         self.respond(fut, request_id, ctx)
@@ -562,7 +621,8 @@ impl ClientWsSession {
             });
         }
 
-        let fut = self.verify_user_id_password(user_id, old_password)
+        let fut = self
+            .verify_user_id_password(user_id, old_password)
             .and_then(|res| match res {
                 Ok(_) => Either::A(auth::hash(new_password).map(|ok| Ok(ok))),
                 Err(error) => Either::B(future::ok(Err(error))),
@@ -571,28 +631,27 @@ impl ClientWsSession {
             .and_then(move |res, act, _ctx| {
                 let fut = match res {
                     Ok((new_password_hash, hash_version)) => {
-                        let fut = act.database_server
+                        let fut = act
+                            .database_server
                             .send(ChangePassword {
                                 user_id,
                                 new_password_hash,
                                 hash_version,
                             })
-                            .map(move |res,| res.map(|_| ()))
+                            .map(move |res| res.map(|_| ()))
                             .map(|res| match res {
                                 Ok(_) => RequestResponse::success(),
-                                Err(l337_err) => match l337_err {
-                                    l337::Error::Internal(e) => {
-                                        eprintln!("Database connection pooling error: {:?}", e);
-                                        RequestResponse::Error(ServerError::Internal)
-                                    }
-                                    l337::Error::External(sql_error) => {
-                                        eprintln!("Database error: {:?}", sql_error);
-                                        RequestResponse::Error(ServerError::Internal)
-                                    }
-                                },
+                                Err(l337::Error::Internal(e)) => {
+                                    eprintln!("Database connection pooling error: {:?}", e);
+                                    RequestResponse::Error(ServerError::Internal)
+                                }
+                                Err(l337::Error::External(sql_error)) => {
+                                    eprintln!("Database error: {:?}", sql_error);
+                                    RequestResponse::Error(ServerError::Internal)
+                                }
                             });
                         Either::A(fut)
-                    },
+                    }
                     Err(e) => Either::B(future::ok(RequestResponse::Error(e))),
                 };
 
@@ -607,18 +666,18 @@ impl ClientWsSession {
         user_id: UserId,
         password: String,
     ) -> impl Future<Item = Result<(), ServerError>, Error = MailboxError> {
-        self.database_server.send(GetUserById(user_id)).and_then(
-            move |res| match res {
-                Ok(Some(user)) => Either::A(auth::verify_user_password(user, password)
-                    .map(|res| res.map(|_| ()))
-                ),
+        self.database_server
+            .send(GetUserById(user_id))
+            .and_then(move |res| match res {
+                Ok(Some(user)) => {
+                    Either::A(auth::verify_user_password(user, password).map(|res| res.map(|_| ())))
+                }
                 Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
                 Err(e) => {
                     eprintln!("Database error: {:?}", e);
                     Either::B(future::ok(Err(ServerError::Internal)))
                 }
-            }
-        )
+            })
     }
 
     fn verify_username_password(
@@ -627,15 +686,15 @@ impl ClientWsSession {
         password: String,
     ) -> impl Future<Item = Result<UserId, ServerError>, Error = MailboxError> {
         let username = auth::process_username(&username, self.config.get_ref());
-        self.database_server.send(GetUserByName(username)).and_then(
-            move |res| match res {
+        self.database_server
+            .send(GetUserByName(username))
+            .and_then(move |res| match res {
                 Ok(Some(user)) => Either::A(auth::verify_user_password(user, password)),
                 Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
                 Err(e) => {
                     eprintln!("Database error: {:?}", e);
                     Either::B(future::ok(Err(ServerError::Internal)))
                 }
-            }
-        )
+            })
     }
 }

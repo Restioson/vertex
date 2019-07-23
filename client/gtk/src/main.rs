@@ -88,7 +88,7 @@ impl Update for Win {
                 let text_buffer = self.widgets.messages.get_buffer().unwrap();
 
                 if msg.starts_with("/") {
-                    let v: Vec<&str> = msg.splitn(3, ' ').collect();
+                    let v: Vec<&str> = msg.split(' ').collect();
 
                     match v[0] {
                         "/join" => {
@@ -136,15 +136,30 @@ impl Update for Win {
                             room_label.show_all();
                         }
                         "/login" => {
-                            if v.len() == 3 {
+                            if v.len() > 2 {
                                 text_buffer
                                     .insert(&mut text_buffer.get_end_iter(), "Logging in...\n");
 
-                                match self.model.vertex.login(None, v[1], v[2]) {
+                                let token = if v.len() == 5 {
+                                    let id =
+                                        DeviceId(Uuid::parse_str(v[3]).expect("Invalid device id"));
+                                    let token = AuthToken(v[4].to_string());
+
+                                    Some((id, token))
+                                } else {
+                                    println!("v.len() = {}", v.len()); // TODO
+                                    println!("v = {:?}", v);
+                                    None
+                                };
+
+                                match self.model.vertex.login(token, v[1], v[2]) {
                                     // TODO store token
                                     Ok((device_id, token)) => text_buffer.insert(
                                         &mut text_buffer.get_end_iter(),
-                                        &format!("Sucessfully logged in. Token: {}.\n", token.0),
+                                        &format!(
+                                            "Sucessfully logged in. Device id: {}. Token: {}.\n",
+                                            device_id.0, token.0
+                                        ),
                                     ),
                                     Err(e) => text_buffer.insert(
                                         &mut text_buffer.get_end_iter(),

@@ -53,6 +53,12 @@ impl Message for CreateToken {
     type Result = Result<(), l337::Error<tokio_postgres::Error>>;
 }
 
+pub struct RevokeToken(pub DeviceId);
+
+impl Message for RevokeToken {
+    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
+}
+
 impl Handler<GetToken> for DatabaseServer {
     type Result = ResponseFuture<Option<Token>, l337::Error<tokio_postgres::Error>>;
 
@@ -109,6 +115,22 @@ impl Handler<CreateToken> for DatabaseServer {
                         ],
                     )
                 })
+                .map_err(l337::Error::External)
+                .map(|_| ())
+        }))
+    }
+}
+
+impl Handler<RevokeToken> for DatabaseServer {
+    type Result = ResponseFuture<(), l337::Error<tokio_postgres::Error>>;
+
+    fn handle(&mut self, revoke: RevokeToken, _: &mut Context<Self>) -> Self::Result {
+        Box::new(self.pool.connection().and_then(|mut conn| {
+            conn.client
+                .prepare(
+                    "DROP from login_tokens WHERE device_id = $1", // TODO if not exists
+                )
+                .and_then(move |stmt| conn.client.execute(&stmt, &[&(revoke.0).0]))
                 .map_err(l337::Error::External)
                 .map(|_| ())
         }))

@@ -12,6 +12,7 @@ pub struct User {
     pub password_hash: String,
     pub hash_scheme_version: HashSchemeVersion,
     pub compromised: bool,
+    pub locked: bool,
     pub banned: bool,
 }
 
@@ -29,6 +30,7 @@ impl User {
             password_hash,
             hash_scheme_version,
             compromised: false,
+            locked: false,
             banned: false,
         }
     }
@@ -47,6 +49,7 @@ impl TryFrom<Row> for User {
                 row.try_get::<&str, i16>("hash_scheme_version")?,
             ),
             compromised: row.try_get("compromised")?,
+            locked: row.try_get("locked")?,
             banned: row.try_get("banned")?,
         })
     }
@@ -114,9 +117,10 @@ impl Handler<CreateUser> for DatabaseServer {
                             password_hash,
                             hash_scheme_version,
                             compromised,
+                            locked,
                             banned
                         )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT DO NOTHING",
                 )
                 .and_then(move |stmt| {
@@ -129,6 +133,7 @@ impl Handler<CreateUser> for DatabaseServer {
                             &user.password_hash,
                             &(user.hash_scheme_version as u8 as i16),
                             &user.compromised,
+                            &user.locked,
                             &user.banned,
                         ],
                     )

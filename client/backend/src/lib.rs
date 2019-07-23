@@ -167,9 +167,16 @@ impl Vertex {
     ) -> Result<(DeviceId, AuthToken), Error> {
         if !self.logged_in {
             let (device_id, token) = match token {
-                Some(token) => token,
+                Some(token) => {
+                    // TODO
+                    println!("dev_id = {} token = {}", (token.0).0, (token.1).0);
+                    token
+                }
                 // TODO allow user to configure these parameters?
-                None => self.create_token(username, password, None, TokenPermissionFlags::all())?,
+                None => {
+                    println!("creating token");
+                    self.create_token(username, password, None, TokenPermissionFlags::all())?
+                }
             };
 
             let request_id = self.request(ClientMessage::Login {

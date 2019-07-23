@@ -71,6 +71,11 @@ pub enum ClientMessage {
         expiration_date: Option<DateTime<Utc>>,
         permission_flags: TokenPermissionFlags,
     },
+    RevokeToken {
+        device_id: DeviceId,
+        // Require re-authentication to revoke a token other than the current
+        password: Option<String>,
+    },
     CreateUser {
         username: String,
         display_name: String,
@@ -241,6 +246,11 @@ pub enum ServerError {
     InvalidToken,
     InvalidPassword,
     IncorrectUsernameOrPassword,
+    /// User is not able to perform said action with current authentication token, or request to
+    /// revoke authentication token requires re-entry of password.
+    AccessDenied,
+    InvalidRoom,
+    AlreadyInRoom,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
