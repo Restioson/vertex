@@ -1,9 +1,10 @@
 use actix::prelude::*;
+use actix_web::dev::ServiceRequest;
 use actix_web::web::{Data, Payload};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use serde::{Deserialize, Serialize};
-use std::{env, fmt::Debug};
+use std::{env, fmt::Debug, fs};
 
 mod auth;
 mod client;
@@ -11,6 +12,8 @@ mod config;
 mod database;
 mod federation;
 
+use crate::config::Config;
+use actix_web::dev::ServiceResponse;
 use client::{ClientServer, ClientWsSession};
 use database::DatabaseServer;
 use federation::{FederationServer, ServerWsSession};
@@ -47,11 +50,23 @@ fn dispatch_server_ws(
     ServerWsSession::start_incoming(request, srv, stream)
 }
 
+fn create_files_directories(config: &Config) {
+    let dirs = [config.profile_pictures.clone()];
+
+    for dir in &dirs {
+        fs::create_dir_all(dir).expect(&format!(
+            "Error creating directory {}",
+            dir.to_string_lossy()
+        ));
+    }
+}
+
 fn main() -> std::io::Result<()> {
     let args = env::args().collect::<Vec<_>>();
     let addr = args.get(1).cloned().unwrap_or("127.0.0.1:8080".to_string());
 
     let config = config::load_config();
+    create_files_directories(&config);
 
     let mut sys = System::new("vertex_server");
     let db_server = DatabaseServer::new(&mut sys).start();
@@ -64,6 +79,18 @@ fn main() -> std::io::Result<()> {
             .data(federation_server.clone())
             .data(db_server.clone())
             .data(config.clone())
+            .service(
+                actix_files::Files::new("/images/profile_pictures/", config.profile_pictures.clone())
+                    .default_handler(
+                        actix_service::service_fn(|req: ServiceRequest| {
+                            req.into_response(HttpResponse::NotFound().finish())
+                        })
+                    )
+                    .files_listing_renderer(|_dir, req| {
+                        Ok(ServiceResponse::new(req.clone(), HttpResponse::Forbidden().finish()))
+                    })
+                    .show_files_listing(),
+            )
             .service(web::resource("/client/").route(web::get().to(dispatch_client_ws)))
             .service(web::resource("/server/").route(web::get().to(dispatch_server_ws)))
     })

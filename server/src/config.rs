@@ -4,6 +4,7 @@ use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::ErrorKind;
+use std::path::PathBuf;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -19,6 +20,10 @@ pub struct Config {
     pub max_display_name_len: u16,
     #[serde(default = "min_display_name_len")]
     pub min_display_name_len: u16,
+    #[serde(default = "max_bio_len")]
+    pub max_bio_len: u32,
+    #[serde(default = "profile_pictures")]
+    pub profile_pictures: PathBuf,
 }
 
 fn max_password_len() -> u16 {
@@ -43,6 +48,14 @@ fn max_display_name_len() -> u16 {
 
 fn min_display_name_len() -> u16 {
     1
+}
+
+fn max_bio_len() -> u32 {
+    500
+}
+
+fn profile_pictures() -> PathBuf {
+    PathBuf::from("./files/images/profile_pictures/")
 }
 
 pub fn load_config() -> Config {

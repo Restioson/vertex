@@ -162,7 +162,7 @@ impl ClientWsSession {
             ctx.binary(response);
             actix::fut::ok(())
         })
-        .wait(ctx); // TODO perhaps not wait
+        .wait(ctx);
     }
 
     fn handle_message(&mut self, req: ClientRequest, ctx: &mut WebsocketContext<Self>) {

@@ -11,3 +11,4 @@ client/backend/Cargo.lock
 wasm-pack.log
 **/.crates.toml/
 .vscode/
+server/files/

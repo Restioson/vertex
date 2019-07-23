@@ -45,6 +45,7 @@ impl DatabaseServer {
                             password_hash        VARCHAR NOT NULL,
                             hash_scheme_version  SMALLINT NOT NULL,
                             compromised          BOOLEAN NOT NULL,
+                            locked               BOOLEAN NOT NULL,
                             banned               BOOLEAN NOT NULL
                         )",
                     )
