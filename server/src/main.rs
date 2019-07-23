@@ -3,7 +3,6 @@ use actix_web::dev::ServiceRequest;
 use actix_web::web::{Data, Payload};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
-use serde::{Deserialize, Serialize};
 use std::{env, fmt::Debug, fs};
 
 mod auth;

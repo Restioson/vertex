@@ -88,8 +88,9 @@ pub enum ClientMessage {
         new_display_name: String,
     },
     ChangePassword {
+        old_password: String,
         new_password: String,
-    }, // TODO old_password
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

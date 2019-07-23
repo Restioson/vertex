@@ -4,6 +4,8 @@ use lazy_static::lazy_static;
 use rand::RngCore;
 use tokio_threadpool::ThreadPool;
 use unicode_normalization::UnicodeNormalization;
+use crate::database::User;
+use vertex_common::{UserId, ServerError};
 
 lazy_static! {
     static ref THREAD_POOL: ThreadPool = ThreadPool::new();
@@ -41,7 +43,7 @@ fn valid_username(username: &str, config: &Config) -> bool {
 
 pub struct TooShort;
 
-pub fn process_username(username: &str, config: &Config) -> String {
+pub fn process_username(username: &str, _config: &Config) -> String {
     username
         .nfkc()
         .map(|c| c.to_lowercase())
@@ -56,6 +58,9 @@ pub fn prepare_username(username: &str, config: &Config) -> Result<String, TooSh
         Err(TooShort)
     }
 }
+
+// The `<E: Send + 'static>`s here are to allow the caller to specify an error type for easier use,
+// since this will never return an error
 
 pub fn hash<E: Send + 'static>(
     pass: String,
@@ -91,4 +96,24 @@ pub fn verify<E: Send + 'static>(
         })
         .map_err(|_| panic!("the threadpool shut down"))
     }))
+}
+
+pub fn verify_user_password<E: Send + 'static>(
+    user: User,
+    password: String
+) -> impl Future<Item = Result<UserId, ServerError>, Error = E> {
+    let User {
+        id: user_id,
+        password_hash,
+        hash_scheme_version,
+        ..
+    } = user;
+
+    verify(password, password_hash, hash_scheme_version).map(move |matches| {
+        if matches {
+            Ok(user_id)
+        } else {
+            Err(ServerError::IncorrectUsernameOrPassword)
+        }
+    })
 }

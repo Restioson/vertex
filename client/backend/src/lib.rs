@@ -168,7 +168,7 @@ impl Vertex {
         if !self.logged_in {
             let (device_id, token) = match token {
                 Some(token) => token,
-                // TODO flags, None
+                // TODO allow user to configure these parameters?
                 None => self.create_token(username, password, None, TokenPermissionFlags::all())?,
             };
 

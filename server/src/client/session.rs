@@ -260,8 +260,8 @@ impl ClientWsSession {
                 ClientMessage::ChangeDisplayName { new_display_name } => {
                     self.change_display_name(new_display_name, id, request_id, ctx)
                 }
-                ClientMessage::ChangePassword { new_password } => {
-                    self.change_password(new_password, id, request_id, ctx)
+                ClientMessage::ChangePassword { old_password, new_password } => {
+                    self.change_password(old_password, new_password, id, request_id, ctx)
                 }
                 _ => unimplemented!(),
             },
@@ -549,45 +549,76 @@ impl ClientWsSession {
 
     fn change_password(
         &mut self,
-        password: String,
+        old_password: String,
+        new_password: String,
         user_id: UserId,
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
     ) {
-        if !auth::valid_password(&password, self.config.get_ref()) {
+        if !auth::valid_password(&new_password, self.config.get_ref()) {
             return ctx.binary(ServerMessage::Response {
                 response: RequestResponse::Error(ServerError::InvalidPassword),
                 request_id,
             });
         }
 
-        let fut = auth::hash(password)
-            .into_actor(self)
-            .and_then(move |(new_password_hash, hash_version), act, _ctx| {
-                act.database_server
-                    .send(ChangePassword {
-                        user_id,
-                        new_password_hash,
-                        hash_version,
-                    })
-                    .map(move |res| res.map(|_| ()))
-                    .into_actor(act)
+        let fut = self.verify_user_id_password(user_id, old_password)
+            .and_then(|res| match res {
+                Ok(_) => Either::A(auth::hash(new_password).map(|ok| Ok(ok))),
+                Err(error) => Either::B(future::ok(Err(error))),
             })
-            .map(move |res, _act, _ctx| match res {
-                Ok(_) => RequestResponse::success(),
-                Err(l337_err) => match l337_err {
-                    l337::Error::Internal(e) => {
-                        eprintln!("Database connection pooling error: {:?}", e);
-                        RequestResponse::Error(ServerError::Internal)
-                    }
-                    l337::Error::External(sql_error) => {
-                        eprintln!("Database error: {:?}", sql_error);
-                        RequestResponse::Error(ServerError::Internal)
-                    }
-                },
+            .into_actor(self)
+            .and_then(move |res, act, _ctx| {
+                let fut = match res {
+                    Ok((new_password_hash, hash_version)) => {
+                        let fut = act.database_server
+                            .send(ChangePassword {
+                                user_id,
+                                new_password_hash,
+                                hash_version,
+                            })
+                            .map(move |res,| res.map(|_| ()))
+                            .map(|res| match res {
+                                Ok(_) => RequestResponse::success(),
+                                Err(l337_err) => match l337_err {
+                                    l337::Error::Internal(e) => {
+                                        eprintln!("Database connection pooling error: {:?}", e);
+                                        RequestResponse::Error(ServerError::Internal)
+                                    }
+                                    l337::Error::External(sql_error) => {
+                                        eprintln!("Database error: {:?}", sql_error);
+                                        RequestResponse::Error(ServerError::Internal)
+                                    }
+                                },
+                            });
+                        Either::A(fut)
+                    },
+                    Err(e) => Either::B(future::ok(RequestResponse::Error(e))),
+                };
+
+                fut.into_actor(act)
             });
 
         self.respond(fut, request_id, ctx)
+    }
+
+    fn verify_user_id_password(
+        &mut self,
+        user_id: UserId,
+        password: String,
+    ) -> impl Future<Item = Result<(), ServerError>, Error = MailboxError> {
+        self.database_server.send(GetUserById(user_id)).and_then(
+            move |res| match res {
+                Ok(Some(user)) => Either::A(auth::verify_user_password(user, password)
+                    .map(|res| res.map(|_| ()))
+                ),
+                Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
+                Err(e) => {
+                    eprintln!("Database error: {:?}", e);
+                    Either::B(future::ok(Err(ServerError::Internal)))
+                }
+            }
+        )
     }
 
     fn verify_username_password(
@@ -597,33 +628,14 @@ impl ClientWsSession {
     ) -> impl Future<Item = Result<UserId, ServerError>, Error = MailboxError> {
         let username = auth::process_username(&username, self.config.get_ref());
         self.database_server.send(GetUserByName(username)).and_then(
-            move |user_opt| match user_opt {
-                Ok(Some(user)) => {
-                    let User {
-                        id: user_id,
-                        password_hash,
-                        hash_scheme_version,
-                        ..
-                    } = user;
-
-                    Either::A(
-                        auth::verify(password, password_hash, hash_scheme_version).map(
-                            move |matches| {
-                                if matches {
-                                    Ok(user_id)
-                                } else {
-                                    Err(ServerError::IncorrectUsernameOrPassword)
-                                }
-                            },
-                        ),
-                    )
-                }
+            move |res| match res {
+                Ok(Some(user)) => Either::A(auth::verify_user_password(user, password)),
                 Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
                 Err(e) => {
                     eprintln!("Database error: {:?}", e);
                     Either::B(future::ok(Err(ServerError::Internal)))
                 }
-            },
+            }
         )
     }
 }
