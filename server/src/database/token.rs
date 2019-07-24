@@ -53,10 +53,10 @@ impl Message for CreateToken {
     type Result = Result<(), l337::Error<tokio_postgres::Error>>;
 }
 
-pub struct RevokeToken(pub DeviceId);
+pub struct RevokeToken(pub DeviceId, pub UserId);
 
 impl Message for RevokeToken {
-    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
+    type Result = Result<bool, l337::Error<tokio_postgres::Error>>;
 }
 
 impl Handler<GetToken> for DatabaseServer {
@@ -98,8 +98,7 @@ impl Handler<CreateToken> for DatabaseServer {
                             expiration_date,
                             permission_flags
                         )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
-                    ON CONFLICT DO NOTHING",
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)",
                 )
                 .and_then(move |stmt| {
                     conn.client.execute(
@@ -122,17 +121,17 @@ impl Handler<CreateToken> for DatabaseServer {
 }
 
 impl Handler<RevokeToken> for DatabaseServer {
-    type Result = ResponseFuture<(), l337::Error<tokio_postgres::Error>>;
+    type Result = ResponseFuture<bool, l337::Error<tokio_postgres::Error>>;
 
     fn handle(&mut self, revoke: RevokeToken, _: &mut Context<Self>) -> Self::Result {
         Box::new(self.pool.connection().and_then(|mut conn| {
             conn.client
                 .prepare(
-                    "DROP from login_tokens WHERE device_id = $1", // TODO if not exists
+                    "DELETE FROM login_tokens WHERE device_id = $1 AND user_id = $2",
                 )
-                .and_then(move |stmt| conn.client.execute(&stmt, &[&(revoke.0).0]))
+                .and_then(move |stmt| conn.client.execute(&stmt, &[&(revoke.0).0, &(revoke.1).0]))
                 .map_err(l337::Error::External)
-                .map(|_| ())
+                .map(|r| r == 1) // Result will be 1 if the token existed
         }))
     }
 }

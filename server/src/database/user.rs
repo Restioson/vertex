@@ -196,7 +196,7 @@ impl Handler<ChangeUsername> for DatabaseServer {
     fn handle(&mut self, change: ChangeUsername, _: &mut Context<Self>) -> Self::Result {
         Box::new(self.pool.connection().and_then(move |mut conn| {
             conn.client
-                .prepare("UPDATE users SET username = $1 WHERE id = $2") // TODO where username not exists?
+                .prepare("UPDATE users SET username = $1 WHERE id = $2 ON CONFLICT DO NOTHING") // TODO test on conflict
                 .and_then(move |stmt| {
                     conn.client
                         .execute(&stmt, &[&change.new_username, &change.user_id.0])

@@ -19,6 +19,7 @@ pub struct Vertex {
     socket: Client<TcpStream>,
     pub username: Option<String>,
     pub display_name: Option<String>,
+    pub device_id: Option<DeviceId>,
     logged_in: bool,
     heartbeat: Instant,
 }
@@ -38,6 +39,7 @@ impl Vertex {
             socket,
             username: None,
             display_name: None,
+            device_id: None,
             logged_in: false,
             heartbeat: Instant::now(),
         }
@@ -167,16 +169,9 @@ impl Vertex {
     ) -> Result<(DeviceId, AuthToken), Error> {
         if !self.logged_in {
             let (device_id, token) = match token {
-                Some(token) => {
-                    // TODO
-                    println!("dev_id = {} token = {}", (token.0).0, (token.1).0);
-                    token
-                }
+                Some(token) => token,
                 // TODO allow user to configure these parameters?
-                None => {
-                    println!("creating token");
-                    self.create_token(username, password, None, TokenPermissionFlags::all())?
-                }
+                None => self.create_token(username, password, None, TokenPermissionFlags::all())?,
             };
 
             let request_id = self.request(ClientMessage::Login {
@@ -197,6 +192,7 @@ impl Vertex {
                         {
                             self.username = Some(username.to_string());
                             self.display_name = Some(username.to_string()); // TODO configure this
+                            self.device_id = Some(device_id);
                             Ok((device_id, token))
                         }
                         RequestResponse::Error(e) => Err(Error::ServerError(e)),
@@ -300,6 +296,64 @@ impl Vertex {
                     RequestResponse::Success(Success::Token { device_id, token }) => {
                         if response_id == request_id {
                             Ok((device_id, token))
+                        } else {
+                            Err(Error::IncorrectServerMessage(msg))
+                        }
+                    }
+                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
+                    _ => Err(Error::IncorrectServerMessage(msg)),
+                }
+            }
+            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
+        }
+    }
+
+    pub fn revoke_token(&mut self, password: &str, to_revoke: DeviceId) -> Result<(), Error> {
+        self.revoke_token_inner(Some(password), to_revoke)?;
+
+        if let Some(current_device_id) = self.device_id {
+            if current_device_id == to_revoke {
+                self.logged_in = false;
+                self.device_id = None;
+                self.username = None;
+                self.display_name = None;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn revoke_current_token(&mut self) -> Result<(), Error> {
+        self.revoke_token_inner(None, self.device_id.ok_or(Error::NotLoggedIn)?)?;
+        self.logged_in = false;
+        self.device_id = None;
+        self.username = None;
+        self.display_name = None;
+
+        Ok(())
+    }
+
+    fn revoke_token_inner(
+        &mut self,
+        password: Option<&str>,
+        to_revoke: DeviceId
+    ) -> Result<(), Error> {
+        let request_id = self.request(ClientMessage::RevokeToken {
+            device_id: to_revoke,
+            password: password.map(|s| s.to_string()),
+        })?;
+
+        let msg = self.receive_blocking()?;
+        match msg.clone() {
+            ServerMessage::Response {
+                response,
+                request_id: response_id,
+            } => {
+                match response {
+                    // TODO do this more asynchronously @gegy1000
+                    RequestResponse::Success(Success::NoData) => {
+                        if response_id == request_id {
+                            Ok(())
                         } else {
                             Err(Error::IncorrectServerMessage(msg))
                         }

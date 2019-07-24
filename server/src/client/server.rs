@@ -109,8 +109,6 @@ impl Handler<Disconnect> for ClientServer {
     type Result = ();
 
     fn handle(&mut self, disconnect: Disconnect, _: &mut Context<Self>) {
-        println!("received discon: {:?}", disconnect);
-
         let mut online_devices = self.online_devices.get_mut(&disconnect.user_id).unwrap();
 
         let idx = online_devices
@@ -140,7 +138,9 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
         let author_id = m.device_id;
         self.send_to_room(
             &m.msg.to_room.clone(),
-            ServerMessage::Message(ForwardedMessage::from_message_and_author(m.msg, m.user_id)),
+            ServerMessage::Message(
+                ForwardedMessage::from_message_author_device(m.msg, m.user_id, m.device_id)
+            ),
             &author_id,
         );
         RequestResponse::success()
@@ -172,7 +172,7 @@ impl Handler<IdentifiedMessage<Join>> for ClientServer {
             None => return RequestResponse::Error(ServerError::InvalidRoom),
         };
 
-        if room.contains(&m.user_id) {
+        if !room.contains(&m.user_id) {
             room.push(m.user_id);
             RequestResponse::success()
         } else {

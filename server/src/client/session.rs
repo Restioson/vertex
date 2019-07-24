@@ -403,7 +403,7 @@ impl ClientWsSession {
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
     ) {
-        let fut = if to_revoke == current_device_id {
+        let fut = if to_revoke != current_device_id {
             Either::A(self.verify_user_id_password(user_id, password.unwrap()))
         } else {
             Either::B(future::ok(Ok(())))
@@ -412,9 +412,10 @@ impl ClientWsSession {
         .and_then(move |res, act, _ctx| match res {
             Ok(()) => fut::Either::A(
                 act.database_server
-                    .send(RevokeToken(to_revoke))
+                    .send(RevokeToken(to_revoke, user_id))
                     .map(|res| match res {
-                        Ok(()) => Ok(()),
+                        Ok(true) => Ok(()),
+                        Ok(false) => Err(ServerError::DeviceDoesNotExist),
                         Err(l337::Error::Internal(e)) => {
                             eprintln!("Database connection pooling error: {:?}", e);
                             Err(ServerError::Internal)
@@ -431,6 +432,7 @@ impl ClientWsSession {
         .and_then(move |res, act, _ctx| match res {
             Ok(()) => {
                 if to_revoke == current_device_id {
+                    act.state = SessionState::WaitingForLogin;
                     fut::Either::A(
                         act.client_server
                             .send(Disconnect {

@@ -116,14 +116,20 @@ impl Message for ClientSentMessage {
 pub struct ForwardedMessage {
     pub room: RoomId,
     pub author: UserId,
+    pub device: DeviceId,
     pub content: String,
 }
 
 impl ForwardedMessage {
-    pub fn from_message_and_author(msg: ClientSentMessage, author: UserId) -> Self {
+    pub fn from_message_author_device(
+        msg: ClientSentMessage,
+        author: UserId,
+        device: DeviceId
+    ) -> Self {
         ForwardedMessage {
             room: msg.to_room,
             author,
+            device,
             content: msg.content,
         }
     }
@@ -244,6 +250,7 @@ pub enum ServerError {
     InvalidUsername,
     InvalidDisplayName,
     InvalidToken,
+    DeviceDoesNotExist,
     InvalidPassword,
     IncorrectUsernameOrPassword,
     /// User is not able to perform said action with current authentication token, or request to

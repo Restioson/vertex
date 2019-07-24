@@ -147,8 +147,6 @@ impl Update for Win {
 
                                     Some((id, token))
                                 } else {
-                                    println!("v.len() = {}", v.len()); // TODO
-                                    println!("v = {:?}", v);
                                     None
                                 };
 
@@ -194,6 +192,30 @@ impl Update for Win {
                                 text_buffer.insert(
                                     &mut text_buffer.get_end_iter(),
                                     "Username and password required\n",
+                                );
+                            }
+                        }
+                        "/revokecurrent" => {
+                            text_buffer.insert(
+                                &mut text_buffer.get_end_iter(),
+                                "Revoking token...\n",
+                            );
+
+                            self.model.vertex.revoke_current_token().expect("Error revoking current token");
+                        }
+                        "/revoke" => {
+                            if v.len() == 3 {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Revoking token...\n",
+                                );
+
+                                let dev = DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
+                                self.model.vertex.revoke_token(v[2], dev).expect("Error revoking token");
+                            } else {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Token and password required\n",
                                 );
                             }
                         }
