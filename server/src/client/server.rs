@@ -1,5 +1,5 @@
-use super::ClientWsSession;
-use crate::{database::DatabaseServer, SendMessage};
+use super::{ClientWsSession, LogoutSession};
+use crate::SendMessage;
 use actix::prelude::*;
 use ccl::dhashmap::DHashMap;
 use std::fmt::Debug;
@@ -11,6 +11,11 @@ pub struct Connect {
     pub session: Addr<ClientWsSession>,
     pub user_id: UserId,
     pub device_id: DeviceId,
+}
+
+#[derive(Debug, Message)]
+pub struct LogoutAllSessions {
+    pub user_id: UserId,
 }
 
 #[derive(Debug, Message)]
@@ -31,6 +36,15 @@ impl Message for Join {
 impl ClientMessageType for Join {}
 
 #[derive(Debug)]
+pub struct CreateRoom;
+
+impl ClientMessageType for CreateRoom {}
+
+impl Message for CreateRoom {
+    type Result = RequestResponse;
+}
+
+#[derive(Debug)]
 pub struct IdentifiedMessage<T: Message + ClientMessageType + Debug> {
     pub user_id: UserId,
     pub device_id: DeviceId,
@@ -42,29 +56,27 @@ impl<T: Message + ClientMessageType + Debug> Message for IdentifiedMessage<T> {
     type Result = T::Result;
 }
 
-#[derive(Debug)]
-pub struct CreateRoom;
-
-impl ClientMessageType for CreateRoom {}
-
-impl Message for CreateRoom {
-    type Result = RequestResponse;
-}
-
 pub struct ClientServer {
-    db: Addr<DatabaseServer>,
     sessions: DHashMap<DeviceId, Addr<ClientWsSession>>,
     online_devices: DHashMap<UserId, Vec<DeviceId>>,
     rooms: DHashMap<RoomId, Vec<UserId>>,
 }
 
 impl ClientServer {
-    pub fn new(db: Addr<DatabaseServer>) -> Self {
+    pub fn new() -> Self {
         ClientServer {
-            db,
             sessions: DHashMap::default(),
             online_devices: DHashMap::default(),
             rooms: DHashMap::default(),
+        }
+    }
+
+    fn logout_sessions(&mut self, user_id: &UserId) {
+        if let Some(online_devices) = self.online_devices.get(user_id) {
+            online_devices
+                .iter()
+                .map(|id| self.sessions.get_mut(id).unwrap())
+                .for_each(|s| s.do_send(LogoutSession));
         }
     }
 
@@ -76,11 +88,7 @@ impl ClientServer {
                     .iter()
                     .filter(|id| **id != *sender)
                     .map(|id| self.sessions.get_mut(id).unwrap())
-                    .for_each(|s| {
-                        s.do_send(SendMessage {
-                            message: message.clone(),
-                        })
-                    });
+                    .for_each(|s| s.do_send(SendMessage { message: message.clone() }));
             }
         }
     }
@@ -138,9 +146,11 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
         let author_id = m.device_id;
         self.send_to_room(
             &m.msg.to_room.clone(),
-            ServerMessage::Message(
-                ForwardedMessage::from_message_author_device(m.msg, m.user_id, m.device_id)
-            ),
+            ServerMessage::Message(ForwardedMessage::from_message_author_device(
+                m.msg,
+                m.user_id,
+                m.device_id,
+            )),
             &author_id,
         );
         RequestResponse::success()
@@ -198,5 +208,13 @@ impl Handler<IdentifiedMessage<Delete>> for ClientServer {
         let room_id = m.msg.room_id;
         self.send_to_room(&room_id, ServerMessage::Delete(m.msg), &m.device_id);
         RequestResponse::success()
+    }
+}
+
+impl Handler<LogoutAllSessions> for ClientServer {
+    type Result = ();
+
+    fn handle(&mut self, logout: LogoutAllSessions, _: &mut Context<Self>) {
+        self.logout_sessions(&logout.user_id);
     }
 }

@@ -69,7 +69,7 @@ fn main() -> std::io::Result<()> {
 
     let mut sys = System::new("vertex_server");
     let db_server = DatabaseServer::new(&mut sys).start();
-    let client_server = ClientServer::new(db_server.clone()).start();
+    let client_server = ClientServer::new().start();
     let federation_server = FederationServer::new().start();
 
     HttpServer::new(move || {

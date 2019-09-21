@@ -41,7 +41,7 @@ impl DatabaseServer {
                         "CREATE TABLE IF NOT EXISTS users (
                             id                   UUID PRIMARY KEY,
                             username             VARCHAR NOT NULL UNIQUE,
-                            display_name         VARCHAR NOT NULL UNIQUE,
+                            display_name         VARCHAR NOT NULL,
                             password_hash        VARCHAR NOT NULL,
                             hash_scheme_version  SMALLINT NOT NULL,
                             compromised          BOOLEAN NOT NULL,

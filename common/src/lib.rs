@@ -62,6 +62,7 @@ impl Into<Vec<u8>> for ClientRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
     Login {
+        username: String,
         device_id: DeviceId,
         token: AuthToken,
     },
@@ -124,7 +125,7 @@ impl ForwardedMessage {
     pub fn from_message_author_device(
         msg: ClientSentMessage,
         author: UserId,
-        device: DeviceId
+        device: DeviceId,
     ) -> Self {
         ForwardedMessage {
             room: msg.to_room,
@@ -191,6 +192,7 @@ pub enum ServerMessage {
     Message(ForwardedMessage),
     Edit(Edit),
     Delete(Delete),
+    SessionLoggedOut,
 }
 
 impl Into<Bytes> for ServerMessage {
@@ -250,6 +252,9 @@ pub enum ServerError {
     InvalidUsername,
     InvalidDisplayName,
     InvalidToken,
+    UserCompromised,
+    UserLocked,
+    UserBanned,
     DeviceDoesNotExist,
     InvalidPassword,
     IncorrectUsernameOrPassword,

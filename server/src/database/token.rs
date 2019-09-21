@@ -126,9 +126,7 @@ impl Handler<RevokeToken> for DatabaseServer {
     fn handle(&mut self, revoke: RevokeToken, _: &mut Context<Self>) -> Self::Result {
         Box::new(self.pool.connection().and_then(|mut conn| {
             conn.client
-                .prepare(
-                    "DELETE FROM login_tokens WHERE device_id = $1 AND user_id = $2",
-                )
+                .prepare("DELETE FROM login_tokens WHERE device_id = $1 AND user_id = $2")
                 .and_then(move |stmt| conn.client.execute(&stmt, &[&(revoke.0).0, &(revoke.1).0]))
                 .map_err(l337::Error::External)
                 .map(|r| r == 1) // Result will be 1 if the token existed

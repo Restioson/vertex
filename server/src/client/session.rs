@@ -5,7 +5,6 @@ use crate::database::*;
 use crate::federation::FederationServer;
 use crate::SendMessage;
 use actix::fut;
-use actix::prelude::*;
 use actix_web::web::Data;
 use actix_web_actors::ws::{self, WebsocketContext};
 use chrono::DateTime;
@@ -14,7 +13,6 @@ use futures::future::{self, Either};
 use rand::RngCore;
 use std::io::Cursor;
 use std::time::Instant;
-use tokio_postgres::error::SqlState;
 use uuid::Uuid;
 use vertex_common::*;
 
@@ -39,7 +37,6 @@ pub struct ClientWsSession {
     federation_server: Addr<FederationServer>,
     state: SessionState,
     heartbeat: Instant,
-    device_id: Option<DeviceId>,
     config: Data<Config>,
 }
 
@@ -108,6 +105,15 @@ impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
     }
 }
 
+impl Handler<LogoutSession> for ClientWsSession {
+    type Result = ();
+
+    fn handle(&mut self, _: LogoutSession, ctx: &mut WebsocketContext<Self>) {
+        ctx.binary(ServerMessage::SessionLoggedOut);
+        self.state = SessionState::WaitingForLogin;
+    }
+}
+
 impl ClientWsSession {
     pub fn new(
         client_server: Addr<ClientServer>,
@@ -121,7 +127,6 @@ impl ClientWsSession {
             federation_server,
             state: SessionState::WaitingForLogin,
             heartbeat: Instant::now(),
-            device_id: None,
             config,
         }
     }
@@ -166,8 +171,8 @@ impl ClientWsSession {
 
     fn handle_message(&mut self, req: ClientRequest, ctx: &mut WebsocketContext<Self>) {
         match req.message {
-            ClientMessage::Login { device_id, token } => {
-                self.login(device_id, token, req.request_id, ctx)
+            ClientMessage::Login { username, device_id, token } => {
+                self.login(username, device_id, token, req.request_id, ctx)
             }
             ClientMessage::CreateToken {
                 username,
@@ -274,6 +279,7 @@ impl ClientWsSession {
 
     fn login(
         &mut self,
+        username: String,
         device_id: DeviceId,
         login_token: AuthToken,
         request_id: RequestId,
@@ -286,28 +292,20 @@ impl ClientWsSession {
             })
         }
 
-        let fut = self
-            .database_server
-            .send(GetToken { device_id })
-            .and_then(move |token_opt| match token_opt {
-                Ok(Some(token)) => {
-                    let Token {
-                        token_hash,
-                        hash_scheme_version,
-                        user_id,
-                        ..
-                    } = token;
-                    Either::A(
-                        auth::verify(login_token.0, token_hash, hash_scheme_version).map(
-                            move |matches| {
-                                if matches {
-                                    Ok(user_id)
-                                } else {
-                                    Err(ServerError::InvalidToken)
-                                }
-                            },
-                        ),
-                    )
+        let fut = self.database_server.send(GetUserByName(username))
+            .and_then(move |user_opt| match user_opt {
+                Ok(Some(user)) => {
+                    let res = if user.locked {
+                        Err(ServerError::UserLocked)
+                    } else if user.banned {
+                        Err(ServerError::UserBanned)
+                    } else if user.compromised {
+                        Err(ServerError::UserCompromised)
+                    } else {
+                        Ok(())
+                    };
+
+                    Either::A(future::ok(res))
                 }
                 Ok(None) => Either::B(future::ok(Err(ServerError::InvalidToken))),
                 Err(e) => {
@@ -316,6 +314,42 @@ impl ClientWsSession {
                 }
             })
             .into_actor(self)
+            .and_then(move |login_allowed, act, _ctx| match login_allowed {
+                Ok(()) => {
+                    fut::Either::A(act
+                        .database_server
+                        .send(GetToken { device_id })
+                        .and_then(move |token_opt| match token_opt {
+                            Ok(Some(token)) => {
+                                let Token {
+                                    token_hash,
+                                    hash_scheme_version,
+                                    user_id,
+                                    ..
+                                } = token;
+                                Either::A(
+                                    auth::verify(login_token.0, token_hash, hash_scheme_version).map(
+                                        move |matches| {
+                                            if matches {
+                                                Ok(user_id)
+                                            } else {
+                                                Err(ServerError::InvalidToken)
+                                            }
+                                        },
+                                    ),
+                                )
+                            }
+                            Ok(None) => Either::B(future::ok(Err(ServerError::InvalidToken))),
+                            Err(e) => {
+                                eprintln!("Database error: {:?}", e);
+                                Either::B(future::ok(Err(ServerError::Internal)))
+                            }
+                        })
+                        .into_actor(act)
+                    )
+                },
+                Err(e) => fut::Either::B(fut::ok(Err(e))),
+            })
             .and_then(move |res, act, ctx| match res {
                 Ok(user_id) => fut::Either::A(
                     act.client_server
@@ -332,7 +366,6 @@ impl ClientWsSession {
             .map(move |res, act, _ctx| match res {
                 Ok(user_id) => {
                     act.state = SessionState::Ready(user_id, device_id);
-                    act.device_id = Some(device_id);
                     RequestResponse::user(user_id)
                 }
                 Err(e) => RequestResponse::Error(e),
@@ -557,14 +590,8 @@ impl ClientWsSession {
                     RequestResponse::Error(ServerError::Internal)
                 }
                 Err(l337::Error::External(sql_error)) => {
-                    if sql_error.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
-                        || sql_error.code() == Some(&SqlState::UNIQUE_VIOLATION)
-                    {
-                        RequestResponse::Error(ServerError::UsernameAlreadyExists)
-                    } else {
-                        eprintln!("Database error: {:?}", sql_error);
-                        RequestResponse::Error(ServerError::Internal)
-                    }
+                    eprintln!("Database error: {:?}", sql_error);
+                    RequestResponse::Error(ServerError::Internal)
                 }
             });
 
@@ -658,6 +685,17 @@ impl ClientWsSession {
                 };
 
                 fut.into_actor(act)
+            })
+            .and_then(move |res, act, _ctx| {
+                match res {
+                    RequestResponse::Success(success) => fut::Either::A(
+                        act.client_server
+                            .send(LogoutAllSessions { user_id })
+                            .map(|_| RequestResponse::Success(success))
+                            .into_actor(act)
+                    ),
+                    response => fut::Either::B(fut::ok(response)),
+                }
             });
 
         self.respond(fut, request_id, ctx)

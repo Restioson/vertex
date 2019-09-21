@@ -48,7 +48,14 @@ impl Win {
                 let message = format!("{}: {}\n", msg.author, msg.content);
                 text_buffer.insert(&mut text_buffer.get_end_iter(), &message);
             }
-            Action::Error(_error) => {}
+            Action::Error(_error) => {}, // TODO handle this? @gegy
+            Action::LoggedOut => {
+                let text_buffer = self.widgets.messages.get_buffer().unwrap();
+                text_buffer.insert(
+                    &mut text_buffer.get_end_iter(),
+                    &"Logged out -- session invalidated. Please log in again."
+                );
+            },
         }
     }
 }
@@ -196,26 +203,83 @@ impl Update for Win {
                             }
                         }
                         "/revokecurrent" => {
-                            text_buffer.insert(
-                                &mut text_buffer.get_end_iter(),
-                                "Revoking token...\n",
-                            );
+                            text_buffer
+                                .insert(&mut text_buffer.get_end_iter(), "Revoking token...\n");
 
-                            self.model.vertex.revoke_current_token().expect("Error revoking current token");
+                            self.model
+                                .vertex
+                                .revoke_current_token()
+                                .expect("Error revoking current token");
                         }
                         "/revoke" => {
                             if v.len() == 3 {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Revoking token...\n",
-                                );
+                                text_buffer
+                                    .insert(&mut text_buffer.get_end_iter(), "Revoking token...\n");
 
-                                let dev = DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
-                                self.model.vertex.revoke_token(v[2], dev).expect("Error revoking token");
+                                let dev =
+                                    DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
+                                self.model
+                                    .vertex
+                                    .revoke_token(v[2], dev)
+                                    .expect("Error revoking token");
                             } else {
                                 text_buffer.insert(
                                     &mut text_buffer.get_end_iter(),
                                     "Token and password required\n",
+                                );
+                            }
+                        }
+                        "/changeusername" => {
+                            if v.len() == 2 {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Changing username...\n",
+                                );
+
+                                self.model
+                                    .vertex
+                                    .change_username(v[1])
+                                    .expect("Error changing username");
+                            } else {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "New username required\n",
+                                );
+                            }
+                        }
+                        "/changedisplayname" => {
+                            if v.len() == 2 {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Changing display name...\n",
+                                );
+
+                                self.model
+                                    .vertex
+                                    .change_display_name(v[1])
+                                    .expect("Error changing display name");
+                            } else {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "New display name required\n",
+                                );
+                            }
+                        }
+                        "/changepassword" => {
+                            if v.len() == 3 {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Changing password...\n",
+                                );
+
+                                self.model
+                                    .vertex
+                                    .change_password(v[1], v[2])
+                                    .expect("Error changing password");
+                            } else {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Old password and new password required\n",
                                 );
                             }
                         }

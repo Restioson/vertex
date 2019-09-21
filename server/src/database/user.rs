@@ -1,7 +1,7 @@
 use super::*;
 use crate::auth::HashSchemeVersion;
 use std::convert::TryFrom;
-use tokio_postgres::row::Row;
+use tokio_postgres::{error::SqlState, row::Row};
 use uuid::Uuid;
 use vertex_common::UserId;
 
@@ -196,12 +196,19 @@ impl Handler<ChangeUsername> for DatabaseServer {
     fn handle(&mut self, change: ChangeUsername, _: &mut Context<Self>) -> Self::Result {
         Box::new(self.pool.connection().and_then(move |mut conn| {
             conn.client
-                .prepare("UPDATE users SET username = $1 WHERE id = $2 ON CONFLICT DO NOTHING") // TODO test on conflict
+                .prepare("UPDATE users SET username = $1 WHERE id = $2")
                 .and_then(move |stmt| {
                     conn.client
                         .execute(&stmt, &[&change.new_username, &change.user_id.0])
                 })
-                .map(|ret| ret == 1) // Return true if 1 item was updated (update was sucessful)
+                .map(|ret| ret == 1) // Return true if 1 item was updated (update was successful)
+                .then(|res| match res {
+                    Err(ref e) if e.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
+                        || e.code() == Some(&SqlState::UNIQUE_VIOLATION) => {
+                        Ok(false)
+                    },
+                    other => other,
+                })
                 .map_err(l337::Error::External)
         }))
     }
@@ -231,7 +238,9 @@ impl Handler<ChangePassword> for DatabaseServer {
         Box::new(self.pool.connection().and_then(move |mut conn| {
             conn.client
                 .prepare(
-                    "UPDATE users SET password_hash = $1, hash_scheme_version = $2 WHERE id = $3",
+                    "UPDATE users SET
+                        password_hash = $1, hash_scheme_version = $2, compromised = $3
+                    WHERE id = $4",
                 )
                 .and_then(move |stmt| {
                     conn.client.execute(
@@ -239,6 +248,7 @@ impl Handler<ChangePassword> for DatabaseServer {
                         &[
                             &change.new_password_hash,
                             &(change.hash_version as u8 as i16),
+                            &false,
                             &change.user_id.0,
                         ],
                     )
