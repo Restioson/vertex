@@ -36,18 +36,19 @@ The configuration file will be located in the standard configuration directories
 
 On Docker, it should be located at ``
 
-| Key                    | Value                                                                                                                                                                                                                               |
-|------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `max_password_len`     | The maximum password length that a user may enter.  It must be greater than or equal to 1 and the minimum password length. This is applied only for future passwords -- it is not retroactively applied. Should be a large value.   |
-| `min_password_len`     | The minimum password length that a user may enter. It must be greater than 8. This is applied only for future passwords -- it is not retroactively applied. **Serious security consideration should be taken before altering.**     |
-| `max_username_len`     | The maximum username length that a user may enter. It must be greater than or equal to 1 and the minimum password length. This is applied only for future usernames -- it is not retroactively applied.                             |
-| `min_username_len`     | The minimum username length that a user may enter. It must be greater than or equal to 1. This is applied only for future usernames -- it is not retroactively applied.                                                             |
-| `max_display_name_len` | The maximum display name length that a user may enter. It must be greater than or equal to 1 and the minimum password length. This is applied only for future display names -- it is not retroactively applied.                     |
-| `min_display_name_len` | The minimum password length that a user may enter. It must be  greater than or equal to 1. This is  applied only for future display names -- it is not retroactively applied.                                                       |
-| `max_bio_len`          | The maximum bio/"about me" text length per user.                                                                                                                                                                                    |
-| `files_directory`      | The directory to serve static files from (e.g profile pictures). They are served at the root, `/`, so `[files_directory]/images/profile_pictures` is served at `/images/profile_pictures`. It should only be used for public files. |
+| Key                     | Value                                                                                                                                                                                                                               |
+|-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `max_password_len`      | The maximum password length that a user may enter.  It must be greater than or equal to 1 and the minimum password length. This is applied only for future passwords -- it is not retroactively applied. Should be a large value.   |
+| `min_password_len`      | The minimum password length that a user may enter. It must be greater than 8. This is applied only for future passwords -- it is not retroactively applied. **Serious security consideration should be taken before altering.**     |
+| `max_username_len`      | The maximum username length that a user may enter. It must be greater than or equal to 1 and the minimum password length. This is applied only for future usernames -- it is not retroactively applied.                             |
+| `min_username_len`      | The minimum username length that a user may enter. It must be greater than or equal to 1. This is applied only for future usernames -- it is not retroactively applied.                                                             |
+| `max_display_name_len`  | The maximum display name length that a user may enter. It must be greater than or equal to 1 and the minimum password length. This is applied only for future display names -- it is not retroactively applied.                     |
+| `min_display_name_len`  | The minimum password length that a user may enter. It must be  greater than or equal to 1. This is  applied only for future display names -- it is not retroactively applied.                                                       |
+| `max_bio_len`           | The maximum bio/"about me" text length per user.                                                                                                                                                                                    |
+| `files_directory`       | The directory to serve static files from (e.g profile pictures). They are served at the root, `/`, so `[files_directory]/images/profile_pictures` is served at `/images/profile_pictures`. It should only be used for public files. |
+| `tokens_sweep_interval` | How often to sweep the database for possibly expired tokens in seconds. A warning will be printed if this is less than the time taken to complete a single sweep.                                                                   |
 
-It is notated with TOML.
+It is written in TOML.
 
 ## Objectives
 

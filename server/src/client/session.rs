@@ -105,10 +105,10 @@ impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
     }
 }
 
-impl Handler<LogoutSession> for ClientWsSession {
+impl Handler<LogoutThisSession> for ClientWsSession {
     type Result = ();
 
-    fn handle(&mut self, _: LogoutSession, ctx: &mut WebsocketContext<Self>) {
+    fn handle(&mut self, _: LogoutThisSession, ctx: &mut WebsocketContext<Self>) {
         ctx.binary(ServerMessage::SessionLoggedOut);
         self.state = SessionState::WaitingForLogin;
     }
@@ -171,9 +171,11 @@ impl ClientWsSession {
 
     fn handle_message(&mut self, req: ClientRequest, ctx: &mut WebsocketContext<Self>) {
         match req.message {
-            ClientMessage::Login { username, device_id, token } => {
-                self.login(username, device_id, token, req.request_id, ctx)
-            }
+            ClientMessage::Login {
+                username,
+                device_id,
+                token,
+            } => self.login(username, device_id, token, req.request_id, ctx),
             ClientMessage::CreateToken {
                 username,
                 password,
@@ -292,7 +294,9 @@ impl ClientWsSession {
             })
         }
 
-        let fut = self.database_server.send(GetUserByName(username))
+        let fut = self
+            .database_server
+            .send(GetUserByName(username))
             .and_then(move |user_opt| match user_opt {
                 Ok(Some(user)) => {
                     let res = if user.locked {
@@ -315,9 +319,8 @@ impl ClientWsSession {
             })
             .into_actor(self)
             .and_then(move |login_allowed, act, _ctx| match login_allowed {
-                Ok(()) => {
-                    fut::Either::A(act
-                        .database_server
+                Ok(()) => fut::Either::A(
+                    act.database_server
                         .send(GetToken { device_id })
                         .and_then(move |token_opt| match token_opt {
                             Ok(Some(token)) => {
@@ -328,15 +331,14 @@ impl ClientWsSession {
                                     ..
                                 } = token;
                                 Either::A(
-                                    auth::verify(login_token.0, token_hash, hash_scheme_version).map(
-                                        move |matches| {
+                                    auth::verify(login_token.0, token_hash, hash_scheme_version)
+                                        .map(move |matches| {
                                             if matches {
                                                 Ok(user_id)
                                             } else {
                                                 Err(ServerError::InvalidToken)
                                             }
-                                        },
-                                    ),
+                                        }),
                                 )
                             }
                             Ok(None) => Either::B(future::ok(Err(ServerError::InvalidToken))),
@@ -345,9 +347,8 @@ impl ClientWsSession {
                                 Either::B(future::ok(Err(ServerError::Internal)))
                             }
                         })
-                        .into_actor(act)
-                    )
-                },
+                        .into_actor(act),
+                ),
                 Err(e) => fut::Either::B(fut::ok(Err(e))),
             })
             .and_then(move |res, act, ctx| match res {
@@ -686,16 +687,14 @@ impl ClientWsSession {
 
                 fut.into_actor(act)
             })
-            .and_then(move |res, act, _ctx| {
-                match res {
-                    RequestResponse::Success(success) => fut::Either::A(
-                        act.client_server
-                            .send(LogoutAllSessions { user_id })
-                            .map(|_| RequestResponse::Success(success))
-                            .into_actor(act)
-                    ),
-                    response => fut::Either::B(fut::ok(response)),
-                }
+            .and_then(move |res, act, _ctx| match res {
+                RequestResponse::Success(success) => fut::Either::A(
+                    act.client_server
+                        .send(LogoutUserSessions { user_id })
+                        .map(|_| RequestResponse::Success(success))
+                        .into_actor(act),
+                ),
+                response => fut::Either::B(fut::ok(response)),
             });
 
         self.respond(fut, request_id, ctx)

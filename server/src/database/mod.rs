@@ -1,20 +1,26 @@
 use actix::prelude::*;
 use l337_postgres::PostgresConnectionManager;
 use std::fs;
+use std::time::{Duration, Instant};
 use tokio_postgres::NoTls;
+use vertex_common::{DeviceId, UserId};
 
 mod token;
 mod user;
 
+use crate::client::{ClientServer, LogoutSessions};
+use crate::config::Config;
 pub use token::*;
 pub use user::*;
 
 pub struct DatabaseServer {
     pool: l337::Pool<PostgresConnectionManager<NoTls>>,
+    sweep_interval: Duration,
+    client_server: Addr<ClientServer>,
 }
 
 impl DatabaseServer {
-    pub fn new(sys: &mut SystemRunner) -> Self {
+    pub fn new(sys: &mut SystemRunner, client_server: Addr<ClientServer>, config: &Config) -> Self {
         let mgr = PostgresConnectionManager::new(
             fs::read_to_string("db.conf")
                 .expect("db.conf not found")
@@ -26,11 +32,13 @@ impl DatabaseServer {
         let pool = sys
             .block_on(l337::Pool::new(mgr, Default::default()))
             .expect("db error");
-        DatabaseServer { pool }
+        DatabaseServer {
+            pool,
+            sweep_interval: Duration::from_secs(config.tokens_sweep_interval),
+            client_server,
+        }
     }
-}
 
-impl DatabaseServer {
     fn create_tables(&mut self) -> impl Future<Item = (), Error = ()> {
         let users = self
             .pool
@@ -79,12 +87,66 @@ impl DatabaseServer {
 
         users.and_then(|_| login_tokens)
     }
+
+    fn expired_tokens(
+        &self,
+    ) -> impl Stream<Item = (UserId, DeviceId), Error = l337::Error<tokio_postgres::Error>> {
+        self.pool
+            .connection()
+            .map(|mut conn| {
+                conn.client
+                    .prepare(
+                        "DELETE FROM login_tokens
+                            WHERE expiration_date < now()::timestamp
+                            RETURNING device_id, user_id",
+                    )
+                    .map_err(l337::Error::External)
+                    .map(move |stmt| {
+                        conn.client
+                            .query(&stmt, &[])
+                            .map(|row| {
+                                Ok((
+                                    UserId(row.try_get("user_id")?),
+                                    DeviceId(row.try_get("device_id")?),
+                                ))
+                            })
+                            .map_err(l337::Error::External)
+                    })
+                    .flatten_stream()
+            })
+            .flatten_stream()
+            .then(|result| result.and_then(|inner| inner.map_err(l337::Error::External)))
+    }
+
+    fn sweep_tokens(&self) -> impl ActorFuture<Actor = Self, Item = (), Error = ()> {
+        let begin = Instant::now();
+
+        self.expired_tokens()
+            .collect()
+            .map_err(|e| panic!("db error: {:?}", e))
+            .into_actor(self)
+            .map(move |list, act, _ctx| act.client_server.do_send(LogoutSessions { list }))
+            .map(move |_, act, _ctx| {
+                let time_taken = Instant::now().duration_since(begin);
+                if time_taken > act.sweep_interval {
+                    eprintln!(
+                        "Warning! Took {}s to sweep the database for expired tokens, but the interval is {}s!",
+                        time_taken.as_secs(),
+                        act.sweep_interval.as_secs(),
+                    );
+                }
+            })
+    }
 }
 
 impl Actor for DatabaseServer {
     type Context = Context<Self>;
 
-    fn started(&mut self, _ctx: &mut Context<Self>) {
+    fn started(&mut self, ctx: &mut Context<Self>) {
         Arbiter::spawn(self.create_tables());
+
+        ctx.run_interval(self.sweep_interval, |db, ctx| {
+            ctx.spawn(db.sweep_tokens());
+        });
     }
 }

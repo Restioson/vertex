@@ -7,4 +7,4 @@ pub use server::*;
 pub use session::*;
 
 #[derive(Debug, Message)]
-pub struct LogoutSession;
+pub struct LogoutThisSession;

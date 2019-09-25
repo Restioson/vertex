@@ -203,10 +203,12 @@ impl Handler<ChangeUsername> for DatabaseServer {
                 })
                 .map(|ret| ret == 1) // Return true if 1 item was updated (update was successful)
                 .then(|res| match res {
-                    Err(ref e) if e.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
-                        || e.code() == Some(&SqlState::UNIQUE_VIOLATION) => {
+                    Err(ref e)
+                        if e.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
+                            || e.code() == Some(&SqlState::UNIQUE_VIOLATION) =>
+                    {
                         Ok(false)
-                    },
+                    }
                     other => other,
                 })
                 .map_err(l337::Error::External)

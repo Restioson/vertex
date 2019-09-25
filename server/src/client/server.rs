@@ -1,4 +1,4 @@
-use super::{ClientWsSession, LogoutSession};
+use super::{ClientWsSession, LogoutThisSession};
 use crate::SendMessage;
 use actix::prelude::*;
 use ccl::dhashmap::DHashMap;
@@ -14,7 +14,12 @@ pub struct Connect {
 }
 
 #[derive(Debug, Message)]
-pub struct LogoutAllSessions {
+pub struct LogoutSessions {
+    pub list: Vec<(UserId, DeviceId)>,
+}
+
+#[derive(Debug, Message)]
+pub struct LogoutUserSessions {
     pub user_id: UserId,
 }
 
@@ -71,12 +76,27 @@ impl ClientServer {
         }
     }
 
-    fn logout_sessions(&mut self, user_id: &UserId) {
+    fn logout_user_sessions(&mut self, user_id: &UserId) {
         if let Some(online_devices) = self.online_devices.get(user_id) {
             online_devices
                 .iter()
                 .map(|id| self.sessions.get_mut(id).unwrap())
-                .for_each(|s| s.do_send(LogoutSession));
+                .for_each(|s| s.do_send(LogoutThisSession));
+        }
+    }
+
+    fn logout_sessions(&mut self, logout: LogoutSessions) {
+        // TODO could probably be optimised
+        for (user_id, device_id) in logout.list {
+            if let Some(online_devices) = self.online_devices.get(&user_id) {
+                let device_id = online_devices.iter().find(|id| **id == device_id);
+
+                if let Some(device_id) = device_id {
+                    if let Some(session) = self.sessions.get_mut(device_id) {
+                        session.do_send(LogoutThisSession);
+                    }
+                }
+            }
         }
     }
 
@@ -88,7 +108,11 @@ impl ClientServer {
                     .iter()
                     .filter(|id| **id != *sender)
                     .map(|id| self.sessions.get_mut(id).unwrap())
-                    .for_each(|s| s.do_send(SendMessage { message: message.clone() }));
+                    .for_each(|s| {
+                        s.do_send(SendMessage {
+                            message: message.clone(),
+                        })
+                    });
             }
         }
     }
@@ -211,10 +235,18 @@ impl Handler<IdentifiedMessage<Delete>> for ClientServer {
     }
 }
 
-impl Handler<LogoutAllSessions> for ClientServer {
+impl Handler<LogoutUserSessions> for ClientServer {
     type Result = ();
 
-    fn handle(&mut self, logout: LogoutAllSessions, _: &mut Context<Self>) {
-        self.logout_sessions(&logout.user_id);
+    fn handle(&mut self, logout: LogoutUserSessions, _: &mut Context<Self>) {
+        self.logout_user_sessions(&logout.user_id);
+    }
+}
+
+impl Handler<LogoutSessions> for ClientServer {
+    type Result = ();
+
+    fn handle(&mut self, logout: LogoutSessions, _: &mut Context<Self>) {
+        self.logout_sessions(logout)
     }
 }

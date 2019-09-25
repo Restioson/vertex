@@ -68,8 +68,8 @@ fn main() -> std::io::Result<()> {
     create_files_directories(&config);
 
     let mut sys = System::new("vertex_server");
-    let db_server = DatabaseServer::new(&mut sys).start();
     let client_server = ClientServer::new().start();
+    let db_server = DatabaseServer::new(&mut sys, client_server.clone(), &config).start();
     let federation_server = FederationServer::new().start();
 
     HttpServer::new(move || {

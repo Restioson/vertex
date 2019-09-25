@@ -48,14 +48,14 @@ impl Win {
                 let message = format!("{}: {}\n", msg.author, msg.content);
                 text_buffer.insert(&mut text_buffer.get_end_iter(), &message);
             }
-            Action::Error(_error) => {}, // TODO handle this? @gegy
+            Action::Error(_error) => {} // TODO handle this? @gegy
             Action::LoggedOut => {
                 let text_buffer = self.widgets.messages.get_buffer().unwrap();
                 text_buffer.insert(
                     &mut text_buffer.get_end_iter(),
-                    &"Logged out -- session invalidated. Please log in again."
+                    &"Logged out -- session invalidated. Please log in again.",
                 );
-            },
+            }
         }
     }
 }

@@ -74,7 +74,7 @@ impl Vertex {
                 self.logged_in = false; // TODO proper log out function
 
                 Some(Action::LoggedOut)
-            },
+            }
             other => panic!("message {:?} is unimplemented", other),
         }
     }
