@@ -6,8 +6,12 @@ use url::Url;
 use uuid::Uuid;
 use vertex_client_backend::*;
 use vertex_common::*;
+use tokio::{self, runtime::Runtime};
+
+use futures::future::Future;
 
 use clap::{App, Arg};
+use actix::System;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -88,17 +92,21 @@ impl Update for Win {
     type Msg = VertexMsg;
 
     fn model(_relm: &Relm<Win>, args: VertexArgs) -> VertexModel {
+        let config = Config {
+            url: Url::parse("ws://127.0.0.1:8080/client/").unwrap(),
+            client_id: UserId(args.user_id.unwrap_or_else(|| Uuid::new_v4())),
+        };
+
+        let vertex = Vertex::connect(config);
+
         let mut model = VertexModel {
-            vertex: Vertex::new(Config {
-                url: Url::parse("ws://127.0.0.1:8080/client/").unwrap(),
-                client_id: UserId(args.user_id.unwrap_or_else(|| Uuid::new_v4())),
-            }),
+            vertex,
             room: None,
             room_list: Vec::new(),
         };
 
         // TODO: Where should this go?
-        model.vertex.login().expect("Error logging in");
+        actix::spawn(model.vertex.login());
 
         model
     }
@@ -117,7 +125,7 @@ impl Update for Win {
                         "/join" => {
                             if v.len() == 2 {
                                 let room = RoomId(Uuid::parse_str(v[1]).expect("Invalid room id"));
-                                self.model.vertex.join_room(room).expect("Error joining room");
+                                actix::spawn(self.model.vertex.join_room(room));
                                 self.push_message("Info", &format!("Joined room {}", room.0));
 
                                 self.model.room = Some(room);
@@ -132,15 +140,19 @@ impl Update for Win {
                             }
                         }
                         "/createroom" => {
-                            let room = self.model.vertex.create_room().expect("Error creating room");
-                            self.push_message("Info", &format!("Joined room {}", room.0));
+                            let room = actix::spawn(self.model.vertex.create_room()
+                                .map(|room| {
+                                    self.push_message("Info", &format!("Joined room {}", room.0));
 
-                            self.model.room = Some(room);
-                            let txt: &str = &format!("#{}", room.0);
-                            let room_label = Label::new(Some(txt));
-                            self.widgets.rooms.insert(&room_label, -1);
-                            self.model.room_list.push(room);
-                            room_label.show_all();
+                                    self.model.room = Some(room);
+                                    let txt: &str = &format!("#{}", room.0);
+                                    let room_label = Label::new(Some(txt));
+                                    self.widgets.rooms.insert(&room_label, -1);
+                                    self.model.room_list.push(room);
+                                    room_label.show_all();
+                                    room
+                                })
+                                );
                         }
                         _ => self.push_message("Info", "Unknown command"),
                     }
@@ -149,13 +161,11 @@ impl Update for Win {
                 }
 
                 let room = self.model.room.expect("Not in a room").clone();
-                self.model
-                    .vertex
-                    .send_message(msg.to_string(), room)
-                    .expect("Error sending message"); // todo display error
+
+                // TODO: change this to not be blocking
+                actix::spawn(self.model.vertex.send_message(msg.to_string(), room));
 
                 let name = self.model.vertex.username();
-
                 self.push_message(&name, &msg);
             }
             VertexMsg::Lifecycle => {
@@ -165,10 +175,7 @@ impl Update for Win {
                 }
             }
             VertexMsg::Heartbeat => {
-                if let Err(_) = self.model.vertex.dispatch_heartbeat() {
-                    eprintln!("Server timed out");
-                    std::process::exit(1);
-                }
+                self.model.vertex.dispatch_heartbeat();
             }
             VertexMsg::Quit => gtk::main_quit(),
         }
@@ -250,5 +257,7 @@ fn main() {
 
     let args = VertexArgs { user_id };
 
-    Win::run(args).expect("failed to run window");
+    System::run(|| {
+        Win::run(args).expect("failed to run window");
+    }).expect("failed to start system");
 }

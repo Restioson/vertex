@@ -55,9 +55,9 @@ impl ClientWsSession {
         self.state.user_id()
     }
 
-    fn handle_message(&mut self, req: ClientRequest, ctx: &mut WebsocketContext<Self>) {
-        let response = match req.message {
-            ClientMessage::Login(login) => {
+    fn handle_message(&mut self, req: ClientMessage, ctx: &mut WebsocketContext<Self>) {
+        let response = match req.request {
+            ClientRequest::Login(login) => {
                 // Register with the server
                 self.client_server.do_send(Connect {
                     session: ctx.address(),
@@ -65,14 +65,14 @@ impl ClientWsSession {
                     login: login.clone(),
                 });
                 self.state = SessionState::Ready(login.id);
-                RequestResponse::success()
+                Ok(RequestResponse::NoData)
             }
-            _ => self.handle_authenticated_message(req.message, ctx),
+            _ => self.handle_authenticated_message(req.request, ctx),
         };
 
         let response = ServerMessage::Response {
             response,
-            request_id: req.request_id,
+            request_id: req.id,
         };
 
         let binary: Bytes = response.into();
@@ -81,39 +81,39 @@ impl ClientWsSession {
 
     fn handle_authenticated_message(
         &mut self,
-        msg: ClientMessage,
+        msg: ClientRequest,
         _ctx: &mut WebsocketContext<Self>,
-    ) -> RequestResponse {
+    ) -> Result<RequestResponse, ServerError> {
         match self.state {
-            SessionState::WaitingForLogin => RequestResponse::Error(ServerError::NotLoggedIn),
+            SessionState::WaitingForLogin => Err(ServerError::NotLoggedIn),
             SessionState::Ready(id) => {
                 match msg {
-                    ClientMessage::SendMessage(msg) => {
+                    ClientRequest::SendMessage(msg) => {
                         self.client_server.do_send(IdentifiedMessage {
                             user_id: id,
                             session_id: self.session_id,
                             msg,
                         });
-                        RequestResponse::success()
+                        Ok(RequestResponse::NoData)
                     }
-                    ClientMessage::EditMessage(edit) => {
+                    ClientRequest::EditMessage(edit) => {
                         self.client_server.do_send(IdentifiedMessage {
                             user_id: id,
                             session_id: self.session_id,
                             msg: edit,
                         });
-                        RequestResponse::success()
+                        Ok(RequestResponse::NoData)
                     }
-                    ClientMessage::JoinRoom(room) => {
+                    ClientRequest::JoinRoom(room) => {
                         // TODO check that it worked lol
                         self.client_server.do_send(IdentifiedMessage {
                             user_id: id,
                             session_id: self.session_id,
                             msg: Join { room },
                         });
-                        RequestResponse::success()
+                        Ok(RequestResponse::NoData)
                     }
-                    ClientMessage::CreateRoom => {
+                    ClientRequest::CreateRoom => {
                         let id = self
                             .client_server
                             .send(IdentifiedMessage {
@@ -123,7 +123,7 @@ impl ClientWsSession {
                             })
                             .wait()
                             .unwrap();
-                        RequestResponse::Success(Success::Room { id })
+                        Ok(RequestResponse::Room { id })
                     }
                     _ => unimplemented!(),
                 }

@@ -1,6 +1,7 @@
 //! Some definitions common between server and client
 #[cfg(feature = "enable-actix")]
 use actix::prelude::*;
+
 use bytes::Bytes;
 use std::time::Duration;
 use uuid::Uuid;
@@ -25,34 +26,41 @@ pub struct RoomId(pub Uuid);
 pub struct MessageId(pub Uuid);
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ClientRequest {
-    pub message: ClientMessage,
-    pub request_id: RequestId,
+pub struct ClientMessage {
+    pub request: ClientRequest,
+    pub id: RequestId,
 }
 
-impl ClientRequest {
-    pub fn new(message: ClientMessage) -> Self {
-        ClientRequest {
-            message,
-            request_id: RequestId(Uuid::new_v4()),
+impl From<ClientRequest> for ClientMessage {
+    #[inline]
+    fn from(req: ClientRequest) -> Self {
+        ClientMessage::new(req)
+    }
+}
+
+impl ClientMessage {
+    pub fn new(request: ClientRequest) -> Self {
+        ClientMessage {
+            request,
+            id: RequestId(Uuid::new_v4()),
         }
     }
 }
 
-impl Into<Bytes> for ClientRequest {
+impl Into<Bytes> for ClientMessage {
     fn into(self) -> Bytes {
         serde_cbor::to_vec(&self).unwrap().into()
     }
 }
 
-impl Into<Vec<u8>> for ClientRequest {
+impl Into<Vec<u8>> for ClientMessage {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum ClientMessage {
+pub enum ClientRequest {
     Login(Login),
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
@@ -113,10 +121,11 @@ pub struct Login {
 
 impl ClientMessageType for Login {}
 
+#[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
     Response {
-        response: RequestResponse,
+        response: Result<RequestResponse, ServerError>,
         request_id: RequestId,
     },
     Error(ServerError),
@@ -138,18 +147,6 @@ impl Into<Vec<u8>> for ServerMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RequestResponse {
-    Success(Success),
-    Error(ServerError),
-}
-
-impl RequestResponse {
-    pub fn success() -> Self {
-        RequestResponse::Success(Success::NoData)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerError {
     InvalidMessage,
     UnexpectedTextFrame,
@@ -161,7 +158,7 @@ pub enum ServerError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Success {
+pub enum RequestResponse {
     NoData,
     Room { id: RoomId },
     MessageSent { id: MessageId },

@@ -1,11 +1,16 @@
+#![feature(await_macro, async_await)]
+
 use std::convert::Into;
 use url::Url;
 use vertex_common::*;
-use websocket::WebSocketError;
+use websocket::{WebSocketError, OwnedMessage};
+
+use net::{Net, MakeRequest};
+use actix::{Addr, Actor, Context, Handler};
+use futures::{Future, future};
+use crate::net::DispatchHeartbeat;
 
 mod net;
-
-use net::Net;
 
 pub struct Config {
     pub url: Url,
@@ -13,136 +18,122 @@ pub struct Config {
 }
 
 pub struct Vertex {
-    net: Net,
-    id: UserId,
+    net: Addr<Net>,
+    user_id: UserId,
     logged_in: bool,
 }
 
 impl Vertex {
-    pub fn new(config: Config) -> Self {
+    pub fn connect(config: Config) -> Vertex {
+        let net = Net::connect(config.url)
+            .expect("failed to connect");
+
         Vertex {
-            net: Net::connect(&config.url),
-            id: config.client_id,
+            net,
+            user_id: config.client_id,
             logged_in: false,
         }
     }
 
     pub fn handle(&mut self) -> Option<Action> {
-        let message = match self.net.receive() {
-            Some(Ok(m)) => m,
-            Some(Err(e)) => return Some(Action::Error(e)),
-            None => return None,
-        };
-
-        match message {
-            ServerMessage::Response {
-                response,
-                request_id: _,
-            } => {
-                match response {
-                    // TODO associate with a particular message id: @gegy1000
-                    RequestResponse::Success(_) => None,
-                    RequestResponse::Error(e) => Some(Action::Error(Error::ServerError(e))),
-                }
-            }
-            ServerMessage::Error(e) => Some(Action::Error(Error::ServerError(e))),
-            ServerMessage::Message(m) => Some(Action::AddMessage(m.into())),
-            _ => panic!("unimplemented"),
-        }
+//        let message = match self.net.receive() {
+//            Some(Ok(m)) => m,
+//            Some(Err(e)) => return Some(Action::Error(e)),
+//            None => return None,
+//        };
+//
+//        match message {
+//            ServerMessage::Response {
+//                response,
+//                request_id: _,
+//            } => {
+//                match response {
+//                    // TODO associate with a particular message id: @gegy1000
+//                    Result<RequestResponse, ServerError>::RequestResponse(_) => None,
+//                    Result<RequestResponse, ServerError>::Error(e) => Some(Action::Error(Error::ServerError(e))),
+//                }
+//            }
+//            ServerMessage::Error(e) => Some(Action::Error(Error::ServerError(e))),
+//            ServerMessage::Message(m) => Some(Action::AddMessage(m.into())),
+//            _ => panic!("unimplemented"),
+//        }
+        None
     }
 
-    pub fn login(&mut self) -> Result<()> {
+    pub fn login(&mut self) -> RequestFuture<()> {
         if !self.logged_in {
-            let request_id = self.net.request(ClientMessage::Login(Login { id: self.id }))?;
-
-            let msg = self.net.receive_blocking()?;
-            match msg.clone() {
-                ServerMessage::Response {
-                    response,
-                    request_id: response_id,
-                } => {
+            Box::new(self.request(ClientRequest::Login(Login { id: self.user_id }))
+                .then(|response| {
                     match response {
-                        // TODO do this more asynchronously @gegy1000
-                        RequestResponse::Success(Success::NoData) if response_id == request_id => {
-                            Ok(())
-                        }
-                        RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                        _ => Err(Error::IncorrectServerMessage(msg)),
+                        Ok(RequestResponse::NoData) => Ok(()),
+                        Ok(response) => Err(Error::UnexpectedResponse(response)),
+                        Err(e) => Err(e),
                     }
-                }
-                msg @ _ => Err(Error::IncorrectServerMessage(msg)),
-            }
+                }))
         } else {
-            Err(Error::AlreadyLoggedIn)
+            Box::new(future::err(Error::AlreadyLoggedIn))
         }
     }
 
-    pub fn create_room(&mut self) -> Result<RoomId> {
-        let request_id = self.net.request(ClientMessage::CreateRoom)?;
-
-        let msg = self.net.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request_id: response_id,
-            } => {
+    pub fn create_room(&mut self) -> RequestFuture<RoomId> {
+        Box::new(self.request(ClientRequest::CreateRoom)
+            .then(|response| {
                 match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::Room { id }) if response_id == request_id => {
-                        Ok(id)
-                    }
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
+                    Ok(RequestResponse::Room { id }) => Ok(id),
+                    Ok(response) => Err(Error::UnexpectedResponse(response)),
+                    Err(e) => Err(e),
                 }
-            }
-            ServerMessage::Error(e) => Err(Error::ServerError(e)),
-            _ => Err(Error::IncorrectServerMessage(msg)),
-        }
+            }))
     }
 
-    pub fn join_room(&mut self, room: RoomId) -> Result<()> {
-        let request_id = self.net.request(ClientMessage::JoinRoom(room))?;
-
-        let msg = self.net.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request_id: response_id,
-            } => {
+    pub fn join_room(&mut self, room: RoomId) -> RequestFuture<()> {
+        Box::new(self.request(ClientRequest::JoinRoom(room))
+            .then(|response| {
                 match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) if response_id == request_id => {
-                        Ok(())
-                    }
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
+                    Ok(RequestResponse::NoData) => Ok(()),
+                    Ok(response) => Err(Error::UnexpectedResponse(response)),
+                    Err(e) => Err(e),
                 }
-            }
-            ServerMessage::Error(e) => Err(Error::ServerError(e)),
-            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
-        }
+            }))
     }
 
     /// Sends a message, returning the request id if it was sent successfully
-    pub fn send_message(&mut self, msg: String, to_room: RoomId) -> Result<RequestId> {
-        if !self.logged_in {
-            self.net.request(ClientMessage::SendMessage(ClientSentMessage {
-                to_room,
-                content: msg,
-            }))
+    pub fn send_message(&mut self, content: String, to_room: RoomId) -> RequestFuture<()> {
+        if self.logged_in {
+            Box::new(self.request(ClientRequest::SendMessage(ClientSentMessage { to_room, content })).map(|_| ()))
         } else {
-            Err(Error::NotLoggedIn)
+            Box::new(future::err(Error::NotLoggedIn))
         }
     }
 
     pub fn username(&self) -> String {
-        format!("{}", self.id.0) // TODO lol
+        format!("{}", self.user_id.0) // TODO lol
     }
 
     /// Should be called once every `HEARTBEAT_INTERVAL`
     #[inline]
-    pub fn dispatch_heartbeat(&mut self) -> Result<()> {
-        self.net.dispatch_heartbeat()
+    pub fn dispatch_heartbeat(&mut self)  {
+        self.net.send(DispatchHeartbeat);
+    }
+
+    #[inline]
+    fn request(&self, request: ClientRequest) -> impl Future<Item=RequestResponse, Error=Error> {
+        self.net.send(MakeRequest(request))
+            .then(|result| {
+                result.expect("failed to send request to actor")
+            })
+    }
+}
+
+impl Actor for Vertex {
+    type Context = Context<Vertex>;
+}
+
+impl Handler<ServerMessage> for Vertex {
+    type Result = ();
+
+    fn handle(&mut self, msg: ServerMessage, ctx: &mut Context<Vertex>) {
+        println!("bruh! {:?}", msg);
     }
 }
 
@@ -171,6 +162,7 @@ pub enum Action {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+pub type RequestFuture<T> = Box<dyn Future<Item=T, Error=Error> + Send>;
 
 #[derive(Debug)]
 pub enum Error {
@@ -179,8 +171,9 @@ pub enum Error {
     WebSocketError(WebSocketError),
     /// A message from the server that doesn't deserialize correctly
     InvalidServerMessage,
-    /// A message from the server that doesn't make sense in a specific context
-    IncorrectServerMessage(ServerMessage),
+    /// A response from the server that doesn't make sense in a specific context
+    UnexpectedResponse(RequestResponse),
     ServerError(ServerError),
     ServerTimedOut,
+    ResponseCancelled,
 }
