@@ -204,6 +204,10 @@ impl Update for Win {
                                 );
                             }
                         }
+                        "/forgettoken" => {
+                            self.model.keyring.delete_password().expect("Error forgetting token");
+                            text_buffer.insert(&mut text_buffer.get_end_iter(), "Token forgot.\n");
+                        }
                         "/register" => {
                             if v.len() == 3 {
                                 text_buffer.insert(
