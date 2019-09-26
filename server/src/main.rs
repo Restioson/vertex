@@ -61,6 +61,8 @@ fn create_files_directories(config: &Config) {
 }
 
 fn main() -> std::io::Result<()> {
+    println!("Vertex server starting...");
+
     let args = env::args().collect::<Vec<_>>();
     let addr = args.get(1).cloned().unwrap_or("127.0.0.1:8080".to_string());
 
@@ -100,7 +102,7 @@ fn main() -> std::io::Result<()> {
     .bind(addr.clone())?
     .start();
 
-    println!("Server started on addr {}", addr);
+    println!("Vertex server started on addr {}", addr);
 
     sys.run()
 }

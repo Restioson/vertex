@@ -1,7 +1,7 @@
 use super::{ClientWsSession, LogoutThisSession};
 use crate::SendMessage;
 use actix::prelude::*;
-use ccl::dhashmap::DHashMap;
+use dashmap::DashMap;
 use std::fmt::Debug;
 use uuid::Uuid;
 use vertex_common::*;
@@ -62,17 +62,17 @@ impl<T: Message + ClientMessageType + Debug> Message for IdentifiedMessage<T> {
 }
 
 pub struct ClientServer {
-    sessions: DHashMap<DeviceId, Addr<ClientWsSession>>,
-    online_devices: DHashMap<UserId, Vec<DeviceId>>,
-    rooms: DHashMap<RoomId, Vec<UserId>>,
+    sessions: DashMap<DeviceId, Addr<ClientWsSession>>,
+    online_devices: DashMap<UserId, Vec<DeviceId>>,
+    rooms: DashMap<RoomId, Vec<UserId>>,
 }
 
 impl ClientServer {
     pub fn new() -> Self {
         ClientServer {
-            sessions: DHashMap::default(),
-            online_devices: DHashMap::default(),
-            rooms: DHashMap::default(),
+            sessions: DashMap::default(),
+            online_devices: DashMap::default(),
+            rooms: DashMap::default(),
         }
     }
 

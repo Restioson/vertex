@@ -751,7 +751,10 @@ impl ClientWsSession {
         self.database_server
             .send(GetUserByName(username))
             .and_then(move |res| match res {
-                Ok(Some(user)) => Either::A(auth::verify_user_password(user, password)),
+                Ok(Some(user)) => {
+                    println!("user with name {} exists", username);
+                    Either::A(auth::verify_user_password(user, password))
+                },
                 Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
                 Err(l337::Error::Internal(e)) => {
                     eprintln!("Database connection pooling error: {:?}", e);

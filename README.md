@@ -13,7 +13,7 @@ Vertex is a WIP end-to-end encrypted, decentralised, federated chat platform bui
 
 ### Server - Docker
 To install the server via Docker, you will require Docker and Docker Compose. Once they are
-installed, simply run `docker-compose up`.
+installed, simply run `docker-compose up` in the main directory (`vertex/`). Add `--build` to rebuild for new changes.
 
 **Warning:** *First time* compilation may take very long for the server (~10min). Grab a cup of coffee ;).
 Luckily, you only need to do this once, except *if* the dependencies change *and* you are using Docker.
@@ -60,7 +60,7 @@ It is written in TOML.
 - [ ] Client:
   - [x] Basic GUI client
   - [ ] Make it nicer to use -- gui, not commands
-- [ ] Login & persistent identity
+- [x] Login & persistent identity
 - [ ] Federation
 - [ ] Encryption
   - [ ] MLS

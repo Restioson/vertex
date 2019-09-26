@@ -8,11 +8,19 @@ host="$1"
 port="$2"
 shift 2
 cmd="$@"
+times=0
 
-until PGPASSWORD=$POSTGRES_PASSWORD nc -z $host $port &> /dev/null; do
-  >&2 echo "Postgres is unavailable - sleeping"
-  sleep 2
+while [ $times -lt 2 ]; do
+    ! PGPASSWORD=$POSTGRES_PASSWORD psql -h $host -p $port > /dev/null 2>&1
+
+    if [ $? -eq 0 ]; then
+        times=$((times + 1))
+    fi
+
+    >&2 echo "Postgres is unavailable - sleeping"
+    sleep 2
 done
 
->&2 echo "Postgres is up - executing command"
-exec $cmd
+echo "Postgres is up - executing command $cmd"
+$cmd
+echo "Command executed"
