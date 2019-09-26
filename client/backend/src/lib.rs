@@ -277,8 +277,7 @@ impl Vertex {
         };
 
         let request_id = self.request(ClientMessage::Login {
-            username: username.to_string(),
-            device_id: device_id.clone(),
+            device_id,
             token: token.clone(),
         })?;
 

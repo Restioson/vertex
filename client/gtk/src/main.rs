@@ -1,13 +1,16 @@
+#[macro_use]
+extern crate serde_derive;
+
 use gtk::prelude::*;
 use gtk::{Entry, Label, ListBox, TextView, Window};
 use relm::{connect, connect_stream, Relm, Update, Widget};
 use relm_derive::*;
 use url::Url;
 use uuid::Uuid;
+use keyring::Keyring;
+use clap::{App, Arg};
 use vertex_client_backend::*;
 use vertex_common::*;
-
-use clap::{App, Arg};
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -19,6 +22,7 @@ struct VertexModel {
     vertex: Vertex,
     room: Option<RoomId>,
     room_list: Vec<RoomId>,
+    keyring: Keyring<'static>,
 }
 
 struct VertexArgs {
@@ -32,6 +36,12 @@ enum VertexMsg {
     Lifecycle,
     Heartbeat,
     Quit,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct StoredToken {
+    device_id: DeviceId,
+    token: String,
 }
 
 struct Win {
@@ -80,6 +90,7 @@ impl Update for Win {
             }),
             room: None,
             room_list: Vec::new(),
+            keyring: Keyring::new("vertex_client_gtk", ""), // username = ""
         };
 
         model
@@ -153,19 +164,34 @@ impl Update for Win {
                                     let token = AuthToken(v[4].to_string());
 
                                     Some((id, token))
+                                } else if let Ok(token_ser) = self.model.keyring.get_password() {
+                                    let stored_token: StoredToken = serde_json::from_str(&token_ser)
+                                        .expect("Error deserializing token");
+
+                                    Some((stored_token.device_id, AuthToken(stored_token.token)))
                                 } else {
                                     None
                                 };
 
                                 match self.model.vertex.login(token, v[1], v[2]) {
-                                    // TODO store token
-                                    Ok((device_id, token)) => text_buffer.insert(
-                                        &mut text_buffer.get_end_iter(),
-                                        &format!(
-                                            "Sucessfully logged in. Device id: {}. Token: {}.\n",
-                                            device_id.0, token.0
-                                        ),
-                                    ),
+                                    Ok((device_id, token)) => {
+                                        let stored_token = StoredToken {
+                                            device_id,
+                                            token: token.0.clone()
+                                        };
+                                        let token_ser = serde_json::to_string(&stored_token)
+                                            .expect("Error serializing token");
+                                        self.model.keyring.set_password(&token_ser)
+                                            .expect("Error storing token");
+
+                                        text_buffer.insert(
+                                            &mut text_buffer.get_end_iter(),
+                                            &format!(
+                                                "Sucessfully logged in. Device id: {}. Token: {}.\n",
+                                                device_id.0, token.0
+                                            ),
+                                        );
+                                    },
                                     Err(e) => text_buffer.insert(
                                         &mut text_buffer.get_end_iter(),
                                         &format!("Error logging in: {:?}\n", e),

@@ -171,11 +171,7 @@ impl ClientWsSession {
 
     fn handle_message(&mut self, req: ClientRequest, ctx: &mut WebsocketContext<Self>) {
         match req.message {
-            ClientMessage::Login {
-                username,
-                device_id,
-                token,
-            } => self.login(username, device_id, token, req.request_id, ctx),
+            ClientMessage::Login { device_id, token } => self.login(device_id, token, req.request_id, ctx),
             ClientMessage::CreateToken {
                 username,
                 password,
@@ -281,7 +277,6 @@ impl ClientWsSession {
 
     fn login(
         &mut self,
-        username: String,
         device_id: DeviceId,
         login_token: AuthToken,
         request_id: RequestId,
@@ -294,78 +289,92 @@ impl ClientWsSession {
             })
         }
 
-        let fut = self
-            .database_server
-            .send(GetUserByName(username))
-            .and_then(move |user_opt| match user_opt {
-                Ok(Some(user)) => {
-                    let res = if user.locked {
+        let fut = self.database_server
+            .send(GetToken { device_id })
+            .into_actor(self)
+            .and_then(move |token_opt, act, _ctx| match token_opt {
+                Ok(Some(token)) => {
+                    fut::Either::A(act
+                        .database_server
+                        .send(GetUserById(token.user_id))
+                        .and_then(move |user_opt| match user_opt {
+                            Ok(Some(user)) => future::ok(Ok((token, user))),
+                            Ok(None) => future::ok(Err(ServerError::InvalidToken)),
+                            Err(l337::Error::Internal(e)) => {
+                                eprintln!("Database connection pooling error: {:?}", e);
+                                future::ok(Err(ServerError::Internal))
+                            }
+                            Err(l337::Error::External(sql_error)) => {
+                                eprintln!("Database error: {:?}", sql_error);
+                                future::ok(Err(ServerError::Internal))
+                            }
+                        })
+                        .into_actor(act)
+                    )
+                },
+                Ok(None) => fut::Either::B(fut::ok(Err(ServerError::InvalidToken))),
+                Err(l337::Error::Internal(e)) => {
+                    eprintln!("Database connection pooling error: {:?}", e);
+                    fut::Either::B(fut::ok(Err(ServerError::Internal)))
+                }
+                Err(l337::Error::External(sql_error)) => {
+                    eprintln!("Database error: {:?}", sql_error);
+                    fut::Either::B(fut::ok(Err(ServerError::Internal)))
+                }
+            })
+            .map(|res, _act, _ctx| match res {
+                Ok((token, user)) => {
+                    if user.locked {
                         Err(ServerError::UserLocked)
                     } else if user.banned {
                         Err(ServerError::UserBanned)
                     } else if user.compromised {
                         Err(ServerError::UserCompromised)
                     } else {
-                        Ok(())
-                    };
-
-                    Either::A(future::ok(res))
+                        Ok(token)
+                    }
                 }
-                Ok(None) => Either::B(future::ok(Err(ServerError::InvalidToken))),
-                Err(e) => {
-                    eprintln!("Database error: {:?}", e);
-                    Either::B(future::ok(Err(ServerError::Internal)))
-                }
+                Err(e) => Err(e),
             })
-            .into_actor(self)
-            .and_then(move |login_allowed, act, _ctx| match login_allowed {
-                Ok(()) => fut::Either::A(
-                    act.database_server
-                        .send(GetToken { device_id })
-                        .and_then(move |token_opt| match token_opt {
-                            Ok(Some(token)) => {
-                                let Token {
-                                    token_hash,
-                                    hash_scheme_version,
-                                    user_id,
-                                    ..
-                                } = token;
-                                Either::A(
-                                    auth::verify(login_token.0, token_hash, hash_scheme_version)
-                                        .map(move |matches| {
-                                            if matches {
-                                                Ok(user_id)
-                                            } else {
-                                                Err(ServerError::InvalidToken)
-                                            }
-                                        }),
-                                )
-                            }
-                            Ok(None) => Either::B(future::ok(Err(ServerError::InvalidToken))),
-                            Err(e) => {
-                                eprintln!("Database error: {:?}", e);
-                                Either::B(future::ok(Err(ServerError::Internal)))
-                            }
-                        })
-                        .into_actor(act),
-                ),
+            .and_then(|res, act, _ctx| match res {
+                Ok(token) => {
+                    let Token {
+                        token_hash,
+                        hash_scheme_version,
+                        user_id,
+                        device_id,
+                        ..
+                    } = token;
+
+                    fut::Either::A(
+                        auth::verify(login_token.0, token_hash, hash_scheme_version)
+                            .map(move |matches| {
+                                if matches {
+                                    Ok((user_id, device_id))
+                                } else {
+                                    Err(ServerError::InvalidToken)
+                                }
+                            })
+                            .into_actor(act)
+                    )
+                },
                 Err(e) => fut::Either::B(fut::ok(Err(e))),
             })
             .and_then(move |res, act, ctx| match res {
-                Ok(user_id) => fut::Either::A(
+                Ok((user_id, device_id)) => fut::Either::A(
                     act.client_server
                         .send(Connect {
                             session: ctx.address(),
                             device_id,
                             user_id,
                         })
-                        .map(move |_| Ok(user_id))
+                        .map(move |_| Ok((user_id, device_id)))
                         .into_actor(act),
                 ),
                 Err(e) => fut::Either::B(fut::ok(Err(e))),
             })
             .map(move |res, act, _ctx| match res {
-                Ok(user_id) => {
+                Ok((user_id, device_id)) => {
                     act.state = SessionState::Ready(user_id, device_id);
                     RequestResponse::user(user_id)
                 }
@@ -413,7 +422,17 @@ impl ClientWsSession {
                         fut::Either::A(
                             act.database_server
                                 .send(CreateToken(token))
-                                .map(move |_| Ok((device_id, auth_token)))
+                                .map(move |res| match res {
+                                    Ok(_) => Ok((device_id, auth_token)),
+                                    Err(l337::Error::Internal(e)) => {
+                                        eprintln!("Database connection pooling error: {:?}", e);
+                                        Err(ServerError::Internal)
+                                    }
+                                    Err(l337::Error::External(sql_error)) => {
+                                        eprintln!("Database error: {:?}", sql_error);
+                                        Err(ServerError::Internal)
+                                    }
+                                })
                                 .into_actor(act),
                         )
                     }
@@ -712,8 +731,12 @@ impl ClientWsSession {
                     Either::A(auth::verify_user_password(user, password).map(|res| res.map(|_| ())))
                 }
                 Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
-                Err(e) => {
-                    eprintln!("Database error: {:?}", e);
+                Err(l337::Error::Internal(e)) => {
+                    eprintln!("Database connection pooling error: {:?}", e);
+                    Either::B(future::ok(Err(ServerError::Internal)))
+                }
+                Err(l337::Error::External(sql_error)) => {
+                    eprintln!("Database error: {:?}", sql_error);
                     Either::B(future::ok(Err(ServerError::Internal)))
                 }
             })
@@ -730,8 +753,12 @@ impl ClientWsSession {
             .and_then(move |res| match res {
                 Ok(Some(user)) => Either::A(auth::verify_user_password(user, password)),
                 Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
-                Err(e) => {
-                    eprintln!("Database error: {:?}", e);
+                Err(l337::Error::Internal(e)) => {
+                    eprintln!("Database connection pooling error: {:?}", e);
+                    Either::B(future::ok(Err(ServerError::Internal)))
+                }
+                Err(l337::Error::External(sql_error)) => {
+                    eprintln!("Database error: {:?}", sql_error);
                     Either::B(future::ok(Err(ServerError::Internal)))
                 }
             })

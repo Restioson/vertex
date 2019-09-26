@@ -62,7 +62,6 @@ impl Into<Vec<u8>> for ClientRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
     Login {
-        username: String,
         device_id: DeviceId,
         token: AuthToken,
     },
