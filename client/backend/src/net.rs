@@ -15,7 +15,7 @@ use std::time::Instant;
 
 pub struct Net {
     send: mpsc::Sender<OwnedMessage>,
-    recv: mpsc::Receiver<OwnedMessage>,
+    recv: mpsc::Receiver<WebSocketResult<OwnedMessage>>,
     last_message: Instant,
 }
 
@@ -29,12 +29,14 @@ impl Net {
         let (send_in, recv_in) = mpsc::channel();
         let (send_out, recv_out) = mpsc::channel();
 
+        let send_in_writer = send_in.clone();
+
         let (reader, writer) = client.split()?;
 
         thread::spawn(move || {
             NetReader {
                 reader,
-                send: send_in,
+                send_in,
             }.run()
         });
 
@@ -42,6 +44,7 @@ impl Net {
             NetWriter {
                 writer,
                 recv: recv_out,
+                send_in: send_in_writer
             }.run()
         });
 
@@ -65,7 +68,7 @@ impl Net {
     pub fn recv(&mut self) -> VertexResult<Option<ClientboundMessage>> {
         while let Ok(message) = self.recv.try_recv() {
             self.last_message = Instant::now();
-            match message {
+            match message? {
                 OwnedMessage::Binary(bytes) => {
                     match serde_cbor::from_slice::<ClientboundPayload>(&bytes) {
                         Ok(ClientboundPayload::Message(msg)) => return Ok(Some(msg)),
@@ -80,14 +83,13 @@ impl Net {
         Ok(None)
     }
 
-    pub fn last_message(&self) -> Instant {
-        self.last_message
-    }
+    #[inline]
+    pub fn last_message(&self) -> Instant { self.last_message }
 }
 
 struct NetReader {
     reader: Reader<TcpStream>,
-    send: mpsc::Sender<OwnedMessage>,
+    send_in: mpsc::Sender<WebSocketResult<OwnedMessage>>,
 }
 
 impl NetReader {
@@ -95,13 +97,12 @@ impl NetReader {
         loop {
             match self.reader.recv_message() {
                 Ok(message) => {
-                    if self.send.send(message).is_err() {
+                    if self.send_in.send(Ok(message)).is_err() {
                         break;
                     }
                 }
                 Err(err) => {
-                    // TODO: handle error
-                    eprintln!("websocket read error: {:?}", err);
+                    let _ = self.send_in.send(Err(err));
                     break;
                 }
             }
@@ -112,14 +113,14 @@ impl NetReader {
 struct NetWriter {
     writer: Writer<TcpStream>,
     recv: mpsc::Receiver<OwnedMessage>,
+    send_in: mpsc::Sender<WebSocketResult<OwnedMessage>>,
 }
 
 impl NetWriter {
     fn run(mut self) {
         while let Ok(message) = self.recv.recv() {
             if let Err(err) = self.writer.send_message(&message) {
-                // TODO: handle error
-                eprintln!("websocket write error: {}", err);
+                let _ = self.send_in.send(Err(err));
                 break;
             }
         }

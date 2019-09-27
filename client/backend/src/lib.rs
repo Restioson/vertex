@@ -115,3 +115,11 @@ pub enum Error {
     ServerClosed,
     MalformedResponse,
 }
+
+impl From<WebSocketError> for Error {
+    fn from(err: WebSocketError) -> Self { Error::WebSocketError(err) }
+}
+
+impl From<ServerError> for Error {
+    fn from(err: ServerError) -> Self { Error::ServerError(err) }
+}
