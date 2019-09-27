@@ -14,7 +14,6 @@ gtk = { version = "^0.6", features = ["v3_20"] }
 relm = "^0.16"
 relm-derive = "^0.16"
 clap = "2.33"
-tokio = { version = "^0.1" }
 
 vertex_client_backend = { path = "../backend/" }
 vertex_common = { path = "../../common" }

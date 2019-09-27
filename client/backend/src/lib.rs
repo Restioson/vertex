@@ -1,5 +1,3 @@
-#![feature(await_macro, async_await)]
-
 use std::convert::Into;
 use url::Url;
 use vertex_common::*;

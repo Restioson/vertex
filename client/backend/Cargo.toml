@@ -11,6 +11,3 @@ serde = "^1"
 serde_cbor = "^0.9"
 vertex_common = { path = "../../common/" }
 url = "^1.7"
-futures = "^0.1"
-tokio = { version = "^0.1" }
-crossbeam = "^0.7"
