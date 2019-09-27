@@ -76,17 +76,12 @@ impl Update for Win {
     type Msg = VertexMsg;
 
     fn model(_relm: &Relm<Win>, args: VertexArgs) -> VertexModel {
-        println!(
-            "Connecting to {}",
-            args.ip.clone().unwrap_or("127.0.0.1:8080".to_string())
-        );
+        let ip = args.ip.clone().unwrap_or("127.0.0.1:8080".to_string());
+        println!("Connecting to {}", ip);
+
         let model = VertexModel {
             vertex: Vertex::new(Config {
-                url: Url::parse(&format!(
-                    "ws://{}/client/",
-                    args.ip.unwrap_or("127.0.0.1:8080".to_string())
-                ))
-                .unwrap(),
+                url: Url::parse(&format!("ws://{}/client/", ip)).unwrap(),
             }),
             room: None,
             room_list: Vec::new(),

@@ -89,10 +89,8 @@ impl ClientServer {
         // TODO could probably be optimised
         for (user_id, device_id) in logout.list {
             if let Some(online_devices) = self.online_devices.get(&user_id) {
-                let device_id = online_devices.iter().find(|id| **id == device_id);
-
-                if let Some(device_id) = device_id {
-                    if let Some(session) = self.sessions.get_mut(device_id) {
+                if online_devices.contains(&device_id) {
+                    if let Some(session) = self.sessions.get_mut(&device_id) {
                         session.do_send(LogoutThisSession);
                     }
                 }

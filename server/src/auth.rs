@@ -46,11 +46,7 @@ fn valid_username(username: &str, config: &Config) -> bool {
 pub struct TooShort;
 
 pub fn process_username(username: &str, _config: &Config) -> String {
-    username
-        .nfkc()
-        .map(|c| c.to_lowercase())
-        .flatten()
-        .collect()
+    username.nfkc().flat_map(|c| c.to_lowercase()).collect()
 }
 
 pub fn prepare_username(username: &str, config: &Config) -> Result<String, TooShort> {
