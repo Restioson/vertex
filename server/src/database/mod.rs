@@ -3,7 +3,7 @@ use l337_postgres::PostgresConnectionManager;
 use std::fs;
 use std::time::{Duration, Instant};
 use tokio_postgres::NoTls;
-use vertex_common::{DeviceId, UserId};
+use vertex_common::{DeviceId, ServerError, UserId};
 
 mod token;
 mod user;
@@ -73,6 +73,7 @@ impl DatabaseServer {
                     .prepare(
                         "CREATE TABLE IF NOT EXISTS login_tokens (
                             device_id            UUID PRIMARY KEY,
+                            device_name          VARCHAR,
                             token_hash           VARCHAR NOT NULL,
                             hash_scheme_version  SMALLINT NOT NULL,
                             user_id              UUID NOT NULL,
@@ -154,4 +155,17 @@ impl Actor for DatabaseServer {
             ctx.spawn(db.sweep_tokens());
         });
     }
+}
+
+fn handle_error(error: l337::Error<tokio_postgres::Error>) -> ServerError {
+    match error {
+        l337::Error::Internal(e) => {
+            eprintln!("Database connection pooling error: {:?}", e);
+        }
+        l337::Error::External(sql_error) => {
+            eprintln!("Database error: {:?}", sql_error);
+        }
+    }
+
+    ServerError::Internal
 }

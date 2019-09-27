@@ -419,6 +419,7 @@ impl Vertex {
         let request_id = self.request(ClientMessage::CreateToken {
             username: username.to_string(),
             password: password.to_string(),
+            device_name: None, // TODO
             expiration_date,
             permission_flags,
         })?;

@@ -68,6 +68,7 @@ pub enum ClientMessage {
     CreateToken {
         username: String,
         password: String,
+        device_name: Option<String>,
         expiration_date: Option<DateTime<Utc>>,
         permission_flags: TokenPermissionFlags,
     },

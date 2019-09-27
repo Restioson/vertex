@@ -3,7 +3,7 @@ use crate::auth::HashSchemeVersion;
 use std::convert::TryFrom;
 use tokio_postgres::{error::SqlState, row::Row};
 use uuid::Uuid;
-use vertex_common::UserId;
+use vertex_common::{ServerError, UserId};
 
 pub struct User {
     pub id: UserId,
@@ -58,19 +58,19 @@ impl TryFrom<Row> for User {
 pub struct GetUserById(pub UserId);
 
 impl Message for GetUserById {
-    type Result = Result<Option<User>, l337::Error<tokio_postgres::Error>>;
+    type Result = Result<Option<User>, ServerError>;
 }
 
 pub struct GetUserByName(pub String);
 
 impl Message for GetUserByName {
-    type Result = Result<Option<User>, l337::Error<tokio_postgres::Error>>;
+    type Result = Result<Option<User>, ServerError>;
 }
 
 pub struct CreateUser(pub User);
 
 impl Message for CreateUser {
-    type Result = Result<bool, l337::Error<tokio_postgres::Error>>;
+    type Result = Result<bool, ServerError>;
 }
 
 pub struct ChangeUsername {
@@ -79,7 +79,7 @@ pub struct ChangeUsername {
 }
 
 impl Message for ChangeUsername {
-    type Result = Result<bool, l337::Error<tokio_postgres::Error>>;
+    type Result = Result<bool, ServerError>;
 }
 
 pub struct ChangeDisplayName {
@@ -88,7 +88,7 @@ pub struct ChangeDisplayName {
 }
 
 impl Message for ChangeDisplayName {
-    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
+    type Result = Result<(), ServerError>;
 }
 
 pub struct ChangePassword {
@@ -98,18 +98,21 @@ pub struct ChangePassword {
 }
 
 impl Message for ChangePassword {
-    type Result = Result<(), l337::Error<tokio_postgres::Error>>;
+    type Result = Result<(), ServerError>;
 }
 
 impl Handler<CreateUser> for DatabaseServer {
-    type Result = ResponseFuture<bool, l337::Error<tokio_postgres::Error>>;
+    type Result = ResponseFuture<bool, ServerError>;
 
     fn handle(&mut self, create: CreateUser, _: &mut Context<Self>) -> Self::Result {
         let user = create.0;
-        Box::new(self.pool.connection().and_then(|mut conn| {
-            conn.client
-                .prepare(
-                    "INSERT INTO users
+        Box::new(
+            self.pool
+                .connection()
+                .and_then(|mut conn| {
+                    conn.client
+                        .prepare(
+                            "INSERT INTO users
                         (
                             id,
                             username,
@@ -122,141 +125,168 @@ impl Handler<CreateUser> for DatabaseServer {
                         )
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT DO NOTHING",
-                )
-                .and_then(move |stmt| {
-                    conn.client.execute(
-                        &stmt,
-                        &[
-                            &user.id.0,
-                            &user.username,
-                            &user.display_name,
-                            &user.password_hash,
-                            &(user.hash_scheme_version as u8 as i16),
-                            &user.compromised,
-                            &user.locked,
-                            &user.banned,
-                        ],
-                    )
+                        )
+                        .and_then(move |stmt| {
+                            conn.client.execute(
+                                &stmt,
+                                &[
+                                    &user.id.0,
+                                    &user.username,
+                                    &user.display_name,
+                                    &user.password_hash,
+                                    &(user.hash_scheme_version as u8 as i16),
+                                    &user.compromised,
+                                    &user.locked,
+                                    &user.banned,
+                                ],
+                            )
+                        })
+                        .map_err(l337::Error::External)
+                        .map(|ret| ret == 1) // Return true if 1 item was inserted (insert was successful)
                 })
-                .map_err(l337::Error::External)
-                .map(|ret| ret == 1) // Return true if 1 item was inserted (insert was sucessful)
-        }))
+                .map_err(handle_error),
+        )
     }
 }
 
 impl Handler<GetUserById> for DatabaseServer {
-    type Result = ResponseFuture<Option<User>, l337::Error<tokio_postgres::Error>>;
+    type Result = ResponseFuture<Option<User>, ServerError>;
 
     fn handle(&mut self, get: GetUserById, _: &mut Context<Self>) -> Self::Result {
         let id = get.0;
 
-        Box::new(self.pool.connection().and_then(move |mut conn| {
-            conn.client
-                .prepare("SELECT * FROM users WHERE id=$1")
-                .and_then(move |stmt| {
+        Box::new(
+            self.pool
+                .connection()
+                .and_then(move |mut conn| {
                     conn.client
-                        .query(&stmt, &[&id.0])
-                        .map(|row| User::try_from(row))
-                        .into_future()
-                        .map(|(user, _stream)| user)
-                        .map_err(|(err, _stream)| err)
+                        .prepare("SELECT * FROM users WHERE id=$1")
+                        .and_then(move |stmt| {
+                            conn.client
+                                .query(&stmt, &[&id.0])
+                                .map(|row| User::try_from(row))
+                                .into_future()
+                                .map(|(user, _stream)| user)
+                                .map_err(|(err, _stream)| err)
+                        })
+                        .and_then(|x| x.transpose()) // Fut<Opt<Res<Usr, Err>>, Err> -> Fut<Opt<Usr>, Err>
+                        .map_err(l337::Error::External)
                 })
-                .and_then(|x| x.transpose()) // Fut<Opt<Res<Usr, Err>>, Err> -> Fut<Opt<Usr>, Err>
-                .map_err(l337::Error::External)
-        }))
+                .map_err(handle_error),
+        )
     }
 }
 
 impl Handler<GetUserByName> for DatabaseServer {
-    type Result = ResponseFuture<Option<User>, l337::Error<tokio_postgres::Error>>;
+    type Result = ResponseFuture<Option<User>, ServerError>;
 
     fn handle(&mut self, get: GetUserByName, _: &mut Context<Self>) -> Self::Result {
         let name = get.0;
 
-        Box::new(self.pool.connection().and_then(move |mut conn| {
-            conn.client
-                .prepare("SELECT * FROM users WHERE username=$1")
-                .and_then(move |stmt| {
+        Box::new(
+            self.pool
+                .connection()
+                .and_then(move |mut conn| {
                     conn.client
-                        .query(&stmt, &[&name])
-                        .map(|row| User::try_from(row))
-                        .into_future()
-                        .map(|(user, _stream)| user)
-                        .map_err(|(err, _stream)| err)
+                        .prepare("SELECT * FROM users WHERE username=$1")
+                        .and_then(move |stmt| {
+                            conn.client
+                                .query(&stmt, &[&name])
+                                .map(|row| User::try_from(row))
+                                .into_future()
+                                .map(|(user, _stream)| user)
+                                .map_err(|(err, _stream)| err)
+                        })
+                        .and_then(|x| x.transpose()) // Fut<Opt<Res<Usr, Err>>, Err> -> Fut<Opt<Usr>, Err>
+                        .map_err(l337::Error::External)
                 })
-                .and_then(|x| x.transpose()) // Fut<Opt<Res<Usr, Err>>, Err> -> Fut<Opt<Usr>, Err>
-                .map_err(l337::Error::External)
-        }))
+                .map_err(handle_error),
+        )
     }
 }
 
 impl Handler<ChangeUsername> for DatabaseServer {
-    type Result = ResponseFuture<bool, l337::Error<tokio_postgres::Error>>;
+    type Result = ResponseFuture<bool, ServerError>;
 
     fn handle(&mut self, change: ChangeUsername, _: &mut Context<Self>) -> Self::Result {
-        Box::new(self.pool.connection().and_then(move |mut conn| {
-            conn.client
-                .prepare("UPDATE users SET username = $1 WHERE id = $2")
-                .and_then(move |stmt| {
+        Box::new(
+            self.pool
+                .connection()
+                .and_then(move |mut conn| {
                     conn.client
-                        .execute(&stmt, &[&change.new_username, &change.user_id.0])
+                        .prepare("UPDATE users SET username = $1 WHERE id = $2")
+                        .and_then(move |stmt| {
+                            conn.client
+                                .execute(&stmt, &[&change.new_username, &change.user_id.0])
+                        })
+                        .map(|ret| ret == 1) // Return true if 1 item was updated (update was successful)
+                        .then(|res| match res {
+                            Err(ref e)
+                                if e.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
+                                    || e.code() == Some(&SqlState::UNIQUE_VIOLATION) =>
+                            {
+                                Ok(false)
+                            }
+                            other => other,
+                        })
+                        .map_err(l337::Error::External)
                 })
-                .map(|ret| ret == 1) // Return true if 1 item was updated (update was successful)
-                .then(|res| match res {
-                    Err(ref e)
-                        if e.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
-                            || e.code() == Some(&SqlState::UNIQUE_VIOLATION) =>
-                    {
-                        Ok(false)
-                    }
-                    other => other,
-                })
-                .map_err(l337::Error::External)
-        }))
+                .map_err(handle_error),
+        )
     }
 }
 
 impl Handler<ChangeDisplayName> for DatabaseServer {
-    type Result = ResponseFuture<(), l337::Error<tokio_postgres::Error>>;
+    type Result = ResponseFuture<(), ServerError>;
 
     fn handle(&mut self, change: ChangeDisplayName, _: &mut Context<Self>) -> Self::Result {
-        Box::new(self.pool.connection().and_then(move |mut conn| {
-            conn.client
-                .prepare("UPDATE users SET display_name = $1 WHERE id = $2")
-                .and_then(move |stmt| {
+        Box::new(
+            self.pool
+                .connection()
+                .and_then(move |mut conn| {
                     conn.client
-                        .execute(&stmt, &[&change.new_display_name, &change.user_id.0])
+                        .prepare("UPDATE users SET display_name = $1 WHERE id = $2")
+                        .and_then(move |stmt| {
+                            conn.client
+                                .execute(&stmt, &[&change.new_display_name, &change.user_id.0])
+                        })
+                        .map(|_| ())
+                        .map_err(l337::Error::External)
                 })
-                .map(|_| ())
-                .map_err(l337::Error::External)
-        }))
+                .map_err(handle_error),
+        )
     }
 }
 
 impl Handler<ChangePassword> for DatabaseServer {
-    type Result = ResponseFuture<(), l337::Error<tokio_postgres::Error>>;
+    type Result = ResponseFuture<(), ServerError>;
 
     fn handle(&mut self, change: ChangePassword, _: &mut Context<Self>) -> Self::Result {
-        Box::new(self.pool.connection().and_then(move |mut conn| {
-            conn.client
-                .prepare(
-                    "UPDATE users SET
+        Box::new(
+            self.pool
+                .connection()
+                .and_then(move |mut conn| {
+                    conn.client
+                        .prepare(
+                            "UPDATE users SET
                         password_hash = $1, hash_scheme_version = $2, compromised = $3
                     WHERE id = $4",
-                )
-                .and_then(move |stmt| {
-                    conn.client.execute(
-                        &stmt,
-                        &[
-                            &change.new_password_hash,
-                            &(change.hash_version as u8 as i16),
-                            &false,
-                            &change.user_id.0,
-                        ],
-                    )
+                        )
+                        .and_then(move |stmt| {
+                            conn.client.execute(
+                                &stmt,
+                                &[
+                                    &change.new_password_hash,
+                                    &(change.hash_version as u8 as i16),
+                                    &false,
+                                    &change.user_id.0,
+                                ],
+                            )
+                        })
+                        .map(|_| ())
+                        .map_err(l337::Error::External)
                 })
-                .map(|_| ())
-                .map_err(l337::Error::External)
-        }))
+                .map_err(handle_error),
+        )
     }
 }

@@ -189,11 +189,13 @@ impl ClientWsSession {
             ClientMessage::CreateToken {
                 username,
                 password,
+                device_name,
                 expiration_date,
                 permission_flags,
             } => self.create_token(
                 username,
                 password,
+                device_name,
                 expiration_date,
                 permission_flags,
                 req.request_id,
@@ -352,26 +354,12 @@ impl ClientWsSession {
                         .and_then(move |user_opt| match user_opt {
                             Ok(Some(user)) => future::ok(Ok((token, user))),
                             Ok(None) => future::ok(Err(ServerError::InvalidToken)),
-                            Err(l337::Error::Internal(e)) => {
-                                eprintln!("Database connection pooling error: {:?}", e);
-                                future::ok(Err(ServerError::Internal))
-                            }
-                            Err(l337::Error::External(sql_error)) => {
-                                eprintln!("Database error: {:?}", sql_error);
-                                future::ok(Err(ServerError::Internal))
-                            }
+                            Err(e) => future::ok(Err(e)),
                         })
                         .into_actor(act),
                 ),
                 Ok(None) => fut::Either::B(fut::ok(Err(ServerError::InvalidToken))),
-                Err(l337::Error::Internal(e)) => {
-                    eprintln!("Database connection pooling error: {:?}", e);
-                    fut::Either::B(fut::ok(Err(ServerError::Internal)))
-                }
-                Err(l337::Error::External(sql_error)) => {
-                    eprintln!("Database error: {:?}", sql_error);
-                    fut::Either::B(fut::ok(Err(ServerError::Internal)))
-                }
+                Err(e) => fut::Either::B(fut::ok(Err(e))),
             })
             .map(|res, act, _ctx| match res {
                 Ok((token, user)) => {
@@ -402,7 +390,7 @@ impl ClientWsSession {
                         ..
                     } = token;
 
-                    if login_token.0.len() <= auth::MAX_TOKEN_LENGTH {
+                    if login_token.0.len() > auth::MAX_TOKEN_LENGTH {
                         fut::Either::B(fut::ok(Err(ServerError::InvalidToken)))
                     } else {
                         fut::Either::A(
@@ -427,14 +415,7 @@ impl ClientWsSession {
                         .map(move |res| match res {
                             Ok(true) => Ok((user_id, device_id, perms)),
                             Ok(false) => Err(ServerError::DeviceDoesNotExist),
-                            Err(l337::Error::Internal(e)) => {
-                                eprintln!("Database connection pooling error: {:?}", e);
-                                Err(ServerError::Internal)
-                            }
-                            Err(l337::Error::External(sql_error)) => {
-                                eprintln!("Database error: {:?}", sql_error);
-                                Err(ServerError::Internal)
-                            }
+                            Err(e) => Err(e),
                         })
                         .into_actor(act),
                 ),
@@ -468,6 +449,7 @@ impl ClientWsSession {
         &mut self,
         username: String,
         password: String,
+        device_name: Option<String>,
         expiration_date: Option<DateTime<Utc>>,
         permission_flags: TokenPermissionFlags,
         request_id: RequestId,
@@ -494,6 +476,7 @@ impl ClientWsSession {
                             hash_scheme_version: hash_version,
                             user_id,
                             device_id,
+                            device_name,
                             last_used: Utc::now(),
                             expiration_date,
                             permission_flags,
@@ -504,14 +487,7 @@ impl ClientWsSession {
                                 .send(CreateToken(token))
                                 .map(move |res| match res {
                                     Ok(_) => Ok((device_id, auth_token)),
-                                    Err(l337::Error::Internal(e)) => {
-                                        eprintln!("Database connection pooling error: {:?}", e);
-                                        Err(ServerError::Internal)
-                                    }
-                                    Err(l337::Error::External(sql_error)) => {
-                                        eprintln!("Database error: {:?}", sql_error);
-                                        Err(ServerError::Internal)
-                                    }
+                                    Err(e) => Err(e),
                                 })
                                 .into_actor(act),
                         )
@@ -549,14 +525,7 @@ impl ClientWsSession {
                     .map(|res| match res {
                         Ok(true) => Ok(()),
                         Ok(false) => Err(ServerError::DeviceDoesNotExist),
-                        Err(l337::Error::Internal(e)) => {
-                            eprintln!("Database connection pooling error: {:?}", e);
-                            Err(ServerError::Internal)
-                        }
-                        Err(l337::Error::External(sql_error)) => {
-                            eprintln!("Database error: {:?}", sql_error);
-                            Err(ServerError::Internal)
-                        }
+                        Err(e) => Err(e),
                     })
                     .into_actor(act),
             ),
@@ -607,14 +576,7 @@ impl ClientWsSession {
                         .map(|res| match res {
                             Ok(true) => Ok(()),
                             Ok(false) => Err(ServerError::DeviceDoesNotExist),
-                            Err(l337::Error::Internal(e)) => {
-                                eprintln!("Database connection pooling error: {:?}", e);
-                                Err(ServerError::Internal)
-                            }
-                            Err(l337::Error::External(sql_error)) => {
-                                eprintln!("Database error: {:?}", sql_error);
-                                Err(ServerError::Internal)
-                            }
+                            Err(e) => Err(e),
                         })
                         .into_actor(act),
                 ),
@@ -679,14 +641,7 @@ impl ClientWsSession {
                         RequestResponse::Error(ServerError::UsernameAlreadyExists)
                     }
                 }
-                Err(l337::Error::Internal(e)) => {
-                    eprintln!("Database connection pooling error: {:?}", e);
-                    RequestResponse::Error(ServerError::Internal)
-                }
-                Err(l337::Error::External(sql_error)) => {
-                    eprintln!("Database error: {:?}", sql_error);
-                    RequestResponse::Error(ServerError::Internal)
-                }
+                Err(e) => RequestResponse::Error(e),
             });
 
         self.respond(fut, request_id, ctx)
@@ -724,14 +679,7 @@ impl ClientWsSession {
                         RequestResponse::Error(ServerError::UsernameAlreadyExists)
                     }
                 }
-                Err(l337::Error::Internal(e)) => {
-                    eprintln!("Database connection pooling error: {:?}", e);
-                    RequestResponse::Error(ServerError::Internal)
-                }
-                Err(l337::Error::External(sql_error)) => {
-                    eprintln!("Database error: {:?}", sql_error);
-                    RequestResponse::Error(ServerError::Internal)
-                }
+                Err(e) => RequestResponse::Error(e),
             });
 
         self.respond(fut, request_id, ctx)
@@ -761,14 +709,7 @@ impl ClientWsSession {
             .into_actor(self)
             .map(move |res, _act, _ctx| match res {
                 Ok(_) => RequestResponse::success(),
-                Err(l337::Error::Internal(e)) => {
-                    eprintln!("Database connection pooling error: {:?}", e);
-                    RequestResponse::Error(ServerError::Internal)
-                }
-                Err(l337::Error::External(sql_error)) => {
-                    eprintln!("Database error: {:?}", sql_error);
-                    RequestResponse::Error(ServerError::Internal)
-                }
+                Err(e) => RequestResponse::Error(e),
             });
 
         self.respond(fut, request_id, ctx)
@@ -809,14 +750,7 @@ impl ClientWsSession {
                             .map(move |res| res.map(|_| ()))
                             .map(|res| match res {
                                 Ok(_) => RequestResponse::success(),
-                                Err(l337::Error::Internal(e)) => {
-                                    eprintln!("Database connection pooling error: {:?}", e);
-                                    RequestResponse::Error(ServerError::Internal)
-                                }
-                                Err(l337::Error::External(sql_error)) => {
-                                    eprintln!("Database error: {:?}", sql_error);
-                                    RequestResponse::Error(ServerError::Internal)
-                                }
+                                Err(e) => RequestResponse::Error(e),
                             });
                         Either::A(fut)
                     }
@@ -850,14 +784,7 @@ impl ClientWsSession {
                     Either::A(auth::verify_user_password(user, password).map(|res| res.map(|_| ())))
                 }
                 Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
-                Err(l337::Error::Internal(e)) => {
-                    eprintln!("Database connection pooling error: {:?}", e);
-                    Either::B(future::ok(Err(ServerError::Internal)))
-                }
-                Err(l337::Error::External(sql_error)) => {
-                    eprintln!("Database error: {:?}", sql_error);
-                    Either::B(future::ok(Err(ServerError::Internal)))
-                }
+                Err(e) => Either::B(future::ok(Err(e))),
             })
     }
 
@@ -872,14 +799,7 @@ impl ClientWsSession {
             .and_then(move |res| match res {
                 Ok(Some(user)) => Either::A(auth::verify_user_password(user, password)),
                 Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
-                Err(l337::Error::Internal(e)) => {
-                    eprintln!("Database connection pooling error: {:?}", e);
-                    Either::B(future::ok(Err(ServerError::Internal)))
-                }
-                Err(l337::Error::External(sql_error)) => {
-                    eprintln!("Database error: {:?}", sql_error);
-                    Either::B(future::ok(Err(ServerError::Internal)))
-                }
+                Err(e) => Either::B(future::ok(Err(e))),
             })
     }
 }
