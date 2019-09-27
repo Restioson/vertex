@@ -14,9 +14,6 @@ pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(5);
 pub trait ClientMessageType {}
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct RequestId(pub Uuid);
-
-#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct UserId(pub Uuid);
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
@@ -26,25 +23,13 @@ pub struct RoomId(pub Uuid);
 pub struct MessageId(pub Uuid);
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ClientMessage {
-    pub request: ClientRequest,
-    pub id: RequestId,
-}
-
-impl From<ClientRequest> for ClientMessage {
-    #[inline]
-    fn from(req: ClientRequest) -> Self {
-        ClientMessage::new(req)
-    }
-}
-
-impl ClientMessage {
-    pub fn new(request: ClientRequest) -> Self {
-        ClientMessage {
-            request,
-            id: RequestId(Uuid::new_v4()),
-        }
-    }
+pub enum ClientMessage {
+    Login(Login),
+    SendMessage(ClientSentMessage),
+    EditMessage(Edit),
+    CreateRoom,
+    JoinRoom(RoomId),
+    Delete(Delete),
 }
 
 impl Into<Bytes> for ClientMessage {
@@ -57,16 +42,6 @@ impl Into<Vec<u8>> for ClientMessage {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum ClientRequest {
-    Login(Login),
-    SendMessage(ClientSentMessage),
-    EditMessage(Edit),
-    CreateRoom,
-    JoinRoom(RoomId),
-    Delete(Delete),
 }
 
 #[cfg_attr(feature = "enable-actix", derive(Message))]
@@ -124,14 +99,11 @@ impl ClientMessageType for Login {}
 #[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
-    Response {
-        response: Result<RequestResponse, ServerError>,
-        request_id: RequestId,
-    },
-    Error(ServerError),
+    AddRoom(RoomId),
     Message(ForwardedMessage),
     Edit(Edit),
     Delete(Delete),
+    Error(ServerError),
 }
 
 impl Into<Bytes> for ServerMessage {
@@ -155,13 +127,6 @@ pub enum ServerError {
     InvalidUrl,
     WsConnectionError,
     NotLoggedIn,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RequestResponse {
-    NoData,
-    Room { id: RoomId },
-    MessageSent { id: MessageId },
 }
 
 #[macro_export]

@@ -3,12 +3,9 @@
 use std::convert::Into;
 use url::Url;
 use vertex_common::*;
-use websocket::{WebSocketError, OwnedMessage};
+use websocket::WebSocketError;
 
-use net::{Net, MakeRequest};
-use actix::{Addr, Actor, Context, Handler};
-use futures::{Future, future};
-use crate::net::DispatchHeartbeat;
+use net::Net;
 
 mod net;
 
@@ -18,7 +15,7 @@ pub struct Config {
 }
 
 pub struct Vertex {
-    net: Addr<Net>,
+    net: Net,
     user_id: UserId,
     logged_in: bool,
 }
@@ -36,74 +33,36 @@ impl Vertex {
     }
 
     pub fn handle(&mut self) -> Option<Action> {
-//        let message = match self.net.receive() {
-//            Some(Ok(m)) => m,
-//            Some(Err(e)) => return Some(Action::Error(e)),
-//            None => return None,
-//        };
-//
-//        match message {
-//            ServerMessage::Response {
-//                response,
-//                request_id: _,
-//            } => {
-//                match response {
-//                    // TODO associate with a particular message id: @gegy1000
-//                    Result<RequestResponse, ServerError>::RequestResponse(_) => None,
-//                    Result<RequestResponse, ServerError>::Error(e) => Some(Action::Error(Error::ServerError(e))),
-//                }
-//            }
-//            ServerMessage::Error(e) => Some(Action::Error(Error::ServerError(e))),
-//            ServerMessage::Message(m) => Some(Action::AddMessage(m.into())),
-//            _ => panic!("unimplemented"),
-//        }
-        None
-    }
+        let message = match self.net.next() {
+            Ok(Some(msg)) => msg,
+            Ok(None) => return None,
+            Err(err) => return Some(Action::Error(err)),
+        };
 
-    pub fn login(&mut self) -> RequestFuture<()> {
-        if !self.logged_in {
-            Box::new(self.request(ClientRequest::Login(Login { id: self.user_id }))
-                .then(|response| {
-                    match response {
-                        Ok(RequestResponse::NoData) => Ok(()),
-                        Ok(response) => Err(Error::UnexpectedResponse(response)),
-                        Err(e) => Err(e),
-                    }
-                }))
-        } else {
-            Box::new(future::err(Error::AlreadyLoggedIn))
+        match message {
+            ServerMessage::AddRoom(room) => Some(Action::AddRoom(room)),
+            ServerMessage::Message(message) => Some(Action::AddMessage(message.into())),
+            ServerMessage::Edit(_) => None, // TODO
+            ServerMessage::Delete(_) => None,
+            ServerMessage::Error(err) => Some(Action::Error(Error::ServerError(err))),
         }
     }
 
-    pub fn create_room(&mut self) -> RequestFuture<RoomId> {
-        Box::new(self.request(ClientRequest::CreateRoom)
-            .then(|response| {
-                match response {
-                    Ok(RequestResponse::Room { id }) => Ok(id),
-                    Ok(response) => Err(Error::UnexpectedResponse(response)),
-                    Err(e) => Err(e),
-                }
-            }))
+    pub fn login(&mut self) {
+        self.net.send(ClientMessage::Login(Login { id: self.user_id }));
     }
 
-    pub fn join_room(&mut self, room: RoomId) -> RequestFuture<()> {
-        Box::new(self.request(ClientRequest::JoinRoom(room))
-            .then(|response| {
-                match response {
-                    Ok(RequestResponse::NoData) => Ok(()),
-                    Ok(response) => Err(Error::UnexpectedResponse(response)),
-                    Err(e) => Err(e),
-                }
-            }))
+    pub fn create_room(&mut self)  {
+        self.net.send(ClientMessage::CreateRoom);
+    }
+
+    pub fn join_room(&mut self, room: RoomId) {
+        self.net.send(ClientMessage::JoinRoom(room));
     }
 
     /// Sends a message, returning the request id if it was sent successfully
-    pub fn send_message(&mut self, content: String, to_room: RoomId) -> RequestFuture<()> {
-        if self.logged_in {
-            Box::new(self.request(ClientRequest::SendMessage(ClientSentMessage { to_room, content })).map(|_| ()))
-        } else {
-            Box::new(future::err(Error::NotLoggedIn))
-        }
+    pub fn send_message(&mut self, content: String, to_room: RoomId) {
+        self.net.send(ClientMessage::SendMessage(ClientSentMessage { to_room, content }));
     }
 
     pub fn username(&self) -> String {
@@ -113,27 +72,7 @@ impl Vertex {
     /// Should be called once every `HEARTBEAT_INTERVAL`
     #[inline]
     pub fn dispatch_heartbeat(&mut self)  {
-        self.net.send(DispatchHeartbeat);
-    }
-
-    #[inline]
-    fn request(&self, request: ClientRequest) -> impl Future<Item=RequestResponse, Error=Error> {
-        self.net.send(MakeRequest(request))
-            .then(|result| {
-                result.expect("failed to send request to actor")
-            })
-    }
-}
-
-impl Actor for Vertex {
-    type Context = Context<Vertex>;
-}
-
-impl Handler<ServerMessage> for Vertex {
-    type Result = ();
-
-    fn handle(&mut self, msg: ServerMessage, ctx: &mut Context<Vertex>) {
-        println!("bruh! {:?}", msg);
+        self.net.dispatch_heartbeat();
     }
 }
 
@@ -158,11 +97,11 @@ impl From<ForwardedMessage> for Message {
 #[derive(Debug)]
 pub enum Action {
     AddMessage(Message),
+    AddRoom(RoomId),
     Error(Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
-pub type RequestFuture<T> = Box<dyn Future<Item=T, Error=Error> + Send>;
 
 #[derive(Debug)]
 pub enum Error {
@@ -171,9 +110,7 @@ pub enum Error {
     WebSocketError(WebSocketError),
     /// A message from the server that doesn't deserialize correctly
     InvalidServerMessage,
-    /// A response from the server that doesn't make sense in a specific context
-    UnexpectedResponse(RequestResponse),
     ServerError(ServerError),
     ServerTimedOut,
-    ResponseCancelled,
+    MalformedResponse
 }

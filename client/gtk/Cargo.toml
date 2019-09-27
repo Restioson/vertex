@@ -17,6 +17,4 @@ clap = "2.33"
 tokio = { version = "^0.1" }
 
 vertex_client_backend = { path = "../backend/" }
-vertex_common = { path = "../../common", features = ["enable-actix"] }
-actix = { version = "^0.8" }
-futures = "^0.1"
+vertex_common = { path = "../../common" }

@@ -6,12 +6,8 @@ use url::Url;
 use uuid::Uuid;
 use vertex_client_backend::*;
 use vertex_common::*;
-use tokio::{self, runtime::Runtime};
-
-use futures::future::Future;
 
 use clap::{App, Arg};
-use actix::System;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -49,6 +45,16 @@ impl Win {
         match action {
             Action::AddMessage(msg) => {
                 self.push_message(&msg.author, &msg.content);
+            }
+            Action::AddRoom(room) => {
+                self.push_message("Info", &format!("Joined room {}", room.0));
+
+                self.model.room = Some(room);
+                let txt: &str = &format!("#{}", room.0);
+                let room_label = Label::new(Some(txt));
+                self.widgets.rooms.insert(&room_label, -1);
+                self.model.room_list.push(room);
+                room_label.show_all();
             }
             Action::Error(_error) => {}
         }
@@ -106,7 +112,7 @@ impl Update for Win {
         };
 
         // TODO: Where should this go?
-        actix::spawn(model.vertex.login());
+        model.vertex.login();
 
         model
     }
@@ -125,7 +131,7 @@ impl Update for Win {
                         "/join" => {
                             if v.len() == 2 {
                                 let room = RoomId(Uuid::parse_str(v[1]).expect("Invalid room id"));
-                                actix::spawn(self.model.vertex.join_room(room));
+                                self.model.vertex.join_room(room);
                                 self.push_message("Info", &format!("Joined room {}", room.0));
 
                                 self.model.room = Some(room);
@@ -140,19 +146,7 @@ impl Update for Win {
                             }
                         }
                         "/createroom" => {
-                            let room = actix::spawn(self.model.vertex.create_room()
-                                .map(|room| {
-                                    self.push_message("Info", &format!("Joined room {}", room.0));
-
-                                    self.model.room = Some(room);
-                                    let txt: &str = &format!("#{}", room.0);
-                                    let room_label = Label::new(Some(txt));
-                                    self.widgets.rooms.insert(&room_label, -1);
-                                    self.model.room_list.push(room);
-                                    room_label.show_all();
-                                    room
-                                })
-                                );
+                            self.model.vertex.create_room();
                         }
                         _ => self.push_message("Info", "Unknown command"),
                     }
@@ -162,8 +156,7 @@ impl Update for Win {
 
                 let room = self.model.room.expect("Not in a room").clone();
 
-                // TODO: change this to not be blocking
-                actix::spawn(self.model.vertex.send_message(msg.to_string(), room));
+                self.model.vertex.send_message(msg.to_string(), room);
 
                 let name = self.model.vertex.username();
                 self.push_message(&name, &msg);
@@ -256,8 +249,5 @@ fn main() {
         .and_then(|id| Uuid::parse_str(id).ok());
 
     let args = VertexArgs { user_id };
-
-    System::run(|| {
-        Win::run(args).expect("failed to run window");
-    }).expect("failed to start system");
+    Win::run(args).expect("failed to run window");
 }
