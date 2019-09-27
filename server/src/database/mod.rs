@@ -101,8 +101,8 @@ impl DatabaseServer {
                 conn.client
                     .prepare(
                         "DELETE FROM login_tokens
-                            WHERE expiration_date < now()::timestamp OR
-                                DATE_PART('days', now()::timestamp - last_used) > $1
+                            WHERE expiration_date < NOW()::timestamp OR
+                                DATE_PART('days', NOW()::timestamp - last_used) > $1
                             RETURNING device_id, user_id",
                     )
                     .map_err(l337::Error::External)

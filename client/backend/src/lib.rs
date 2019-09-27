@@ -1,5 +1,3 @@
-// TODO save password feature through saving tokens
-
 use chrono::{DateTime, Utc};
 use std::convert::Into;
 use std::io::{self, Cursor};
@@ -250,6 +248,38 @@ impl Vertex {
                     // TODO do this more asynchronously @gegy1000
                     RequestResponse::Success(Success::NoData) if response_id == request_id => {
                         // TODO request re-login here later @gegy1000
+                        Ok(())
+                    }
+                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
+                    _ => Err(Error::IncorrectServerMessage(msg)),
+                }
+            }
+            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
+        }
+    }
+
+    // TODO pub just for testing. @gegy1000 if you could integrate this into the login flow...
+    pub fn refresh_token(
+        &mut self,
+        device_id: DeviceId,
+        username: &str,
+        password: &str
+    ) -> Result<(), Error> {
+        let request_id = self.request(ClientMessage::RefreshToken {
+            device_id,
+            username: username.to_string(),
+            password: password.to_string(),
+        })?;
+
+        let msg = self.receive_blocking()?;
+        match msg.clone() {
+            ServerMessage::Response {
+                response,
+                request_id: response_id,
+            } => {
+                match response {
+                    // TODO do this more asynchronously @gegy1000
+                    RequestResponse::Success(Success::NoData) if response_id == request_id => {
                         Ok(())
                     }
                     RequestResponse::Error(e) => Err(Error::ServerError(e)),

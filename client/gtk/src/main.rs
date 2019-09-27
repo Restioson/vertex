@@ -208,6 +208,30 @@ impl Update for Win {
                             self.model.keyring.delete_password().expect("Error forgetting token");
                             text_buffer.insert(&mut text_buffer.get_end_iter(), "Token forgot.\n");
                         }
+                        "/refreshtoken" => {
+                            if v.len() == 4 {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Refreshing token...\n",
+                                );
+
+                                let dev =
+                                    DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
+
+                                self.model.vertex.refresh_token(dev, v[2], v[3])
+                                    .expect("Error refreshing token");
+
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Token refreshed",
+                                );
+                            } else {
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Device ID, username, and password required",
+                                );
+                            }
+                        }
                         "/register" => {
                             if v.len() == 3 {
                                 text_buffer.insert(

@@ -190,6 +190,11 @@ impl ClientWsSession {
                 display_name,
                 password,
             } => self.create_user(username, display_name, password, req.request_id, ctx),
+            ClientMessage::RefreshToken {
+                device_id,
+                username,
+                password,
+            } => self.refresh_token(device_id, username, password, req.request_id, ctx),
             m => self.handle_authenticated_message(m, req.request_id, ctx),
         };
     }
@@ -270,7 +275,7 @@ impl ClientWsSession {
                     old_password,
                     new_password,
                 } => self.change_password(old_password, new_password, user_id, request_id, ctx),
-                _ => unimplemented!(),
+                _ => unreachable!(),
             },
         }
     }
@@ -358,6 +363,26 @@ impl ClientWsSession {
                             .into_actor(act)
                     )
                 },
+                Err(e) => fut::Either::B(fut::ok(Err(e))),
+            })
+            .and_then(move |res, act, _ctx| match res {
+                Ok((user_id, device_id)) => fut::Either::A(
+                    act.database_server
+                        .send(RefreshToken(device_id))
+                        .map(move |res| match res {
+                            Ok(true) => Ok((user_id, device_id)),
+                            Ok(false) => Err(ServerError::DeviceDoesNotExist),
+                            Err(l337::Error::Internal(e)) => {
+                                eprintln!("Database connection pooling error: {:?}", e);
+                                Err(ServerError::Internal)
+                            }
+                            Err(l337::Error::External(sql_error)) => {
+                                eprintln!("Database error: {:?}", sql_error);
+                                Err(ServerError::Internal)
+                            }
+                        })
+                        .into_actor(act)
+                ),
                 Err(e) => fut::Either::B(fut::ok(Err(e))),
             })
             .and_then(move |res, act, ctx| match res {
@@ -465,7 +490,7 @@ impl ClientWsSession {
         .and_then(move |res, act, _ctx| match res {
             Ok(()) => fut::Either::A(
                 act.database_server
-                    .send(RevokeToken(to_revoke, user_id))
+                    .send(RevokeToken(to_revoke))
                     .map(|res| match res {
                         Ok(true) => Ok(()),
                         Ok(false) => Err(ServerError::DeviceDoesNotExist),
@@ -505,6 +530,44 @@ impl ClientWsSession {
             Ok(()) => RequestResponse::success(),
             Err(e) => RequestResponse::Error(e),
         });
+
+        self.respond(fut, request_id, ctx)
+    }
+
+    fn refresh_token(
+        &mut self,
+        to_refresh: DeviceId,
+        username: String,
+        password: String,
+        request_id: RequestId,
+        ctx: &mut WebsocketContext<Self>,
+    ) {
+        let fut = self.verify_username_password(username, password)
+            .into_actor(self)
+            .and_then(move |res, act, _ctx| match res {
+                Ok(_) => fut::Either::A(
+                    act.database_server
+                        .send(RefreshToken(to_refresh))
+                        .map(|res| match res {
+                            Ok(true) => Ok(()),
+                            Ok(false) => Err(ServerError::DeviceDoesNotExist),
+                            Err(l337::Error::Internal(e)) => {
+                                eprintln!("Database connection pooling error: {:?}", e);
+                                Err(ServerError::Internal)
+                            }
+                            Err(l337::Error::External(sql_error)) => {
+                                eprintln!("Database error: {:?}", sql_error);
+                                Err(ServerError::Internal)
+                            }
+                        })
+                        .into_actor(act),
+                ),
+                Err(e) => fut::Either::B(fut::ok(Err(e))),
+            })
+            .map(|res, _act, _ctx| match res {
+                Ok(()) => RequestResponse::success(),
+                Err(e) => RequestResponse::Error(e),
+            });
 
         self.respond(fut, request_id, ctx)
     }

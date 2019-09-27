@@ -53,9 +53,15 @@ impl Message for CreateToken {
     type Result = Result<(), l337::Error<tokio_postgres::Error>>;
 }
 
-pub struct RevokeToken(pub DeviceId, pub UserId);
+pub struct RevokeToken(pub DeviceId);
 
 impl Message for RevokeToken {
+    type Result = Result<bool, l337::Error<tokio_postgres::Error>>;
+}
+
+pub struct RefreshToken(pub DeviceId);
+
+impl Message for RefreshToken {
     type Result = Result<bool, l337::Error<tokio_postgres::Error>>;
 }
 
@@ -126,8 +132,22 @@ impl Handler<RevokeToken> for DatabaseServer {
     fn handle(&mut self, revoke: RevokeToken, _: &mut Context<Self>) -> Self::Result {
         Box::new(self.pool.connection().and_then(|mut conn| {
             conn.client
-                .prepare("DELETE FROM login_tokens WHERE device_id = $1 AND user_id = $2")
-                .and_then(move |stmt| conn.client.execute(&stmt, &[&(revoke.0).0, &(revoke.1).0]))
+                .prepare("DELETE FROM login_tokens WHERE device_id = $1")
+                .and_then(move |stmt| conn.client.execute(&stmt, &[&(revoke.0).0]))
+                .map_err(l337::Error::External)
+                .map(|r| r == 1) // Result will be 1 if the token existed
+        }))
+    }
+}
+
+impl Handler<RefreshToken> for DatabaseServer {
+    type Result = ResponseFuture<bool, l337::Error<tokio_postgres::Error>>;
+
+    fn handle(&mut self, revoke: RefreshToken, _: &mut Context<Self>) -> Self::Result {
+        Box::new(self.pool.connection().and_then(|mut conn| {
+            conn.client
+                .prepare("UPDATE login_tokens SET last_used=NOW()::timestamp WHERE device_id = $1")
+                .and_then(move |stmt| conn.client.execute(&stmt, &[&(revoke.0).0]))
                 .map_err(l337::Error::External)
                 .map(|r| r == 1) // Result will be 1 if the token existed
         }))

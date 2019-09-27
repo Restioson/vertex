@@ -76,6 +76,11 @@ pub enum ClientMessage {
         // Require re-authentication to revoke a token other than the current
         password: Option<String>,
     },
+    RefreshToken {
+        device_id: DeviceId,
+        username: String,
+        password: String,
+    },
     CreateUser {
         username: String,
         display_name: String,
@@ -251,6 +256,7 @@ pub enum ServerError {
     InvalidUsername,
     InvalidDisplayName,
     InvalidToken,
+    StaleToken,
     UserCompromised,
     UserLocked,
     UserBanned,
