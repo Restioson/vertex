@@ -5,9 +5,10 @@ use std::time::{Duration, Instant};
 use url::Url;
 use vertex_common::*;
 use websocket::client::ClientBuilder;
-use websocket::stream::sync::TcpStream;
 use websocket::sync::Client;
 use websocket::{OwnedMessage, WebSocketError};
+use websocket::stream::sync::{TlsStream, TcpStream};
+use native_tls::TlsConnector;
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
 
@@ -16,7 +17,7 @@ pub struct Config {
 }
 
 pub struct Vertex {
-    socket: Client<TcpStream>,
+    socket: Client<TlsStream<TcpStream>>,
     pub username: Option<String>,
     pub display_name: Option<String>,
     pub device_id: Option<DeviceId>,
@@ -27,11 +28,16 @@ pub struct Vertex {
 impl Vertex {
     pub fn new(config: Config) -> Self {
         let socket = ClientBuilder::from_url(&config.url)
-            .connect_insecure()
+            .connect_secure(
+                Some(TlsConnector::builder()
+                    .danger_accept_invalid_certs(true) // TODO needed for self signed certs
+                    .build().expect("Error setting TLS settings"))
+            )
             .expect("Error connecting to websocket");
 
         socket
             .stream_ref()
+            .get_ref()
             .set_read_timeout(Some(Duration::from_micros(1)))
             .unwrap();
 

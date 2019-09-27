@@ -12,3 +12,4 @@ serde_cbor = "^0.9"
 vertex_common = { path = "../../common/" }
 url = "^1.7"
 chrono = { version = "0.4", features = ["serde"] }
+native-tls = "^0.2"

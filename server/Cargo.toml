@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 actix = "^0.8"
-actix-web = "^1"
+actix-web = { version = "^1", features = ["ssl"] }
 actix-web-actors = "^1"
 actix-files = "^0.1"
 actix-service = "^0.4"
@@ -29,6 +29,7 @@ lazy_static = "^1"
 bitflags = "^1"
 base64 = "^0.10"
 directories = "^2"
-toml = "0.5"
-unicode-normalization = "0.1.8"
+toml = "^0.5"
+unicode-normalization = "^0.1"
+openssl = "^0.10"
 vertex_common = { path = "../common/", features = ["enable-actix"] }

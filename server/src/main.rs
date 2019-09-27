@@ -69,6 +69,8 @@ fn main() -> std::io::Result<()> {
     let config = config::load_config();
     create_files_directories(&config);
 
+    let ssl_config = config::ssl_config();
+
     let mut sys = System::new("vertex_server");
     let client_server = ClientServer::new().start();
     let db_server = DatabaseServer::new(&mut sys, client_server.clone(), &config).start();
@@ -99,7 +101,7 @@ fn main() -> std::io::Result<()> {
             .service(web::resource("/client/").route(web::get().to(dispatch_client_ws)))
             .service(web::resource("/server/").route(web::get().to(dispatch_server_ws)))
     })
-    .bind(addr.clone())?
+    .bind_ssl(addr.clone(), ssl_config)?
     .start();
 
     println!("Vertex server started on addr {}", addr);

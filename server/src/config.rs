@@ -1,9 +1,12 @@
 // configuration framework rewrite time. very epic
 
 use directories::ProjectDirs;
+use openssl::pkey::PKey;
+use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::fs::{self, File};
-use std::io::ErrorKind;
+use std::io::{BufReader, ErrorKind, Read};
 use std::path::PathBuf;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -134,4 +137,43 @@ pub fn load_config() -> Config {
     }
 
     config
+}
+
+pub fn ssl_config() -> SslAcceptorBuilder {
+    let dirs = ProjectDirs::from("", "vertex_chat", "vertex_server")
+        .expect("Error getting project directories");
+    let data_dir = dirs.data_dir();
+
+    fs::create_dir_all(data_dir).expect(&format!(
+        "Error creating data dirs ({})",
+        data_dir.to_string_lossy(),
+    ));
+
+    let cert_path = data_dir.join("cert.pem");
+
+    let key_path = data_dir.join("key.pem");
+    let key_file = &mut BufReader::new(File::open(key_path.clone()).expect(&format!(
+        "Error opening private key file ({})",
+        key_path.to_string_lossy()
+    )));
+    let mut key_data = Vec::new();
+    key_file
+        .read_to_end(&mut key_data)
+        .expect("Error reading private key file");
+    let passphrase = env::var("VERTEX_SERVER_KEY_PASS")
+        .expect("Error getting the private key passphrase from $VERTEX_SERVER_KEY_PASS");
+    let passphrase = passphrase.as_bytes();
+    let key = PKey::private_key_from_pem_passphrase(&key_data, passphrase)
+        .expect("Error loading private key");
+
+    let mut acceptor = SslAcceptor::mozilla_modern(SslMethod::tls())
+        .expect("Error getting Mozilla modern ssl acceptor");
+    acceptor
+        .set_certificate_file(cert_path, SslFiletype::PEM)
+        .expect("Error setting certificate");
+    acceptor
+        .set_private_key(&key)
+        .expect("Error setting private key");
+
+    acceptor
 }
