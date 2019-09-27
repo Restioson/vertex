@@ -34,7 +34,7 @@ impl DatabaseServer {
             .expect("db error");
         DatabaseServer {
             pool,
-            sweep_interval: Duration::from_secs(config.tokens_sweep_interval),
+            sweep_interval: Duration::from_secs(config.tokens_sweep_interval_secs),
             client_server,
         }
     }

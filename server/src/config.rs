@@ -20,13 +20,14 @@ pub struct Config {
     pub max_display_name_len: u16,
     #[serde(default = "min_display_name_len")]
     pub min_display_name_len: u16,
-    #[serde(default = "max_bio_len")]
-    pub max_bio_len: u32,
     #[serde(default = "profile_pictures")]
     pub profile_pictures: PathBuf,
-    /// In seconds
-    #[serde(default = "tokens_sweep_interval")]
-    pub tokens_sweep_interval: u64,
+    #[serde(default = "tokens_sweep_interval_secs")]
+    pub tokens_sweep_interval_secs: u64,
+    #[serde(default = "token_stale_days")]
+    pub token_stale_days: u16,
+    #[serde(default = "token_expiry_days")]
+    pub token_expiry_days: u16,
 }
 
 fn max_password_len() -> u16 {
@@ -53,16 +54,20 @@ fn min_display_name_len() -> u16 {
     1
 }
 
-fn max_bio_len() -> u32 {
-    500
-}
-
 fn profile_pictures() -> PathBuf {
     PathBuf::from("./files/images/profile_pictures/")
 }
 
-fn tokens_sweep_interval() -> u64 {
+fn tokens_sweep_interval_secs() -> u64 {
     1800 // 30min
+}
+
+fn token_stale_days() -> u16 {
+    7 // 1 week
+}
+
+fn token_expiry_days() -> u16 {
+    90 // ~3 months
 }
 
 pub fn load_config() -> Config {
@@ -124,7 +129,7 @@ pub fn load_config() -> Config {
         panic!("Maximum display name length must be greater than or equal to minimum display name length");
     }
 
-    if config.tokens_sweep_interval < 60 {
+    if config.tokens_sweep_interval_secs < 60 {
         panic!("Tokens sweep interval must be greater than 1 minute!");
     }
 
