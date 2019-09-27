@@ -1,22 +1,22 @@
-use std::time::Instant;
 use websocket::{ClientBuilder, OwnedMessage, WebSocketResult};
 use websocket::client::Url;
 
 use super::Error as VertexError;
 use super::Result as VertexResult;
 
-use vertex_common::{ServerMessage, ClientMessage, HEARTBEAT_TIMEOUT};
+use vertex_common::{ClientboundPayload, ServerboundMessage, ClientboundMessage};
 
 use websocket::sender::Writer;
 use websocket::receiver::Reader;
 use websocket::stream::sync::TcpStream;
 use std::thread;
 use std::sync::mpsc;
+use std::time::Instant;
 
 pub struct Net {
     send: mpsc::Sender<OwnedMessage>,
     recv: mpsc::Receiver<OwnedMessage>,
-    last_heartbeat: Instant,
+    last_message: Instant,
 }
 
 impl Net {
@@ -48,11 +48,11 @@ impl Net {
         Ok(Net {
             send: send_out,
             recv: recv_in,
-            last_heartbeat: Instant::now(),
+            last_message: Instant::now(),
         })
     }
 
-    pub fn send(&mut self, message: ClientMessage) {
+    pub fn send(&mut self, message: ServerboundMessage) {
         self.send.send(OwnedMessage::Binary(message.into()))
             .expect("send channel closed")
     }
@@ -62,25 +62,26 @@ impl Net {
             .expect("send channel closed")
     }
 
-    pub fn next(&mut self) -> VertexResult<Option<ServerMessage>> {
-        // TODO: I don't think this should be handled here
-        if Instant::now() - self.last_heartbeat > HEARTBEAT_TIMEOUT {
-            return Err(VertexError::ServerTimedOut);
-        }
+    pub fn recv(&mut self) -> VertexResult<Option<ClientboundMessage>> {
         while let Ok(message) = self.recv.try_recv() {
+            self.last_message = Instant::now();
             match message {
                 OwnedMessage::Binary(bytes) => {
-                    match serde_cbor::from_slice::<ServerMessage>(&bytes) {
-                        Ok(message) => return Ok(Some(message)),
+                    match serde_cbor::from_slice::<ClientboundPayload>(&bytes) {
+                        Ok(ClientboundPayload::Message(msg)) => return Ok(Some(msg)),
+                        Ok(ClientboundPayload::Error(err)) => return Err(VertexError::ServerError(err)),
                         Err(_) => return Err(VertexError::MalformedResponse),
                     }
                 }
-                OwnedMessage::Pong(_) => self.last_heartbeat = Instant::now(),
-                OwnedMessage::Close(_) => return Err(VertexError::ServerTimedOut),
-                _ => eprintln!("received unexpected message type"),
+                OwnedMessage::Close(_) => return Err(VertexError::ServerClosed),
+                _ => (),
             }
         }
         Ok(None)
+    }
+
+    pub fn last_message(&self) -> Instant {
+        self.last_message
     }
 }
 

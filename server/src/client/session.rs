@@ -55,9 +55,9 @@ impl ClientWsSession {
         self.state.user_id()
     }
 
-    fn handle_message(&mut self, msg: ClientMessage, ctx: &mut WebsocketContext<Self>) {
+    fn handle_message(&mut self, msg: ServerboundMessage, ctx: &mut WebsocketContext<Self>) {
         let response = match msg {
-            ClientMessage::Login(login) => {
+            ServerboundMessage::Login(login) => {
                 // Register with the server
                 self.client_server.do_send(Connect {
                     session: ctx.address(),
@@ -78,28 +78,28 @@ impl ClientWsSession {
 
     fn handle_authenticated_message(
         &mut self,
-        msg: ClientMessage,
+        msg: ServerboundMessage,
         _ctx: &mut WebsocketContext<Self>,
-    ) -> Option<ServerMessage> {
+    ) -> Option<ClientboundPayload> {
         match self.state {
-            SessionState::WaitingForLogin => return Some(ServerMessage::Error(ServerError::NotLoggedIn)),
+            SessionState::WaitingForLogin => return Some(ClientboundPayload::Error(ServerError::NotLoggedIn)),
             SessionState::Ready(id) => {
                 match msg {
-                    ClientMessage::SendMessage(msg) => {
+                    ServerboundMessage::SendMessage(msg) => {
                         self.client_server.do_send(IdentifiedMessage {
                             user_id: id,
                             session_id: self.session_id,
                             msg,
                         });
                     }
-                    ClientMessage::EditMessage(edit) => {
+                    ServerboundMessage::EditMessage(edit) => {
                         self.client_server.do_send(IdentifiedMessage {
                             user_id: id,
                             session_id: self.session_id,
                             msg: edit,
                         });
                     }
-                    ClientMessage::JoinRoom(room) => {
+                    ServerboundMessage::JoinRoom(room) => {
                         // TODO check that it worked lol
                         self.client_server.do_send(IdentifiedMessage {
                             user_id: id,
@@ -107,7 +107,7 @@ impl ClientWsSession {
                             msg: Join { room },
                         });
                     }
-                    ClientMessage::CreateRoom => {
+                    ServerboundMessage::CreateRoom => {
                         let id = self
                             .client_server
                             .send(IdentifiedMessage {
@@ -117,7 +117,7 @@ impl ClientWsSession {
                             })
                             .wait()
                             .unwrap();
-                        return Some(ServerMessage::AddRoom(id));
+                        return Some(ClientboundPayload::Message(ClientboundMessage::AddRoom(id)));
                     }
                     _ => unimplemented!(),
                 }
@@ -166,7 +166,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
             }
             ws::Message::Text(_) => {
                 let error =
-                    serde_cbor::to_vec(&ServerMessage::Error(ServerError::UnexpectedTextFrame))
+                    serde_cbor::to_vec(&ClientboundPayload::Error(ServerError::UnexpectedTextFrame))
                         .unwrap();
                 ctx.binary(error);
             }
@@ -176,7 +176,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                     Ok(m) => m,
                     Err(_) => {
                         let error =
-                            serde_cbor::to_vec(&ServerMessage::Error(ServerError::InvalidMessage))
+                            serde_cbor::to_vec(&ClientboundPayload::Error(ServerError::InvalidMessage))
                                 .unwrap();
                         return ctx.binary(error);
                     }
@@ -196,10 +196,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
     }
 }
 
-impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
+impl Handler<SendMessage<ClientboundPayload>> for ClientWsSession {
     type Result = ();
 
-    fn handle(&mut self, msg: SendMessage<ServerMessage>, ctx: &mut WebsocketContext<Self>) {
+    fn handle(&mut self, msg: SendMessage<ClientboundPayload>, ctx: &mut WebsocketContext<Self>) {
         ctx.binary(msg);
     }
 }

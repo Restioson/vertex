@@ -23,7 +23,7 @@ pub struct RoomId(pub Uuid);
 pub struct MessageId(pub Uuid);
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum ClientMessage {
+pub enum ServerboundMessage {
     Login(Login),
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
@@ -32,13 +32,13 @@ pub enum ClientMessage {
     Delete(Delete),
 }
 
-impl Into<Bytes> for ClientMessage {
+impl Into<Bytes> for ServerboundMessage {
     fn into(self) -> Bytes {
         serde_cbor::to_vec(&self).unwrap().into()
     }
 }
 
-impl Into<Vec<u8>> for ClientMessage {
+impl Into<Vec<u8>> for ServerboundMessage {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
@@ -96,23 +96,27 @@ pub struct Login {
 
 impl ClientMessageType for Login {}
 
-#[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ServerMessage {
-    AddRoom(RoomId),
-    Message(ForwardedMessage),
-    Edit(Edit),
-    Delete(Delete),
+pub enum ClientboundPayload {
+    Message(ClientboundMessage),
     Error(ServerError),
 }
 
-impl Into<Bytes> for ServerMessage {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ClientboundMessage {
+    AddRoom(RoomId),
+    AddMessage(ForwardedMessage),
+    EditMessage(Edit),
+    DeleteMessage(Delete),
+}
+
+impl Into<Bytes> for ClientboundPayload {
     fn into(self) -> Bytes {
         serde_cbor::to_vec(&self).unwrap().into()
     }
 }
 
-impl Into<Vec<u8>> for ServerMessage {
+impl Into<Vec<u8>> for ClientboundPayload {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
