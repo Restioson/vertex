@@ -16,6 +16,7 @@ pub use user::*;
 pub struct DatabaseServer {
     pool: l337::Pool<PostgresConnectionManager<NoTls>>,
     sweep_interval: Duration,
+    token_expiry_days: u16,
     client_server: Addr<ClientServer>,
 }
 
@@ -35,6 +36,7 @@ impl DatabaseServer {
         DatabaseServer {
             pool,
             sweep_interval: Duration::from_secs(config.tokens_sweep_interval_secs),
+            token_expiry_days: config.token_expiry_days,
             client_server,
         }
     }
@@ -90,20 +92,23 @@ impl DatabaseServer {
 
     fn expired_tokens(
         &self,
+        token_expiry_days: u16,
     ) -> impl Stream<Item = (UserId, DeviceId), Error = l337::Error<tokio_postgres::Error>> {
+        let token_expiry_days = token_expiry_days as f64;
         self.pool
             .connection()
-            .map(|mut conn| {
+            .map(move |mut conn| {
                 conn.client
                     .prepare(
                         "DELETE FROM login_tokens
-                            WHERE expiration_date < now()::timestamp
+                            WHERE expiration_date < now()::timestamp OR
+                                DATE_PART('days', now()::timestamp - last_used) > $1
                             RETURNING device_id, user_id",
                     )
                     .map_err(l337::Error::External)
                     .map(move |stmt| {
                         conn.client
-                            .query(&stmt, &[])
+                            .query(&stmt, &[&token_expiry_days])
                             .map(|row| {
                                 Ok((
                                     UserId(row.try_get("user_id")?),
@@ -121,7 +126,7 @@ impl DatabaseServer {
     fn sweep_tokens(&self) -> impl ActorFuture<Actor = Self, Item = (), Error = ()> {
         let begin = Instant::now();
 
-        self.expired_tokens()
+        self.expired_tokens(self.token_expiry_days)
             .collect()
             .map_err(|e| panic!("db error: {:?}", e))
             .into_actor(self)
