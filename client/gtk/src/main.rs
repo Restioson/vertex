@@ -185,7 +185,7 @@ impl Update for Win {
                                         text_buffer.insert(
                                             &mut text_buffer.get_end_iter(),
                                             &format!(
-                                                "Sucessfully logged in. Device id: {}. Token: {}.\n",
+                                                "Successfully logged in. Device id: {}.\n",
                                                 device_id.0, token.0
                                             ),
                                         );
