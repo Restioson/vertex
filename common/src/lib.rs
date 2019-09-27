@@ -181,8 +181,12 @@ bitflags! {
         const DELETE_OWN_MESSAGES = 1 << 4;
         /// Change the user's name
         const CHANGE_USERNAME = 1 << 5;
+        /// Change the user's display name
+        const CHANGE_DISPLAY_NAME = 1 << 6;
         /// Join rooms
-        const JOIN_ROOM = 1 << 6;
+        const JOIN_ROOMS = 1 << 7;
+        /// Create rooms
+        const CREATE_ROOMS = 1 << 8;
     }
 }
 

@@ -1,14 +1,14 @@
 #[macro_use]
 extern crate serde_derive;
 
+use clap::{App, Arg};
 use gtk::prelude::*;
 use gtk::{Entry, Label, ListBox, TextView, Window};
+use keyring::Keyring;
 use relm::{connect, connect_stream, Relm, Update, Widget};
 use relm_derive::*;
 use url::Url;
 use uuid::Uuid;
-use keyring::Keyring;
-use clap::{App, Arg};
 use vertex_client_backend::*;
 use vertex_common::*;
 
@@ -165,8 +165,9 @@ impl Update for Win {
 
                                     Some((id, token))
                                 } else if let Ok(token_ser) = self.model.keyring.get_password() {
-                                    let stored_token: StoredToken = serde_json::from_str(&token_ser)
-                                        .expect("Error deserializing token");
+                                    let stored_token: StoredToken =
+                                        serde_json::from_str(&token_ser)
+                                            .expect("Error deserializing token");
 
                                     Some((stored_token.device_id, AuthToken(stored_token.token)))
                                 } else {
@@ -177,11 +178,13 @@ impl Update for Win {
                                     Ok((device_id, token)) => {
                                         let stored_token = StoredToken {
                                             device_id,
-                                            token: token.0.clone()
+                                            token: token.0.clone(),
                                         };
                                         let token_ser = serde_json::to_string(&stored_token)
                                             .expect("Error serializing token");
-                                        self.model.keyring.set_password(&token_ser)
+                                        self.model
+                                            .keyring
+                                            .set_password(&token_ser)
                                             .expect("Error storing token");
 
                                         text_buffer.insert(
@@ -191,7 +194,7 @@ impl Update for Win {
                                                 device_id.0, token.0
                                             ),
                                         );
-                                    },
+                                    }
                                     Err(e) => text_buffer.insert(
                                         &mut text_buffer.get_end_iter(),
                                         &format!("Error logging in: {:?}\n", e),
@@ -205,7 +208,10 @@ impl Update for Win {
                             }
                         }
                         "/forgettoken" => {
-                            self.model.keyring.delete_password().expect("Error forgetting token");
+                            self.model
+                                .keyring
+                                .delete_password()
+                                .expect("Error forgetting token");
                             text_buffer.insert(&mut text_buffer.get_end_iter(), "Token forgot.\n");
                         }
                         "/refreshtoken" => {
@@ -218,13 +224,13 @@ impl Update for Win {
                                 let dev =
                                     DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
 
-                                self.model.vertex.refresh_token(dev, v[2], v[3])
+                                self.model
+                                    .vertex
+                                    .refresh_token(dev, v[2], v[3])
                                     .expect("Error refreshing token");
 
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Token refreshed\n",
-                                );
+                                text_buffer
+                                    .insert(&mut text_buffer.get_end_iter(), "Token refreshed\n");
                             } else {
                                 text_buffer.insert(
                                     &mut text_buffer.get_end_iter(),

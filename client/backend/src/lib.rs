@@ -263,7 +263,7 @@ impl Vertex {
         &mut self,
         device_id: DeviceId,
         username: &str,
-        password: &str
+        password: &str,
     ) -> Result<(), Error> {
         let request_id = self.request(ClientMessage::RefreshToken {
             device_id,

@@ -19,14 +19,14 @@ use vertex_common::*;
 #[derive(Eq, PartialEq)]
 enum SessionState {
     WaitingForLogin,
-    Ready(UserId, DeviceId),
+    Ready(UserId, DeviceId, TokenPermissionFlags),
 }
 
 impl SessionState {
     fn user_and_device_ids(&self) -> Option<(UserId, DeviceId)> {
         match self {
             SessionState::WaitingForLogin => None,
-            SessionState::Ready(user_id, device_id) => Some((*user_id, *device_id)),
+            SessionState::Ready(user_id, device_id, _) => Some((*user_id, *device_id)),
         }
     }
 }
@@ -169,9 +169,23 @@ impl ClientWsSession {
         .wait(ctx);
     }
 
+    fn respond_error(
+        &mut self,
+        error: ServerError,
+        id: RequestId,
+        ctx: &mut WebsocketContext<Self>,
+    ) {
+        ctx.binary(ServerMessage::Response {
+            response: RequestResponse::Error(error),
+            request_id: id,
+        });
+    }
+
     fn handle_message(&mut self, req: ClientRequest, ctx: &mut WebsocketContext<Self>) {
         match req.message {
-            ClientMessage::Login { device_id, token } => self.login(device_id, token, req.request_id, ctx),
+            ClientMessage::Login { device_id, token } => {
+                self.login(device_id, token, req.request_id, ctx)
+            }
             ClientMessage::CreateToken {
                 username,
                 password,
@@ -212,63 +226,96 @@ impl ClientWsSession {
                 request_id,
                 ctx,
             ),
-            SessionState::Ready(user_id, device_id) => match msg {
-                ClientMessage::SendMessage(msg) => self.respond(
-                    self.client_server
-                        .send(IdentifiedMessage {
-                            user_id,
-                            device_id,
-                            request_id,
-                            msg,
-                        })
-                        .into_actor(self),
-                    request_id,
-                    ctx,
-                ),
-                ClientMessage::EditMessage(edit) => self.respond(
-                    self.client_server
-                        .send(IdentifiedMessage {
-                            user_id,
-                            device_id,
-                            request_id,
-                            msg: edit,
-                        })
-                        .into_actor(self),
-                    request_id,
-                    ctx,
-                ),
-                ClientMessage::JoinRoom(room) => self.respond(
-                    self.client_server
-                        .send(IdentifiedMessage {
-                            user_id,
-                            device_id,
-                            request_id,
-                            msg: Join { room },
-                        })
-                        .into_actor(self),
-                    request_id,
-                    ctx,
-                ),
-                ClientMessage::CreateRoom => self.respond(
-                    self.client_server
-                        .send(IdentifiedMessage {
-                            user_id,
-                            device_id,
-                            request_id,
-                            msg: CreateRoom,
-                        })
-                        .into_actor(self),
-                    request_id,
-                    ctx,
-                ),
+            SessionState::Ready(user_id, device_id, perms) => match msg {
+                ClientMessage::SendMessage(msg) => {
+                    if !perms.contains(TokenPermissionFlags::SEND_MESSAGES) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    }
+
+                    self.respond(
+                        self.client_server
+                            .send(IdentifiedMessage {
+                                user_id,
+                                device_id,
+                                request_id,
+                                msg,
+                            })
+                            .into_actor(self),
+                        request_id,
+                        ctx,
+                    )
+                }
+                ClientMessage::EditMessage(edit) => {
+                    // TODO when history is implemented, narrow this down according to sender too
+                    if !perms.contains(TokenPermissionFlags::EDIT_ANY_MESSAGES) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    }
+
+                    self.respond(
+                        self.client_server
+                            .send(IdentifiedMessage {
+                                user_id,
+                                device_id,
+                                request_id,
+                                msg: edit,
+                            })
+                            .into_actor(self),
+                        request_id,
+                        ctx,
+                    )
+                }
+                ClientMessage::JoinRoom(room) => {
+                    if !perms.contains(TokenPermissionFlags::JOIN_ROOMS) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    }
+
+                    self.respond(
+                        self.client_server
+                            .send(IdentifiedMessage {
+                                user_id,
+                                device_id,
+                                request_id,
+                                msg: Join { room },
+                            })
+                            .into_actor(self),
+                        request_id,
+                        ctx,
+                    )
+                }
+                ClientMessage::CreateRoom => {
+                    if !perms.contains(TokenPermissionFlags::CREATE_ROOMS) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    }
+
+                    self.respond(
+                        self.client_server
+                            .send(IdentifiedMessage {
+                                user_id,
+                                device_id,
+                                request_id,
+                                msg: CreateRoom,
+                            })
+                            .into_actor(self),
+                        request_id,
+                        ctx,
+                    )
+                }
                 ClientMessage::RevokeToken {
                     device_id: to_revoke,
                     password,
                 } => self.revoke_token(to_revoke, password, user_id, device_id, request_id, ctx),
                 ClientMessage::ChangeUsername { new_username } => {
+                    if !perms.contains(TokenPermissionFlags::CHANGE_USERNAME) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    }
+
                     self.change_username(new_username, user_id, request_id, ctx)
                 }
                 ClientMessage::ChangeDisplayName { new_display_name } => {
+                    if !perms.contains(TokenPermissionFlags::CHANGE_DISPLAY_NAME) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    }
+
                     self.change_display_name(new_display_name, user_id, request_id, ctx)
                 }
                 ClientMessage::ChangePassword {
@@ -294,13 +341,13 @@ impl ClientWsSession {
             })
         }
 
-        let fut = self.database_server
+        let fut = self
+            .database_server
             .send(GetToken { device_id })
             .into_actor(self)
             .and_then(move |token_opt, act, _ctx| match token_opt {
-                Ok(Some(token)) => {
-                    fut::Either::A(act
-                        .database_server
+                Ok(Some(token)) => fut::Either::A(
+                    act.database_server
                         .send(GetUserById(token.user_id))
                         .and_then(move |user_opt| match user_opt {
                             Ok(Some(user)) => future::ok(Ok((token, user))),
@@ -314,9 +361,8 @@ impl ClientWsSession {
                                 future::ok(Err(ServerError::Internal))
                             }
                         })
-                        .into_actor(act)
-                    )
-                },
+                        .into_actor(act),
+                ),
                 Ok(None) => fut::Either::B(fut::ok(Err(ServerError::InvalidToken))),
                 Err(l337::Error::Internal(e)) => {
                     eprintln!("Database connection pooling error: {:?}", e);
@@ -352,6 +398,7 @@ impl ClientWsSession {
                         hash_scheme_version,
                         user_id,
                         device_id,
+                        permission_flags,
                         ..
                     } = token;
 
@@ -362,23 +409,23 @@ impl ClientWsSession {
                             auth::verify(login_token.0, token_hash, hash_scheme_version)
                                 .map(move |matches| {
                                     if matches {
-                                        Ok((user_id, device_id))
+                                        Ok((user_id, device_id, permission_flags))
                                     } else {
                                         Err(ServerError::InvalidToken)
                                     }
                                 })
-                                .into_actor(act)
+                                .into_actor(act),
                         )
                     }
-                },
+                }
                 Err(e) => fut::Either::B(fut::ok(Err(e))),
             })
             .and_then(move |res, act, _ctx| match res {
-                Ok((user_id, device_id)) => fut::Either::A(
+                Ok((user_id, device_id, perms)) => fut::Either::A(
                     act.database_server
                         .send(RefreshToken(device_id))
                         .map(move |res| match res {
-                            Ok(true) => Ok((user_id, device_id)),
+                            Ok(true) => Ok((user_id, device_id, perms)),
                             Ok(false) => Err(ServerError::DeviceDoesNotExist),
                             Err(l337::Error::Internal(e)) => {
                                 eprintln!("Database connection pooling error: {:?}", e);
@@ -389,26 +436,26 @@ impl ClientWsSession {
                                 Err(ServerError::Internal)
                             }
                         })
-                        .into_actor(act)
+                        .into_actor(act),
                 ),
                 Err(e) => fut::Either::B(fut::ok(Err(e))),
             })
             .and_then(move |res, act, ctx| match res {
-                Ok((user_id, device_id)) => fut::Either::A(
+                Ok((user_id, device_id, perms)) => fut::Either::A(
                     act.client_server
                         .send(Connect {
                             session: ctx.address(),
                             device_id,
                             user_id,
                         })
-                        .map(move |_| Ok((user_id, device_id)))
+                        .map(move |_| Ok((user_id, device_id, perms)))
                         .into_actor(act),
                 ),
                 Err(e) => fut::Either::B(fut::ok(Err(e))),
             })
             .map(move |res, act, _ctx| match res {
-                Ok((user_id, device_id)) => {
-                    act.state = SessionState::Ready(user_id, device_id);
+                Ok((user_id, device_id, perms)) => {
+                    act.state = SessionState::Ready(user_id, device_id, perms);
                     RequestResponse::user(user_id)
                 }
                 Err(e) => RequestResponse::Error(e),
@@ -550,7 +597,8 @@ impl ClientWsSession {
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
     ) {
-        let fut = self.verify_username_password(username, password)
+        let fut = self
+            .verify_username_password(username, password)
             .into_actor(self)
             .and_then(move |res, act, _ctx| match res {
                 Ok(_) => fut::Either::A(
