@@ -223,12 +223,12 @@ impl Update for Win {
 
                                 text_buffer.insert(
                                     &mut text_buffer.get_end_iter(),
-                                    "Token refreshed",
+                                    "Token refreshed\n",
                                 );
                             } else {
                                 text_buffer.insert(
                                     &mut text_buffer.get_end_iter(),
-                                    "Device ID, username, and password required",
+                                    "Device ID, username, and password required\n",
                                 );
                             }
                         }

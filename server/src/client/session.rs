@@ -327,14 +327,18 @@ impl ClientWsSession {
                     fut::Either::B(fut::ok(Err(ServerError::Internal)))
                 }
             })
-            .map(|res, _act, _ctx| match res {
+            .map(|res, act, _ctx| match res {
                 Ok((token, user)) => {
+                    let token_stale_days = act.config.token_stale_days as i64;
+
                     if user.locked {
                         Err(ServerError::UserLocked)
                     } else if user.banned {
                         Err(ServerError::UserBanned)
                     } else if user.compromised {
                         Err(ServerError::UserCompromised)
+                    } else if (Utc::now() - token.last_used).num_days() > token_stale_days {
+                        Err(ServerError::StaleToken)
                     } else {
                         Ok(token)
                     }
@@ -351,17 +355,21 @@ impl ClientWsSession {
                         ..
                     } = token;
 
-                    fut::Either::A(
-                        auth::verify(login_token.0, token_hash, hash_scheme_version)
-                            .map(move |matches| {
-                                if matches {
-                                    Ok((user_id, device_id))
-                                } else {
-                                    Err(ServerError::InvalidToken)
-                                }
-                            })
-                            .into_actor(act)
-                    )
+                    if login_token.0.len() <= auth::MAX_TOKEN_LENGTH {
+                        fut::Either::B(fut::ok(Err(ServerError::InvalidToken)))
+                    } else {
+                        fut::Either::A(
+                            auth::verify(login_token.0, token_hash, hash_scheme_version)
+                                .map(move |matches| {
+                                    if matches {
+                                        Ok((user_id, device_id))
+                                    } else {
+                                        Err(ServerError::InvalidToken)
+                                    }
+                                })
+                                .into_actor(act)
+                        )
+                    }
                 },
                 Err(e) => fut::Either::B(fut::ok(Err(e))),
             })

@@ -7,6 +7,8 @@ use tokio_threadpool::ThreadPool;
 use unicode_normalization::UnicodeNormalization;
 use vertex_common::{ServerError, UserId};
 
+pub const MAX_TOKEN_LENGTH: usize = 45;
+
 lazy_static! {
     static ref THREAD_POOL: ThreadPool = ThreadPool::new();
 }
