@@ -11,10 +11,10 @@ actix-web-actors = "^1"
 actix-files = "^0.1"
 actix-service = "^0.4"
 serde = "^1"
-serde_cbor = "^0.9"
+serde_cbor = "^0.10"
 dashmap = "^1"
-websocket = "^0.22"
-url = "^1.7"
+websocket = "^0.23"
+url = "^2"
 futures = "^0.1"
 l337 = { git = "https://github.com/OneSignal/L3-37", rev = "369454b7312ef68a60f5d2df30ad2544fec50359" }
 l337-postgres = { git = "https://github.com/OneSignal/L3-37", rev = "369454b7312ef68a60f5d2df30ad2544fec50359" }
@@ -23,8 +23,8 @@ tokio-postgres = { version = "0.4.0-rc.2", features = ["with-uuid-0_7", "with-ch
 uuid = { version = "0.7", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 tokio-threadpool = "^0.1"
-rust-argon2 = "^0.4"
-rand = "0.7.0-pre.1"
+rust-argon2 = "^0.5"
+rand = "^0.7"
 lazy_static = "^1"
 bitflags = "^1"
 base64 = "^0.10"
