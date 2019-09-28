@@ -230,8 +230,9 @@ impl ClientWsSession {
             ),
             SessionState::Ready(user_id, device_id, perms) => match msg {
                 ClientMessage::SendMessage(msg) => {
-                    if !perms.contains(TokenPermissionFlags::SEND_MESSAGES) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    if !perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
+                        return;
                     }
 
                     self.respond(
@@ -249,8 +250,9 @@ impl ClientWsSession {
                 }
                 ClientMessage::EditMessage(edit) => {
                     // TODO when history is implemented, narrow this down according to sender too
-                    if !perms.contains(TokenPermissionFlags::EDIT_ANY_MESSAGES) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    if !perms.has_perms(TokenPermissionFlags::EDIT_ANY_MESSAGES) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
+                        return;
                     }
 
                     self.respond(
@@ -267,8 +269,9 @@ impl ClientWsSession {
                     )
                 }
                 ClientMessage::JoinRoom(room) => {
-                    if !perms.contains(TokenPermissionFlags::JOIN_ROOMS) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    if !perms.has_perms(TokenPermissionFlags::JOIN_ROOMS) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
+                        return;
                     }
 
                     self.respond(
@@ -285,8 +288,9 @@ impl ClientWsSession {
                     )
                 }
                 ClientMessage::CreateRoom => {
-                    if !perms.contains(TokenPermissionFlags::CREATE_ROOMS) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    if !perms.has_perms(TokenPermissionFlags::CREATE_ROOMS) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
+                        return;
                     }
 
                     self.respond(
@@ -307,15 +311,17 @@ impl ClientWsSession {
                     password,
                 } => self.revoke_token(to_revoke, password, user_id, device_id, request_id, ctx),
                 ClientMessage::ChangeUsername { new_username } => {
-                    if !perms.contains(TokenPermissionFlags::CHANGE_USERNAME) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    if !perms.has_perms(TokenPermissionFlags::CHANGE_USERNAME) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
+                        return;
                     }
 
                     self.change_username(new_username, user_id, request_id, ctx)
                 }
                 ClientMessage::ChangeDisplayName { new_display_name } => {
-                    if !perms.contains(TokenPermissionFlags::CHANGE_DISPLAY_NAME) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx)
+                    if !perms.has_perms(TokenPermissionFlags::CHANGE_DISPLAY_NAME) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
+                        return;
                     }
 
                     self.change_display_name(new_display_name, user_id, request_id, ctx)

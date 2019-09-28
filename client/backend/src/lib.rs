@@ -309,7 +309,7 @@ impl Vertex {
         let (device_id, token) = match token {
             Some(token) => token,
             // TODO allow user to configure these parameters?
-            None => self.create_token(username, password, None, TokenPermissionFlags::all())?,
+            None => self.create_token(username, password, None, TokenPermissionFlags::ALL)?,
         };
 
         let request_id = self.request(ClientMessage::Login {
@@ -396,13 +396,29 @@ impl Vertex {
         }
     }
 
-    /// Sends a message, returning the request id if it was sent successfully
-    pub fn send_message(&mut self, msg: String, to_room: RoomId) -> Result<RequestId, Error> {
+    /// Sends a message
+    pub fn send_message(&mut self, msg: String, to_room: RoomId) -> Result<(), Error> {
         if self.logged_in {
-            self.request(ClientMessage::SendMessage(ClientSentMessage {
+            let request_id = self.request(ClientMessage::SendMessage(ClientSentMessage {
                 to_room,
                 content: msg,
-            }))
+            }))?;
+
+            let msg = self.receive_blocking()?;
+            match msg.clone() {
+                ServerMessage::Response {
+                    response,
+                    request_id: response_id,
+                } => {
+                    match response {
+                        // TODO do this more asynchronously @gegy1000
+                        RequestResponse::Success(Success::NoData) if response_id == request_id => { Ok(()) }
+                        RequestResponse::Error(e) => Err(Error::ServerError(e)),
+                        _ => Err(Error::IncorrectServerMessage(msg)),
+                    }
+                }
+                msg @ _ => Err(Error::IncorrectServerMessage(msg)),
+            }
         } else {
             Err(Error::NotLoggedIn)
         }

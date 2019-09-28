@@ -170,24 +170,32 @@ impl Message for Delete {
 bitflags! {
     #[derive(Serialize, Deserialize)]
     pub struct TokenPermissionFlags: i64 {
+        /// All permissions. Should be used for user devices but not for service logins.
+        const ALL = 1 << 0;
         /// Send messages
-        const SEND_MESSAGES = 1 << 0;
+        const SEND_MESSAGES = 1 << 1;
         /// Edit any messages sent by this user
-        const EDIT_ANY_MESSAGES = 1 << 1;
+        const EDIT_ANY_MESSAGES = 1 << 2;
         /// Edit only messages sent by this device/from this token
-        const EDIT_OWN_MESSAGES = 1 << 2;
+        const EDIT_OWN_MESSAGES = 1 << 3;
         /// Delete any messages sent by this user
-        const DELETE_ANY_MESSAGES = 1 << 3;
+        const DELETE_ANY_MESSAGES = 1 << 4;
         /// Edit only messages sent by this device/from this token
-        const DELETE_OWN_MESSAGES = 1 << 4;
+        const DELETE_OWN_MESSAGES = 1 << 5;
         /// Change the user's name
-        const CHANGE_USERNAME = 1 << 5;
+        const CHANGE_USERNAME = 1 << 6;
         /// Change the user's display name
-        const CHANGE_DISPLAY_NAME = 1 << 6;
+        const CHANGE_DISPLAY_NAME = 1 << 7;
         /// Join rooms
-        const JOIN_ROOMS = 1 << 7;
+        const JOIN_ROOMS = 1 << 8;
         /// Create rooms
-        const CREATE_ROOMS = 1 << 8;
+        const CREATE_ROOMS = 1 << 9;
+    }
+}
+
+impl TokenPermissionFlags {
+    pub fn has_perms(&self, perms: TokenPermissionFlags) -> bool {
+        self.contains(TokenPermissionFlags::ALL) || self.contains(perms)
     }
 }
 
