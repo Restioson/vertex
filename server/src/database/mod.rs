@@ -47,18 +47,7 @@ impl DatabaseServer {
             .connection()
             .and_then(|mut conn| {
                 conn.client
-                    .prepare(
-                        "CREATE TABLE IF NOT EXISTS users (
-                            id                   UUID PRIMARY KEY,
-                            username             VARCHAR NOT NULL UNIQUE,
-                            display_name         VARCHAR NOT NULL,
-                            password_hash        VARCHAR NOT NULL,
-                            hash_scheme_version  SMALLINT NOT NULL,
-                            compromised          BOOLEAN NOT NULL,
-                            locked               BOOLEAN NOT NULL,
-                            banned               BOOLEAN NOT NULL
-                        )",
-                    )
+                    .prepare(CREATE_USERS_TABLE)
                     .and_then(move |stmt| conn.client.execute(&stmt, &[]))
                     .map(|_| ())
                     .map_err(|e| panic!("db error: {:?}", e))
@@ -70,18 +59,7 @@ impl DatabaseServer {
             .connection()
             .and_then(|mut conn| {
                 conn.client
-                    .prepare(
-                        "CREATE TABLE IF NOT EXISTS login_tokens (
-                            device_id            UUID PRIMARY KEY,
-                            device_name          VARCHAR,
-                            token_hash           VARCHAR NOT NULL,
-                            hash_scheme_version  SMALLINT NOT NULL,
-                            user_id              UUID NOT NULL,
-                            last_used            TIMESTAMP WITH TIME ZONE NOT NULL,
-                            expiration_date      TIMESTAMP WITH TIME ZONE,
-                            permission_flags     BIGINT NOT NULL
-                        )",
-                    )
+                    .prepare(CREATE_TOKENS_TABLE)
                     .and_then(move |stmt| conn.client.execute(&stmt, &[]))
                     .map(|_| ())
                     .map_err(|e| panic!("db error: {:?}", e))

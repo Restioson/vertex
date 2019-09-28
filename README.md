@@ -36,9 +36,8 @@ The configuration file will be located in the standard configuration directories
 |-------------------------------------------------------------------|--------------------------------------------------------------|-------------------------------------------------------------------|
 | `$XDG_CONFIG_HOME/vertex_server` or `$HOME/.config/vertex_server` | `{FOLDERID_RoamingAppData}\vertex_chat\vertex_server\config` | `$HOME/Library/Preferences/vertex_chat.vertex_server`             |
 
-On Docker, it should be located at `` TODO
-
-
+When using Docker, put the `config.toml` in the `server/docker/` folder. Upon changing this file, please make sure to
+rebuild the docker image with `docker-compose up --build`.
 
 | Key                          | Value                                                                                                                                                                                                                               | Default                            |
 |------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
@@ -53,7 +52,7 @@ On Docker, it should be located at `` TODO
 | `token_stale_days`           | How many days it takes for a token to become stale and require the user to refresh it with their password.                                                                                                                          | 7 (1 week)                         |
 | `token_expiry_days`          | How many days it takes for a token to expire and the device to be deleted from the user's account.                                                                                                                                  | 90 (~3 months)                     |
 
-It is written in TOML.
+It is written in TOML. 
 
 The server must also be provided with a certificate and private key pair. They should be named `cert.pem` and `key.pem`
 respectively, and be contained in the standard data directories:
@@ -63,7 +62,9 @@ respectively, and be contained in the standard data directories:
 | `$XDG_DATA_HOME/vertex_server` or `$HOME/.local/share/vertex_server` | `{FOLDERID_RoamingAppData}\vertex_chat\vertex_server\data` | `$HOME/Library/Application Support/vertex_chat.vertex_server/`          |
 
 The private key must be encrypted, and its passphrase must be passed to the server through the `VERTEX_SERVER_KEY_PASS`
-environment variable.
+environment variable. When using Docker, put the `cert.pem` and `key.pem` in the `server/docker/` folder. Upon changing
+these, please make sure to rebuild the docker image with `docker-compose up --build`. The passphrase is passed through
+the same variable when using Docker too, e.g `VERTEX_SERVER_KEY_PASS=<pass> docker-compose up --build`.
 
 ## Objectives
 
@@ -81,6 +82,10 @@ environment variable.
   - [ ] MLS
   - [ ] KeyTransparency or similar for Authentication Service
 - [ ] Voice chat
+
+## Current State and Usability
+
+Vertex is not usable in its current state, and it is not recommended to install it except for development purposes.
 
 ## Licensing
 

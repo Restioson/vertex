@@ -2,7 +2,6 @@
 !wait-for-postgres.sh
 !server/src/
 !server/Cargo.toml
-!server/db.conf.docker
+!server/docker/
 !common/src/
 !common/Cargo.toml
-

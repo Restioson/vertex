@@ -11,7 +11,7 @@ services:
     labels:
       - "net.gegy1000.vertex=server"
     environment:
-      - XDG_CONFIG_HOME="/vertex/server/config"
+      - VERTEX_SERVER_KEY_PASS=${VERTEX_SERVER_KEY_PASS}
     links:
       - db:db
     depends_on:

@@ -5,6 +5,18 @@ use tokio_postgres::{error::SqlState, row::Row};
 use uuid::Uuid;
 use vertex_common::{ServerError, UserId};
 
+pub(super) const CREATE_USERS_TABLE: &'static str = "
+CREATE TABLE IF NOT EXISTS users (
+    id                   UUID PRIMARY KEY,
+    username             VARCHAR NOT NULL UNIQUE,
+    display_name         VARCHAR NOT NULL,
+    password_hash        VARCHAR NOT NULL,
+    hash_scheme_version  SMALLINT NOT NULL,
+    compromised          BOOLEAN NOT NULL,
+    locked               BOOLEAN NOT NULL,
+    banned               BOOLEAN NOT NULL
+)";
+
 pub struct User {
     pub id: UserId,
     pub username: String,

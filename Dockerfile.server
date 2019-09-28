@@ -22,7 +22,14 @@ FROM debian:stretch
 RUN echo "Installing psql" && apt-get update > /dev/null && apt-get install postgresql-client -y > /dev/null && \
     rm -r /var/lib/apt/lists/* && echo "psql installed"
 COPY --from=build /vertex/server/target/release/vertex_server ./vertex_server
-COPY server/db.conf.docker db.conf
+
+# Copy config files
+COPY server/docker/db.conf db.conf
+COPY server/docker/cert.pem /root/.local/share/vertex_server/cert.pem
+COPY server/docker/key.pem /root/.local/share/vertex_server/key.pem
+# Dummy file is copied to allow for the config.toml to be copied only if it is present
+COPY server/docker/.dummy.ignore server/docker/config.tom[l] /root/.config/vertex_server/
+
 COPY wait-for-postgres.sh .
 EXPOSE 8080/tcp
 CMD ["./wait-for-postgres.sh", "db", "5342", "./vertex_server", "0.0.0.0:8080"]
