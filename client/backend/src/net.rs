@@ -1,17 +1,17 @@
-use websocket::{ClientBuilder, OwnedMessage, WebSocketResult};
 use websocket::client::Url;
+use websocket::{ClientBuilder, OwnedMessage, WebSocketResult};
 
 use super::Error as VertexError;
 use super::Result as VertexResult;
 
-use vertex_common::{ClientboundPayload, ServerboundMessage, ClientboundMessage};
+use vertex_common::{ClientRequest, ClientboundMessage, Response};
 
-use websocket::sender::Writer;
-use websocket::receiver::Reader;
-use websocket::stream::sync::TcpStream;
-use std::thread;
 use std::sync::mpsc;
+use std::thread;
 use std::time::Instant;
+use websocket::receiver::Reader;
+use websocket::sender::Writer;
+use websocket::stream::sync::TcpStream;
 
 pub struct Net {
     send: mpsc::Sender<OwnedMessage>,
@@ -21,8 +21,7 @@ pub struct Net {
 
 impl Net {
     pub fn connect(url: Url) -> WebSocketResult<Net> {
-        let client = ClientBuilder::from_url(&url)
-            .connect_insecure()?;
+        let client = ClientBuilder::from_url(&url).connect_insecure()?;
 
         client.stream_ref().set_read_timeout(None)?;
 
@@ -33,19 +32,15 @@ impl Net {
 
         let (reader, writer) = client.split()?;
 
-        thread::spawn(move || {
-            NetReader {
-                reader,
-                send_in,
-            }.run()
-        });
+        thread::spawn(move || NetReader { reader, send_in }.run());
 
         thread::spawn(move || {
             NetWriter {
                 writer,
                 recv: recv_out,
-                send_in: send_in_writer
-            }.run()
+                send_in: send_in_writer,
+            }
+            .run()
         });
 
         Ok(Net {
@@ -55,13 +50,15 @@ impl Net {
         })
     }
 
-    pub fn send(&mut self, message: ServerboundMessage) {
-        self.send.send(OwnedMessage::Binary(message.into()))
+    pub fn send(&mut self, message: ClientRequest) {
+        self.send
+            .send(OwnedMessage::Binary(message.into()))
             .expect("send channel closed")
     }
 
     pub fn dispatch_heartbeat(&mut self) {
-        self.send.send(OwnedMessage::Ping(Vec::new()))
+        self.send
+            .send(OwnedMessage::Ping(Vec::new()))
             .expect("send channel closed")
     }
 
@@ -70,9 +67,11 @@ impl Net {
             self.last_message = Instant::now();
             match message? {
                 OwnedMessage::Binary(bytes) => {
-                    match serde_cbor::from_slice::<ClientboundPayload>(&bytes) {
-                        Ok(ClientboundPayload::Message(msg)) => return Ok(Some(msg)),
-                        Ok(ClientboundPayload::Error(err)) => return Err(VertexError::ServerError(err)),
+                    match serde_cbor::from_slice::<ClientboundMessage>(&bytes) {
+                        Ok(ClientboundMessage::Response(Response::Error(err))) => {
+                            return Err(VertexError::ServerError(err))
+                        }
+                        Ok(m) => return Ok(Some(m)),
                         Err(_) => return Err(VertexError::MalformedResponse),
                     }
                 }
@@ -84,7 +83,9 @@ impl Net {
     }
 
     #[inline]
-    pub fn last_message(&self) -> Instant { self.last_message }
+    pub fn last_message(&self) -> Instant {
+        self.last_message
+    }
 }
 
 struct NetReader {

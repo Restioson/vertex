@@ -90,7 +90,7 @@ impl ClientServer {
         }
     }
 
-    fn send_to_room(&mut self, room: &RoomId, message: ClientboundPayload, sender: &SessionId) {
+    fn send_to_room(&mut self, room: &RoomId, message: ClientboundMessage, sender: &SessionId) {
         let room = self.rooms.index(room);
         for user_id in room.users.iter() {
             if let Some(sessions) = self.user_to_sessions.get_mut(user_id) {
@@ -158,7 +158,9 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
         let author_id = m.session_id;
         self.send_to_room(
             &m.msg.to_room.clone(),
-            ClientboundPayload::Message(ClientboundMessage::AddMessage(ForwardedMessage::from_message_and_author(m.msg, m.user_id))),
+            ClientboundMessage::Message(ForwardedMessage::from_message_and_author(
+                m.msg, m.user_id,
+            )),
             &author_id,
         );
     }
@@ -188,7 +190,11 @@ impl Handler<IdentifiedMessage<Edit>> for ClientServer {
 
     fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) {
         let room_id = m.msg.room_id;
-        self.send_to_room(&room_id, ClientboundPayload::Message(ClientboundMessage::EditMessage(m.msg)), &m.session_id);
+        self.send_to_room(
+            &room_id,
+            ClientboundMessage::EditMessage(m.msg),
+            &m.session_id,
+        );
     }
 }
 
@@ -197,6 +203,10 @@ impl Handler<IdentifiedMessage<Delete>> for ClientServer {
 
     fn handle(&mut self, m: IdentifiedMessage<Delete>, _: &mut Context<Self>) {
         let room_id = m.msg.room_id;
-        self.send_to_room(&room_id, ClientboundPayload::Message(ClientboundMessage::DeleteMessage(m.msg)), &m.session_id);
+        self.send_to_room(
+            &room_id,
+            ClientboundMessage::DeleteMessage(m.msg),
+            &m.session_id,
+        );
     }
 }

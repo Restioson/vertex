@@ -23,7 +23,7 @@ pub struct RoomId(pub Uuid);
 pub struct MessageId(pub Uuid);
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum ServerboundMessage {
+pub enum ClientRequest {
     Login(Login),
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
@@ -32,13 +32,13 @@ pub enum ServerboundMessage {
     Delete(Delete),
 }
 
-impl Into<Bytes> for ServerboundMessage {
+impl Into<Bytes> for ClientRequest {
     fn into(self) -> Bytes {
         serde_cbor::to_vec(&self).unwrap().into()
     }
 }
 
-impl Into<Vec<u8>> for ServerboundMessage {
+impl Into<Vec<u8>> for ClientRequest {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
@@ -97,26 +97,32 @@ pub struct Login {
 impl ClientMessageType for Login {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ClientboundPayload {
-    Message(ClientboundMessage),
+pub enum ClientboundMessage {
+    Message(ForwardedMessage),
+    EditMessage(Edit),
+    DeleteMessage(Delete),
+    Response(Response),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Response {
+    Success(Success),
     Error(ServerError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ClientboundMessage {
-    AddRoom(RoomId),
-    AddMessage(ForwardedMessage),
-    EditMessage(Edit),
-    DeleteMessage(Delete),
+pub enum Success {
+    Room(RoomId),
+    NoData,
 }
 
-impl Into<Bytes> for ClientboundPayload {
+impl Into<Bytes> for ClientboundMessage {
     fn into(self) -> Bytes {
         serde_cbor::to_vec(&self).unwrap().into()
     }
 }
 
-impl Into<Vec<u8>> for ClientboundPayload {
+impl Into<Vec<u8>> for ClientboundMessage {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
