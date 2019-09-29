@@ -8,8 +8,7 @@ use std::convert::TryFrom;
 use tokio_postgres::Row;
 use vertex_common::{DeviceId, ServerError, TokenPermissionFlags, UserId};
 
-pub(super) const CREATE_TOKENS_TABLE: &'static str =
-"CREATE TABLE IF NOT EXISTS login_tokens (
+pub(super) const CREATE_TOKENS_TABLE: &'static str = "CREATE TABLE IF NOT EXISTS login_tokens (
     device_id            UUID PRIMARY KEY,
     device_name          VARCHAR,
     token_hash           VARCHAR NOT NULL,

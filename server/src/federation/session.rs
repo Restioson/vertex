@@ -4,6 +4,7 @@ use actix::prelude::*;
 use actix_web::web::{Bytes, Data, HttpRequest, HttpResponse, Payload};
 use actix_web_actors::ws::{self, WebsocketContext};
 use futures::Async;
+use log::{error, trace};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Debug,
@@ -96,11 +97,11 @@ impl ServerWsSession {
 
         match msg {
             FederationMessage::Success(s) => {
-                println!("Msg from federated server: {:?}", s);
+                trace!("Msg from federated server: {:?}", s);
                 Some(FederationMessage::Success(Success::NoData))
             }
             FederationMessage::Error(e) => {
-                eprintln!("Error from federated server: {:?}", e);
+                error!("Error from federated server: {:?}", e);
                 None
             }
         }
@@ -128,7 +129,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for IncomingSession {
             ws::Message::Ping(msg) => ctx.pong(&msg),
             ws::Message::Text(text) => {
                 if self.from.is_none() {
-                    println!("url: {}", text); //TODO
+                    trace!("url: {}", text); //TODO
                     self.server.do_send(Connect {
                         url: Url::parse(&text).expect("invalid url"), // TODO <- return err properly
                         session: ServerWsSession::Incoming(ctx.address()),

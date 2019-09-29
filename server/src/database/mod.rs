@@ -1,5 +1,6 @@
 use actix::prelude::*;
 use l337_postgres::PostgresConnectionManager;
+use log::{error, warn};
 use std::fs;
 use std::time::{Duration, Instant};
 use tokio_postgres::NoTls;
@@ -113,8 +114,8 @@ impl DatabaseServer {
             .map(move |_, act, _ctx| {
                 let time_taken = Instant::now().duration_since(begin);
                 if time_taken > act.sweep_interval {
-                    eprintln!(
-                        "Warning! Took {}s to sweep the database for expired tokens, but the interval is {}s!",
+                    warn!(
+                        "Took {}s to sweep the database for expired tokens, but the interval is {}s!",
                         time_taken.as_secs(),
                         act.sweep_interval.as_secs(),
                     );
@@ -138,10 +139,10 @@ impl Actor for DatabaseServer {
 fn handle_error(error: l337::Error<tokio_postgres::Error>) -> ServerError {
     match error {
         l337::Error::Internal(e) => {
-            eprintln!("Database connection pooling error: {:?}", e);
+            error!("Database connection pooling error: {:?}", e);
         }
         l337::Error::External(sql_error) => {
-            eprintln!("Database error: {:?}", sql_error);
+            error!("Database error: {:?}", sql_error);
         }
     }
 

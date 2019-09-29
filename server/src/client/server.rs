@@ -164,7 +164,6 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
         m: IdentifiedMessage<ClientSentMessage>,
         _: &mut Context<Self>,
     ) -> RequestResponse {
-        println!("msg: {:?}", m);
         let author_id = m.device_id;
         self.send_to_room(
             &m.msg.to_room.clone(),
