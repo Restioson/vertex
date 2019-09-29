@@ -15,7 +15,10 @@ use crate::config::Config;
 use actix_web::dev::ServiceResponse;
 use client::{ClientServer, ClientWsSession};
 use database::DatabaseServer;
+use directories::ProjectDirs;
 use federation::{FederationServer, ServerWsSession};
+use log::info;
+use std::fs::OpenOptions;
 
 #[derive(Debug, Message)]
 pub struct SendMessage<T: Debug> {
@@ -60,8 +63,50 @@ fn create_files_directories(config: &Config) {
     }
 }
 
+fn setup_logging() {
+    let dirs = ProjectDirs::from("", "vertex_chat", "vertex_server")
+        .expect("Error getting project directories");
+    let dir = dirs.data_dir().join("logs");
+
+    fs::create_dir_all(&dir).expect(&format!(
+        "Error creating log dirs ({})",
+        dir.to_string_lossy(),
+    ));
+
+    fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{}] [{}] [{}] {}",
+                chrono::Local::now().to_rfc3339(),
+                record.level(),
+                record.target(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stdout())
+        .chain(
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(
+                    dir.join(
+                        chrono::Local::now()
+                            .format("vertex_server_%Y-%m-%d_%H-%M-%S.log")
+                            .to_string(),
+                    ),
+                )
+                .expect("Error opening log file"),
+        )
+        .apply()
+        .expect("Error setting logger settings");
+
+    info!("Logging set up");
+}
+
 fn main() -> std::io::Result<()> {
     println!("Vertex server starting...");
+    setup_logging();
 
     let args = env::args().collect::<Vec<_>>();
     let addr = args.get(1).cloned().unwrap_or("127.0.0.1:8080".to_string());
@@ -101,10 +146,11 @@ fn main() -> std::io::Result<()> {
             .service(web::resource("/client/").route(web::get().to(dispatch_client_ws)))
             .service(web::resource("/server/").route(web::get().to(dispatch_server_ws)))
     })
-    .bind_ssl(addr.clone(), ssl_config)?
+    .bind_ssl(addr.clone(), ssl_config)
+    .expect("Error binding to socket")
     .start();
 
-    println!("Vertex server started on addr {}", addr);
+    info!("Vertex server started on addr {}", addr);
 
     sys.run()
 }

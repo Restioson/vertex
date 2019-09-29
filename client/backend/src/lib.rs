@@ -1,14 +1,14 @@
 use chrono::{DateTime, Utc};
+use native_tls::TlsConnector;
 use std::convert::Into;
 use std::io::{self, Cursor};
 use std::time::{Duration, Instant};
 use url::Url;
 use vertex_common::*;
 use websocket::client::ClientBuilder;
+use websocket::stream::sync::{TcpStream, TlsStream};
 use websocket::sync::Client;
 use websocket::{OwnedMessage, WebSocketError};
-use websocket::stream::sync::{TlsStream, TcpStream};
-use native_tls::TlsConnector;
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
 
@@ -28,11 +28,12 @@ pub struct Vertex {
 impl Vertex {
     pub fn new(config: Config) -> Self {
         let socket = ClientBuilder::from_url(&config.url)
-            .connect_secure(
-                Some(TlsConnector::builder()
+            .connect_secure(Some(
+                TlsConnector::builder()
                     .danger_accept_invalid_certs(true) // TODO needed for self signed certs
-                    .build().expect("Error setting TLS settings"))
-            )
+                    .build()
+                    .expect("Error setting TLS settings"),
+            ))
             .expect("Error connecting to websocket");
 
         socket
@@ -412,7 +413,9 @@ impl Vertex {
                 } => {
                     match response {
                         // TODO do this more asynchronously @gegy1000
-                        RequestResponse::Success(Success::NoData) if response_id == request_id => { Ok(()) }
+                        RequestResponse::Success(Success::NoData) if response_id == request_id => {
+                            Ok(())
+                        }
                         RequestResponse::Error(e) => Err(Error::ServerError(e)),
                         _ => Err(Error::IncorrectServerMessage(msg)),
                     }

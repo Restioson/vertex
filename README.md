@@ -21,15 +21,11 @@ Luckily, you only need to do this once, except *if* the dependencies change *and
 To run the server, do `cargo run` in the `server/` directory. You can pass it a port to run on,
 e.g `cargo run -- 8081`.
 
-To run the client, do `wasm-pack build`
+To run the client, do `cargo run -- --ip <ip of server>` in the `client/gtk` directory.
 
-## Configuration
-
-### Server
+## Server Configuration
 
 The configuration file will be located in the standard configuration directories per platform, or in a similar location:
-
-// TODO test these directories
 
 | Linux                                                             | Windows                                                      | macOS                                                             |
 |-------------------------------------------------------------------|--------------------------------------------------------------|-------------------------------------------------------------------|
@@ -54,16 +50,17 @@ rebuild the docker image with `docker-compose up --build`.
 It is written in TOML. 
 
 The server must also be provided with a certificate and private key pair. They should be named `cert.pem` and `key.pem`
-respectively, and be contained in the standard data directories:
+respectively, and be contained in the standard configuration directories, as is the config file. The private key must be
+encrypted, and its passphrase must be passed to the server through the `VERTEX_SERVER_KEY_PASS` environment variable.
+When using Docker, put the `cert.pem` and `key.pem` in the `server/docker/` folder. Upon changing these, please make
+sure to rebuild the docker image with `docker-compose up --build`. The passphrase is passed through the same variable 
+when using Docker too, e.g `VERTEX_SERVER_KEY_PASS=<pass> docker-compose up --build`.
 
-| Linux                                                                | Windows                                                    | macOS                                                                   |
-|----------------------------------------------------------------------|------------------------------------------------------------|-------------------------------------------------------------------------|
-| `$XDG_DATA_HOME/vertex_server` or `$HOME/.local/share/vertex_server` | `{FOLDERID_RoamingAppData}\vertex_chat\vertex_server\data` | `$HOME/Library/Application Support/vertex_chat.vertex_server/`          |
+The server's log files can be found in the log folder, under the standard data directories:
 
-The private key must be encrypted, and its passphrase must be passed to the server through the `VERTEX_SERVER_KEY_PASS`
-environment variable. When using Docker, put the `cert.pem` and `key.pem` in the `server/docker/` folder. Upon changing
-these, please make sure to rebuild the docker image with `docker-compose up --build`. The passphrase is passed through
-the same variable when using Docker too, e.g `VERTEX_SERVER_KEY_PASS=<pass> docker-compose up --build`.
+| Linux                                                                            | Windows                                                          | macOS                                                               |
+|----------------------------------------------------------------------------------|------------------------------------------------------------------|---------------------------------------------------------------------|
+| `$XDG_DATA_HOME/vertex_server/logs/` or `$HOME/.local/share/vertex_server/logs/` | `{FOLDERID_RoamingAppData}\vertex_chat\vertex_server\data\logs\` | `$HOME/Library/Application Support/vertex_chat.vertex_server/logs/` |
 
 ## Objectives
 

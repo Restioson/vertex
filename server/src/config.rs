@@ -142,16 +142,10 @@ pub fn load_config() -> Config {
 pub fn ssl_config() -> SslAcceptorBuilder {
     let dirs = ProjectDirs::from("", "vertex_chat", "vertex_server")
         .expect("Error getting project directories");
-    let data_dir = dirs.data_dir();
+    let dir = dirs.config_dir();
 
-    fs::create_dir_all(data_dir).expect(&format!(
-        "Error creating data dirs ({})",
-        data_dir.to_string_lossy(),
-    ));
-
-    let cert_path = data_dir.join("cert.pem");
-
-    let key_path = data_dir.join("key.pem");
+    let cert_path = dir.join("cert.pem");
+    let key_path = dir.join("key.pem");
     let key_file = &mut BufReader::new(File::open(key_path.clone()).expect(&format!(
         "Error opening private key file ({})",
         key_path.to_string_lossy()

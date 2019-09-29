@@ -32,4 +32,6 @@ directories = "^2"
 toml = "^0.5"
 unicode-normalization = "^0.1"
 openssl = "^0.10"
+log = "^0.4"
+fern = "^0.5"
 vertex_common = { path = "../common/", features = ["enable-actix"] }

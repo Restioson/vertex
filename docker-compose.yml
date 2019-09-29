@@ -10,6 +10,8 @@ services:
       - "8080"
     labels:
       - "net.gegy1000.vertex=server"
+    volumes:
+      - ./server/docker/logs:/.local/share/vertex_server/logs
     environment:
       - VERTEX_SERVER_KEY_PASS=${VERTEX_SERVER_KEY_PASS}
     links:
@@ -22,7 +24,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - data-volume:/var/lib/db
+      - vertex_postgres_db:/var/lib/db
     healthcheck:
       test: ["CMD", "pg_isready -U postgres"]
       interval: 5s
