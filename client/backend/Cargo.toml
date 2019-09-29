@@ -5,9 +5,11 @@ authors = ["Restioson <restiosondev@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-websocket = "^0.22"
+websocket = "^0.23"
 uuid = { version = "^0.7", features = ["serde", "v4"] }
 serde = "^1"
-serde_cbor = "^0.9"
+serde_cbor = "^0.10"
 vertex_common = { path = "../../common/" }
 url = "^1.7"
+chrono = { version = "^0.4", features = ["serde"] }
+native-tls = "^0.2"

@@ -8,12 +8,15 @@ edition = "2018"
 gio = "^0.6"
 glib = "^0.7"
 url = "^1.7"
-ccl = "^3"
 uuid = { version = "^0.7", features = ["serde", "v4"] }
 gtk = { version = "^0.6", features = ["v3_20"] }
 relm = "^0.16"
 relm-derive = "^0.16"
-clap = "2.33"
+clap = "^2.33"
+keyring = "^0.7"
+serde = "^1"
+serde_derive = "^1"
+serde_json = "^1"
 
 vertex_client_backend = { path = "../backend/" }
 vertex_common = { path = "../../common" }

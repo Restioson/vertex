@@ -1,6 +1,6 @@
 use super::ServerWsSession;
 use actix::prelude::*;
-use ccl::dhashmap::DHashMap;
+use dashmap::DashMap;
 use url::Url;
 
 #[derive(Message)]
@@ -10,13 +10,13 @@ pub struct Connect {
 }
 
 pub struct FederationServer {
-    servers: DHashMap<Url, ServerWsSession>,
+    servers: DashMap<Url, ServerWsSession>,
 }
 
 impl FederationServer {
     pub fn new() -> Self {
         FederationServer {
-            servers: DHashMap::default(),
+            servers: DashMap::default(),
         }
     }
 }

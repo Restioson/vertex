@@ -1,0 +1,1 @@
+This file is required to allow for the Docker script to copy the config.toml only if it exists

@@ -1,0 +1,7 @@
+*
+!wait-for-postgres.sh
+!server/src/
+!server/Cargo.toml
+!server/docker/
+!common/src/
+!common/Cargo.toml
