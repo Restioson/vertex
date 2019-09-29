@@ -1,5 +1,5 @@
 use gtk::prelude::*;
-use gtk::{Window, Entry, Label, ListBox, Separator, Orientation, Grid};
+use gtk::{Entry, Grid, Label, ListBox, Orientation, Separator, Window};
 use relm::{connect, connect_stream, Relm, Update, Widget};
 use relm_derive::*;
 use url::Url;
@@ -56,7 +56,7 @@ impl Win {
                 self.model.room_list.push(room);
                 room_label.show_all();
             }
-            Action::Error(_error) => {}
+            Action::Error(error) => panic!("error: {:?}", error),
         }
     }
 

@@ -7,7 +7,7 @@ use actix_web_actors::ws::{self, WebsocketContext};
 use std::io::Cursor;
 use std::time::Instant;
 use uuid::Uuid;
-use vertex_common::*;
+use vertex_common::{Response, *};
 
 #[derive(Eq, PartialEq)]
 enum SessionState {
@@ -55,9 +55,9 @@ impl ClientWsSession {
         self.state.user_id()
     }
 
-    fn handle_message(&mut self, msg: ServerboundMessage, ctx: &mut WebsocketContext<Self>) {
+    fn handle_message(&mut self, msg: ClientRequest, ctx: &mut WebsocketContext<Self>) {
         let response = match msg {
-            ServerboundMessage::Login(login) => {
+            ClientRequest::Login(login) => {
                 // Register with the server
                 self.client_server.do_send(Connect {
                     session: ctx.address(),
@@ -65,41 +65,39 @@ impl ClientWsSession {
                     login: login.clone(),
                 });
                 self.state = SessionState::Ready(login.id);
-                None
+                Response::Success(Success::NoData)
             }
             _ => self.handle_authenticated_message(msg, ctx),
         };
 
-        if let Some(response) = response {
-            let binary: Bytes = response.into();
-            ctx.binary(binary);
-        }
+        let binary: Bytes = ClientboundMessage::Response(response).into();
+        ctx.binary(binary);
     }
 
     fn handle_authenticated_message(
         &mut self,
-        msg: ServerboundMessage,
+        msg: ClientRequest,
         _ctx: &mut WebsocketContext<Self>,
-    ) -> Option<ClientboundPayload> {
+    ) -> Response {
         match self.state {
-            SessionState::WaitingForLogin => return Some(ClientboundPayload::Error(ServerError::NotLoggedIn)),
+            SessionState::WaitingForLogin => return Response::Error(ServerError::NotLoggedIn),
             SessionState::Ready(id) => {
                 match msg {
-                    ServerboundMessage::SendMessage(msg) => {
+                    ClientRequest::SendMessage(msg) => {
                         self.client_server.do_send(IdentifiedMessage {
                             user_id: id,
                             session_id: self.session_id,
                             msg,
                         });
                     }
-                    ServerboundMessage::EditMessage(edit) => {
+                    ClientRequest::EditMessage(edit) => {
                         self.client_server.do_send(IdentifiedMessage {
                             user_id: id,
                             session_id: self.session_id,
                             msg: edit,
                         });
                     }
-                    ServerboundMessage::JoinRoom(room) => {
+                    ClientRequest::JoinRoom(room) => {
                         // TODO check that it worked lol
                         self.client_server.do_send(IdentifiedMessage {
                             user_id: id,
@@ -107,7 +105,7 @@ impl ClientWsSession {
                             msg: Join { room },
                         });
                     }
-                    ServerboundMessage::CreateRoom => {
+                    ClientRequest::CreateRoom => {
                         let id = self
                             .client_server
                             .send(IdentifiedMessage {
@@ -117,13 +115,14 @@ impl ClientWsSession {
                             })
                             .wait()
                             .unwrap();
-                        return Some(ClientboundPayload::Message(ClientboundMessage::AddRoom(id)));
+                        return Response::Success(Success::Room(id));
                     }
                     _ => unimplemented!(),
                 }
             }
         }
-        None
+
+        Response::Success(Success::NoData)
     }
 
     fn start_heartbeat(&mut self, ctx: &mut WebsocketContext<Self>) {
@@ -165,9 +164,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                 self.heartbeat = Instant::now();
             }
             ws::Message::Text(_) => {
-                let error =
-                    serde_cbor::to_vec(&ClientboundPayload::Error(ServerError::UnexpectedTextFrame))
-                        .unwrap();
+                let error = serde_cbor::to_vec(&ClientboundMessage::Response(Response::Error(
+                    ServerError::UnexpectedTextFrame,
+                )))
+                .unwrap();
                 ctx.binary(error);
             }
             ws::Message::Binary(bin) => {
@@ -175,9 +175,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                 let msg = match serde_cbor::from_reader(&mut bin) {
                     Ok(m) => m,
                     Err(_) => {
-                        let error =
-                            serde_cbor::to_vec(&ClientboundPayload::Error(ServerError::InvalidMessage))
-                                .unwrap();
+                        let error = serde_cbor::to_vec(&ClientboundMessage::Response(
+                            Response::Error(ServerError::InvalidMessage),
+                        ))
+                        .unwrap();
                         return ctx.binary(error);
                     }
                 };
@@ -196,10 +197,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
     }
 }
 
-impl Handler<SendMessage<ClientboundPayload>> for ClientWsSession {
+impl Handler<SendMessage<ClientboundMessage>> for ClientWsSession {
     type Result = ();
 
-    fn handle(&mut self, msg: SendMessage<ClientboundPayload>, ctx: &mut WebsocketContext<Self>) {
+    fn handle(&mut self, msg: SendMessage<ClientboundMessage>, ctx: &mut WebsocketContext<Self>) {
         ctx.binary(msg);
     }
 }
