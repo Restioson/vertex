@@ -18,7 +18,7 @@ use websocket::stream::sync::TcpStream;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum FederationMessage {
-    RequestResponse(RequestResponse),
+    Response(Response),
     Error(Error),
 }
 
@@ -35,7 +35,7 @@ impl Into<Vec<u8>> for FederationMessage {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum RequestResponse {
+pub enum Response {
     NoData,
 }
 
@@ -95,9 +95,9 @@ impl ServerWsSession {
         let msg = serde_cbor::from_reader(cursor).expect("invaild bytes"); // TODO <- return properly
 
         match msg {
-            FederationMessage::RequestResponse(s) => {
+            FederationMessage::Response(s) => {
                 println!("Msg from federated server: {:?}", s);
-                Some(FederationMessage::RequestResponse(RequestResponse::NoData))
+                Some(FederationMessage::Response(Response::NoData))
             }
             FederationMessage::Error(e) => {
                 eprintln!("Error from federated server: {:?}", e);
@@ -133,7 +133,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for IncomingSession {
                         url: Url::parse(&text).expect("invalid url"), // TODO <- return err properly
                         session: ServerWsSession::Incoming(ctx.address()),
                     });
-                    ctx.binary(FederationMessage::RequestResponse(RequestResponse::NoData));
+                    ctx.binary(FederationMessage::Response(Response::NoData));
                 } else {
                     ctx.binary(ServerWsSession::handle_text()) // todo get rid of
                 }

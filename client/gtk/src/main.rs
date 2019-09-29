@@ -1,13 +1,16 @@
+#[macro_use]
+extern crate serde_derive;
+
+use clap::{App, Arg};
 use gtk::prelude::*;
 use gtk::{Entry, Grid, Label, ListBox, Orientation, Separator, Window};
+use keyring::Keyring;
 use relm::{connect, connect_stream, Relm, Update, Widget};
 use relm_derive::*;
 use url::Url;
 use uuid::Uuid;
 use vertex_client_backend::*;
 use vertex_common::*;
-
-use clap::{App, Arg};
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -19,10 +22,11 @@ struct VertexModel {
     vertex: Vertex,
     room: Option<RoomId>,
     room_list: Vec<RoomId>,
+    keyring: Keyring<'static>,
 }
 
 struct VertexArgs {
-    user_id: Option<Uuid>,
+    ip: Option<String>,
 }
 
 #[derive(Msg)]
@@ -32,6 +36,12 @@ enum VertexMsg {
     Lifecycle,
     Heartbeat,
     Quit,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct StoredToken {
+    device_id: DeviceId,
+    token: String,
 }
 
 struct Win {
@@ -56,7 +66,33 @@ impl Win {
                 self.model.room_list.push(room);
                 room_label.show_all();
             }
-            Action::Error(error) => panic!("error: {:?}", error),
+            Action::LoggedIn { device_id, token } => {
+                let stored_token = StoredToken {
+                    device_id,
+                    token: token.0.clone(),
+                };
+                let token_ser = serde_json::to_string(&stored_token)
+                    .expect("Error serializing token");
+                self.model
+                    .keyring
+                    .set_password(&token_ser)
+                    .expect("Error storing token");
+
+                self.push_message("Info", &format!(
+                    "Successfully logged in. Device id: {}.",
+                    device_id.0,
+                ));
+            }
+            Action::UserCreated(id) => self.push_message("Info", &format!("Registered user with id {}.\n", id.0)),
+            Action::TokenRefreshed => self.push_message("Info", "Token refreshed."),
+            Action::TokenRevoked => self.push_message("Info", "Token revoked."),
+            Action::UsernameChanged(_) => self.push_message("Info", "Username changed successfully."),
+            Action::DisplayNameChanged(_) => self.push_message("Info", "Display name changed successfully."),
+            Action::PasswordChanged => self.push_message("Info", "Password changed successfully."),
+            Action::Error(error) => panic!("error: {:?}", error), // TODO handle this? @gegy
+            Action::LoggedOut => {
+                self.push_message("Info", "Logged out -- session invalidated. Please log in again.");
+            }
         }
     }
 
@@ -98,23 +134,21 @@ impl Update for Win {
     type Msg = VertexMsg;
 
     fn model(_relm: &Relm<Win>, args: VertexArgs) -> VertexModel {
+        let ip = args.ip.clone().unwrap_or("127.0.0.1:8080".to_string());
+        println!("Connecting to {}", ip);
+
         let config = Config {
-            url: Url::parse("ws://127.0.0.1:8080/client/").unwrap(),
-            client_id: UserId(args.user_id.unwrap_or_else(|| Uuid::new_v4())),
+            url: Url::parse(&format!("ws://{}/client/", ip)).unwrap(),
         };
 
         let vertex = Vertex::connect(config);
 
-        let mut model = VertexModel {
+        VertexModel {
             vertex,
             room: None,
             room_list: Vec::new(),
-        };
-
-        // TODO: Where should this go?
-        model.vertex.login();
-
-        model
+            keyring: Keyring::new("vertex_client_gtk", ""), // username = ""
+        }
     }
 
     fn update(&mut self, event: VertexMsg) {
@@ -125,30 +159,139 @@ impl Update for Win {
             }
             VertexMsg::SendMessage(msg) => {
                 if msg.starts_with("/") {
-                    let v: Vec<&str> = msg.splitn(2, ' ').collect();
+                    let v: Vec<&str> = msg.split(' ').collect();
 
                     match v[0] {
                         "/join" => {
                             if v.len() == 2 {
                                 let room = RoomId(Uuid::parse_str(v[1]).expect("Invalid room id"));
-                                self.model.vertex.join_room(room);
-                                self.push_message("Info", &format!("Joined room {}", room.0));
-
-                                self.model.room = Some(room);
-                                let txt: &str = &format!("#{}", room.0);
-                                let room_label = Label::new(Some(txt));
-                                room_label.set_xalign(0.0);
-                                self.widgets.rooms.insert(&room_label, -1);
-                                self.model.room_list.push(room);
-                                room_label.show_all();
+                                self.model.vertex.join_room(room).expect("Error joining room");
                             } else {
                                 self.push_message("Info", "Room id required");
                             }
                         }
                         "/createroom" => {
-                            self.model.vertex.create_room();
+                            self.model.vertex.create_room().expect("Error creating room");
                         }
-                        _ => self.push_message("Info", "Unknown command"),
+                        "/login" => {
+                            if v.len() > 2 {
+                                self.push_message("Info", "Logging in...");
+
+                                let token = if v.len() == 5 {
+                                    let id =
+                                        DeviceId(Uuid::parse_str(v[3]).expect("Invalid device id"));
+                                    let token = AuthToken(v[4].to_string());
+
+                                    Some((id, token))
+                                } else if let Ok(token_ser) = self.model.keyring.get_password() {
+                                    let stored_token: StoredToken =
+                                        serde_json::from_str(&token_ser)
+                                            .expect("Error deserializing token");
+
+                                    Some((stored_token.device_id, AuthToken(stored_token.token)))
+                                } else {
+                                    None
+                                };
+
+                                self.model.vertex.login(token, v[1].to_string(), v[2].to_string()).expect("Error logging in");
+                            } else {
+                                self.push_message("Info", "Username and password required");
+                            }
+                        }
+                        "/forgettoken" => {
+                            self.model
+                                .keyring
+                                .delete_password()
+                                .expect("Error forgetting token");
+                            self.push_message("Info", "Token forgot.");
+                        }
+                        "/refreshtoken" => {
+                            if v.len() == 4 {
+                                self.push_message("Info", "Refreshing token...");
+
+                                let dev =
+                                    DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
+
+                                self.model
+                                    .vertex
+                                    .refresh_token(dev, v[2].to_string(), v[3].to_string());
+                            } else {
+                                self.push_message("Info", "Device ID, username, and password required");
+                            }
+                        }
+                        "/register" => {
+                            if v.len() == 3 {
+                                self.push_message("Info", "Registering user...");
+
+                                self
+                                    .model
+                                    .vertex
+                                    .create_user(v[1].to_string(), v[1].to_string(), v[2].to_string());
+                            } else {
+                                self.push_message("Info", "Username and password required");
+                            }
+                        }
+                        "/revokecurrent" => {
+                            self.push_message("Info", "Revoking token...");
+
+                            self.model
+                                .vertex
+                                .revoke_current_token()
+                                .expect("Error revoking current token");
+                        }
+                        "/revoke" => {
+                            if v.len() == 3 {
+                                self.push_message("Info", "Revoking token...");
+
+                                let dev =
+                                    DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
+                                self.model
+                                    .vertex
+                                    .revoke_token(dev, v[2].to_string())
+                                    .expect("Error revoking token");
+                            } else {
+                                self.push_message("Info", "Token and password required.");
+                            }
+                        }
+                        "/changeusername" => {
+                            if v.len() == 2 {
+                                self.push_message("Info", "Changing username...");
+
+                                self.model
+                                    .vertex
+                                    .change_username(v[1].to_string())
+                                    .expect("Error changing username");
+                            } else {
+                                self.push_message("Info", "New username required.");
+                            }
+                        }
+                        "/changedisplayname" => {
+                            if v.len() == 2 {
+                                self.push_message("Info", "Changing display name...");
+
+                                self.model
+                                    .vertex
+                                    .change_display_name(v[1].to_string())
+                                    .expect("Error changing display name");
+                            } else {
+                                self.push_message("Info", "New display name required.");
+                            }
+                        }
+                        "/changepassword" => {
+                            if v.len() == 3 {
+                                self.push_message("Info", "Changing password...");
+
+                                self.model
+                                    .vertex
+                                    .change_password(v[1].to_string(), v[2].to_string())
+                                    .expect("Error changing password");
+                            } else {
+                                self.push_message("Info", "Old password and new password required.");
+                            }
+                        }
+                        _ => {
+                            self.push_message("Info", "Unknown command.");
+                        }
                     }
 
                     return;
@@ -156,9 +299,15 @@ impl Update for Win {
 
                 let room = self.model.room.expect("Not in a room").clone();
 
-                self.model.vertex.send_message(msg.to_string(), room);
+                self.model.vertex.send_message(msg.to_string(), room).expect("Error sending message");
 
-                let name = self.model.vertex.username();
+                let name = self
+                    .model
+                    .vertex
+                    .display_name
+                    .as_ref()
+                    .expect("Not logged in");
+
                 self.push_message(&name, &msg);
             }
             VertexMsg::Lifecycle => {
@@ -235,19 +384,17 @@ fn main() {
         .version(VERSION)
         .author(AUTHORS)
         .arg(
-            Arg::with_name("user-id")
+            Arg::with_name("ip")
                 .short("i")
-                .long("userid")
-                .value_name("UUID")
-                .help("Sets the user id to login with")
+                .long("ip")
+                .value_name("IP")
+                .help("Sets the homeserver to connect to")
                 .takes_value(true),
         )
         .get_matches();
 
-    let user_id = matches
-        .value_of("user-id")
-        .and_then(|id| Uuid::parse_str(id).ok());
+    let ip = matches.value_of("ip").map(|ip| ip.to_string());
+    let args = VertexArgs { ip };
 
-    let args = VertexArgs { user_id };
     Win::run(args).expect("failed to run window");
 }

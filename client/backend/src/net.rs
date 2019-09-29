@@ -1,5 +1,6 @@
 use websocket::client::Url;
 use websocket::{ClientBuilder, OwnedMessage, WebSocketResult};
+use native_tls::TlsConnector;
 
 use super::Error as VertexError;
 use super::Result as VertexResult;
@@ -21,9 +22,13 @@ pub struct Net {
 
 impl Net {
     pub fn connect(url: Url) -> WebSocketResult<Net> {
-        let client = ClientBuilder::from_url(&url).connect_insecure()?;
+        let client = ClientBuilder::from_url(&url).connect_secure(
+            Some(TlsConnector::builder()
+                .danger_accept_invalid_certs(true) // TODO needed for self signed certs
+                .build().expect("Error setting TLS settings"))
+        )?;
 
-        client.stream_ref().set_read_timeout(None)?;
+        client.stream_ref().get_ref().set_read_timeout(None)?;
 
         let (send_in, recv_in) = mpsc::channel();
         let (send_out, recv_out) = mpsc::channel();

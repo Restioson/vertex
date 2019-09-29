@@ -1,13 +1,20 @@
 use actix::prelude::*;
+use actix_web::dev::ServiceRequest;
 use actix_web::web::{Data, Payload};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
-use std::{env, fmt::Debug};
+use std::{env, fmt::Debug, fs};
 
+mod auth;
 mod client;
+mod config;
+mod database;
 mod federation;
 
+use crate::config::Config;
+use actix_web::dev::ServiceResponse;
 use client::{ClientServer, ClientWsSession};
+use database::DatabaseServer;
 use federation::{FederationServer, ServerWsSession};
 
 #[derive(Debug, Message)]
@@ -20,12 +27,15 @@ fn dispatch_client_ws(
     stream: Payload,
     client_server: Data<Addr<ClientServer>>,
     federation_server: Data<Addr<FederationServer>>,
+    db_server: Data<Addr<DatabaseServer>>,
+    config: Data<config::Config>,
 ) -> Result<HttpResponse, Error> {
     let client_server = client_server.get_ref().clone();
     let federation_server = federation_server.get_ref().clone();
+    let db_server = db_server.get_ref().clone();
 
     ws::start(
-        ClientWsSession::new(client_server, federation_server),
+        ClientWsSession::new(client_server, federation_server, db_server, config),
         &request,
         stream,
     )
@@ -39,23 +49,62 @@ fn dispatch_server_ws(
     ServerWsSession::start_incoming(request, srv, stream)
 }
 
-fn main() -> std::io::Result<()> {
-    let args = env::args().collect::<Vec<_>>();
-    let port = args.get(1).cloned().unwrap_or("8080".to_string());
+fn create_files_directories(config: &Config) {
+    let dirs = [config.profile_pictures.clone()];
 
-    let sys = System::new("chat-server");
+    for dir in &dirs {
+        fs::create_dir_all(dir).expect(&format!(
+            "Error creating directory {}",
+            dir.to_string_lossy()
+        ));
+    }
+}
+
+fn main() -> std::io::Result<()> {
+    println!("Vertex server starting...");
+
+    let args = env::args().collect::<Vec<_>>();
+    let addr = args.get(1).cloned().unwrap_or("127.0.0.1:8080".to_string());
+
+    let config = config::load_config();
+    create_files_directories(&config);
+
+    let ssl_config = config::ssl_config();
+
+    let mut sys = System::new("vertex_server");
     let client_server = ClientServer::new().start();
+    let db_server = DatabaseServer::new(&mut sys, client_server.clone(), &config).start();
     let federation_server = FederationServer::new().start();
 
     HttpServer::new(move || {
         App::new()
             .data(client_server.clone())
             .data(federation_server.clone())
+            .data(db_server.clone())
+            .data(config.clone())
+            .service(
+                actix_files::Files::new(
+                    "/images/profile_pictures/",
+                    config.profile_pictures.clone(),
+                )
+                .default_handler(actix_service::service_fn(|req: ServiceRequest| {
+                    req.into_response(HttpResponse::NotFound().finish())
+                }))
+                .files_listing_renderer(|_dir, req| {
+                    Ok(ServiceResponse::new(
+                        req.clone(),
+                        HttpResponse::Forbidden().finish(),
+                    ))
+                })
+                .show_files_listing(),
+            )
             .service(web::resource("/client/").route(web::get().to(dispatch_client_ws)))
             .service(web::resource("/server/").route(web::get().to(dispatch_server_ws)))
     })
-    .bind(format!("127.0.0.1:{}", port))?
+    .bind_ssl(addr.clone(), ssl_config)?
     .start();
+
+    println!("Vertex server started on addr {}", addr);
 
     sys.run()
 }
