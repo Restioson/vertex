@@ -17,6 +17,7 @@ keyring = "^0.7"
 serde = "^1"
 serde_derive = "^1"
 serde_json = "^1"
+futures = "^0.1"
 
 vertex_client_backend = { path = "../backend/" }
 vertex_common = { path = "../../common" }

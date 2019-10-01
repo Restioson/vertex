@@ -4,7 +4,7 @@ use actix::prelude::*;
 use dashmap::DashMap;
 use std::fmt::Debug;
 use uuid::Uuid;
-use vertex_common::{Response, *};
+use vertex_common::{OkResponse, *};
 
 #[derive(Message)]
 pub struct Connect {
@@ -35,7 +35,7 @@ pub struct Join {
 }
 
 impl Message for Join {
-    type Result = Response;
+    type Result = OkResponse;
 }
 
 impl ClientMessageType for Join {}
@@ -46,7 +46,7 @@ pub struct CreateRoom;
 impl ClientMessageType for CreateRoom {}
 
 impl Message for CreateRoom {
-    type Result = Response;
+    type Result = OkResponse;
 }
 
 #[derive(Debug)]
@@ -156,13 +156,13 @@ impl Handler<Disconnect> for ClientServer {
 }
 
 impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
-    type Result = Response;
+    type Result = OkResponse;
 
     fn handle(
         &mut self,
         m: IdentifiedMessage<ClientSentMessage>,
         _: &mut Context<Self>,
-    ) -> Response {
+    ) -> OkResponse {
         println!("msg: {:?}", m);
         let author_id = m.device_id;
         self.send_to_room(
@@ -174,61 +174,61 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
             )),
             &author_id,
         );
-        Response::success()
+        OkResponse::success()
     }
 }
 
 impl Handler<IdentifiedMessage<CreateRoom>> for ClientServer {
-    type Result = Response;
+    type Result = OkResponse;
 
     fn handle(
         &mut self,
         m: IdentifiedMessage<CreateRoom>,
         _: &mut Context<Self>,
-    ) -> Response {
+    ) -> OkResponse {
         let id = RoomId(Uuid::new_v4());
         self.rooms.insert(id, vec![m.user_id]);
-        Response::room(id)
+        OkResponse::room(id)
     }
 }
 
 impl Handler<IdentifiedMessage<Join>> for ClientServer {
-    type Result = Response;
+    type Result = OkResponse;
 
-    fn handle(&mut self, m: IdentifiedMessage<Join>, _: &mut Context<Self>) -> Response {
+    fn handle(&mut self, m: IdentifiedMessage<Join>, _: &mut Context<Self>) -> OkResponse {
         let mut room = match self.rooms.get_mut(&m.msg.room) {
             Some(r) => r,
             // In future, this error can also be used for rooms that the user is banned from/not
             // invited to
-            None => return Response::Error(ServerError::InvalidRoom),
+            None => return OkResponse::Err(ServerError::InvalidRoom),
         };
 
         if !room.contains(&m.user_id) {
             room.push(m.user_id);
-            Response::success()
+            OkResponse::success()
         } else {
-            Response::Error(ServerError::AlreadyInRoom)
+            OkResponse::Err(ServerError::AlreadyInRoom)
         }
     }
 }
 
 impl Handler<IdentifiedMessage<Edit>> for ClientServer {
-    type Result = Response;
+    type Result = OkResponse;
 
-    fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) -> Response {
+    fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) -> OkResponse {
         let room_id = m.msg.room_id;
         self.send_to_room(&room_id, ClientboundMessage::EditMessage(m.msg), &m.device_id);
-        Response::success()
+        OkResponse::success()
     }
 }
 
 impl Handler<IdentifiedMessage<Delete>> for ClientServer {
-    type Result = Response;
+    type Result = OkResponse;
 
-    fn handle(&mut self, m: IdentifiedMessage<Delete>, _: &mut Context<Self>) -> Response {
+    fn handle(&mut self, m: IdentifiedMessage<Delete>, _: &mut Context<Self>) -> OkResponse {
         let room_id = m.msg.room_id;
         self.send_to_room(&room_id, ClientboundMessage::DeleteMessage(m.msg), &m.device_id);
-        Response::success()
+        OkResponse::success()
     }
 }
 

@@ -1,53 +1,43 @@
 use std::convert::Into;
-use url::Url;
 use vertex_common::*;
-use websocket::WebSocketError;
+use websocket::{WebSocketError, OwnedMessage};
 
-use net::Net;
 use std::collections::LinkedList;
 use std::time::Instant;
+use futures::{future, Future, Async};
+use futures::stream::Stream;
 
-mod net;
-
-pub struct Config {
-    pub url: Url,
-}
+pub mod net;
 
 pub struct Vertex {
-    net: Net,
+    net: net::Active,
     pub username: Option<String>,
     pub display_name: Option<String>,
     pub device_id: Option<DeviceId>,
     logged_in: bool,
-    request_callbacks: LinkedList<Box<dyn FnOnce(&mut Vertex, Response) -> Option<Action>>>,
+    action_futures: LinkedList<Box<dyn Future<Item=Option<Action>, Error=Error>>>,
 }
 
 impl Vertex {
-    pub fn connect(config: Config) -> Vertex {
-        let net = Net::connect(config.url).expect("failed to connect");
-
+    pub fn new(net: net::Active) -> Vertex {
         Vertex {
             net,
             username: None,
             display_name: None,
             device_id: None,
             logged_in: false,
-            request_callbacks: LinkedList::new(),
+            action_futures: LinkedList::new(),
         }
     }
 
-    fn add_callback<F: FnOnce(&mut Vertex, Response) -> Option<Action> + 'static>(&mut self, callback: F) {
-        self.request_callbacks.push_back(Box::new(callback))
-    }
-
-    fn add_callback_success<F: FnOnce(&mut Vertex, Success) -> Option<Action> + 'static>(
-        &mut self,
-        callback: F,
-    ) {
-        self.add_callback(|vertex, res| match res {
-            Response::Success(s) => callback(vertex, s),
-            Response::Error(e) => Some(Action::Error(Error::ServerError(e))),
-        })
+    #[inline]
+    pub fn bind<F, M, E>(&mut self, fut: F, map: M)
+        where F: Future<Error=E> + 'static,
+              M: FnOnce(F::Item) -> Option<Action> + 'static,
+              E: Into<Error>,
+    {
+        let fut = fut.map(map).map_err(|e| e.into());
+        self.action_futures.push_back(Box::new(fut));
     }
 
     pub fn handle(&mut self) -> Option<Action> {
@@ -55,20 +45,36 @@ impl Vertex {
             return Some(Action::Error(Error::ServerTimedOut));
         }
 
-        match self.net.recv() {
-            Ok(Some(msg)) => match msg {
-                ClientboundMessage::Response(res) => {
-                    self.request_callbacks
-                        .pop_front()
-                        .expect("No callback for request found")(self, res)
+        // TODO: Can this be cleaned up at all?
+        if let Some(future) = self.action_futures.front_mut() {
+            match future.poll() {
+                Ok(Async::Ready(action)) => {
+                    self.action_futures.pop_front();
+                    if let Some(action) = action {
+                        return Some(action);
+                    }
                 }
-                ClientboundMessage::Message(message) => Some(Action::AddMessage(message.into())),
-                ClientboundMessage::EditMessage(_) => None, // TODO
-                ClientboundMessage::DeleteMessage(_) => None,
-                ClientboundMessage::SessionLoggedOut => Some(Action::LoggedOut),
-            },
-            Err(err) => Some(Action::Error(err)),
-            _ => None,
+                Err(err) => {
+                    self.action_futures.pop_front();
+                    return Some(Action::Error(err));
+                }
+                _ => (),
+            }
+        }
+
+        loop {
+            match self.net.stream().poll() {
+                Ok(Async::Ready(Some(action))) => {
+                    break match action {
+                        ClientboundAction::Message(message) => Some(Action::AddMessage(message.into())),
+                        ClientboundAction::EditMessage(_) => None, // TODO
+                        ClientboundAction::DeleteMessage(_) => None,
+                        ClientboundAction::SessionLoggedOut => Some(Action::LoggedOut),
+                    };
+                }
+                Ok(_) => break None,
+                Err(err) => break Some(Action::Error(err)),
+            }
         }
     }
 
@@ -82,133 +88,120 @@ impl Vertex {
             return Err(Error::AlreadyLoggedIn);
         }
 
-        let username_cloned = username.clone();
-        let make_login_request = |vertex: &mut Vertex, device_id, token: AuthToken| {
-            vertex.net.send(ClientRequest::Login { device_id, token: token.clone() });
-            vertex.add_callback_success(move |vertex, res| {
-                match res {
-                    Success::NoData => {
-                        vertex.username = Some(username_cloned.clone());
-                        vertex.display_name = Some(username_cloned); // TODO configure this
-                        vertex.device_id = Some(device_id);
-                        vertex.logged_in = true;
-
-                        Some(Action::LoggedIn { device_id, token })
-                    },
-                    _ => Some(Action::Error(Error::InvalidServerMessage)),
-                }
-            });
-        };
-
-        match token {
+        let response = match token {
             Some((device_id, token)) => make_login_request(self, device_id, token),
             None => {
                 // TODO allow user to configure these parameters?
-                self.net.send(ClientRequest::CreateToken {
+                let response = self.net.request(ServerboundRequest::CreateToken {
                     username,
                     password,
                     device_name: None,
                     expiration_date: None,
-                    permission_flags: TokenPermissionFlags::ALL
-                });
-
-                self.add_callback_success(|vertex, res| {
-                    match res {
-                        Success::Token { device_id, token } => {
-                            make_login_request(vertex, device_id, token);
-                            None
-                        },
-                        _ => Some(Action::Error(Error::InvalidServerMessage)),
+                    permission_flags: TokenPermissionFlags::ALL,
+                }).and_then(|response| match response {
+                    OkResponse::Token { device_id, token } => {
+                        // TODO: Clone `net` so we can call it from in here
+                        //   it has other fields than the channels so we might need to do some extra work there
+                        make_login_request(vertex, device_id, token);
+                        None
                     }
-                })
-            },
+                    _ => Some(Action::Error(Error::UnexpectedResponse)),
+                });
+            }
         };
+
+        self.bind(response, |response| {
+            match response {
+                OkResponse::NoData => {
+                    vertex.username = Some(username_cloned.clone());
+                    vertex.display_name = Some(username_cloned); // TODO configure this
+                    vertex.device_id = Some(device_id);
+                    vertex.logged_in = true;
+
+                    Some(Action::LoggedIn { device_id, token })
+                }
+                _ => Some(Action::Error(Error::UnexpectedResponse)),
+            }
+        });
 
         Ok(())
     }
 
     pub fn create_user(&mut self, username: String, display_name: String, password: String) {
-        self.net.send(ClientRequest::CreateUser {
+        let response = self.net.request(ServerboundRequest::CreateUser {
             username,
             display_name,
             password,
         });
-        self.add_callback_success(|_, success| match success {
-            Success::User(id) => Some(Action::UserCreated(id)),
-            _ => Some(Action::Error(Error::InvalidServerMessage)),
-        })
+
+        self.bind(response, |response| match response {
+            OkResponse::User(id) => Some(Action::UserCreated(id)),
+            _ => Some(Action::Error(Error::UnexpectedResponse)),
+        });
     }
 
-    pub fn change_username(&mut self, new_username: String) -> Result<()> {
+    pub fn change_username(&mut self, new_username: String) {
         if !self.logged_in {
             return Err(Error::NotLoggedIn);
         }
 
-        self.net.send(ClientRequest::ChangeUsername { new_username: new_username.clone() });
-        self.add_callback_success(|_, success| match success {
-            Success::NoData => Some(Action::UsernameChanged(new_username)),
-            _ => Some(Action::Error(Error::InvalidServerMessage)),
+        let response = self.net.request(ServerboundRequest::ChangeUsername { new_username: new_username.clone() });
+        self.bind(response, |response| match response {
+            OkResponse::NoData => Some(Action::UsernameChanged(new_username)),
+            _ => Some(Action::Error(Error::UnexpectedResponse)),
         });
-        Ok(())
     }
 
-    pub fn change_display_name(&mut self, new_display_name: String) -> Result<()> {
+    pub fn change_display_name(&mut self, new_display_name: String) {
         if !self.logged_in {
             return Err(Error::NotLoggedIn);
         }
 
-        self.net.send(ClientRequest::ChangeDisplayName { new_display_name: new_display_name.clone() });
-        self.add_callback_success(|vertex, success| match success {
-            Success::NoData => {
-                vertex.display_name = Some(new_display_name.clone());
-                Some(Action::DisplayNameChanged(new_display_name))
-            },
-            _ => Some(Action::Error(Error::InvalidServerMessage)),
+        let response = self.net.request(ServerboundRequest::ChangeDisplayName { new_display_name: new_display_name.clone() });
+        self.bind(response, |response| match response {
+            OkResponse::NoData => Some(Action::DisplayNameChanged(new_display_name)),
+            _ => Some(Action::Error(Error::UnexpectedResponse)),
         });
-        Ok(())
     }
 
-    pub fn change_password(&mut self, old_password: String, new_password: String) -> Result<()> {
+    pub fn change_password(&mut self, old_password: String, new_password: String) {
         if !self.logged_in {
             return Err(Error::NotLoggedIn);
         }
 
-        self.net.send(ClientRequest::ChangePassword { old_password, new_password });
-        self.add_callback_success(|_, success| match success {
-            Success::NoData => Some(Action::PasswordChanged),
-            _ => Some(Action::Error(Error::InvalidServerMessage)),
+        let response = self.net.request(ServerboundRequest::ChangePassword { old_password, new_password });
+        self.bind(response, |response| match response {
+            OkResponse::NoData => Some(Action::PasswordChanged),
+            _ => Some(Action::Error(Error::UnexpectedResponse)),
         });
-        Ok(())
     }
 
     pub fn refresh_token(&mut self, to_refresh: DeviceId, username: String, password: String) {
-        self.net.send(ClientRequest::RefreshToken { device_id: to_refresh, username, password });
-        self.add_callback_success(|_, success| match success {
-            Success::NoData => Some(Action::TokenRefreshed),
-            _ => Some(Action::Error(Error::InvalidServerMessage)),
-        })
+        let response = self.net.request(ServerboundRequest::RefreshToken { device_id: to_refresh, username, password });
+        self.bind(response, |response| match response {
+            OkResponse::NoData => Some(Action::TokenRefreshed),
+            _ => Some(Action::Error(Error::UnexpectedResponse)),
+        });
     }
 
-    pub fn revoke_token(&mut self, to_revoke: DeviceId, password: String) -> Result<()> {
+    pub fn revoke_token(&mut self, to_revoke: DeviceId, password: String) {
         if !self.logged_in {
             return Err(Error::NotLoggedIn);
         }
 
-        self.net.send(ClientRequest::RevokeToken { device_id: to_revoke, password: Some(password) });
-        self.add_callback_success(|_, success| match success {
-            Success::NoData => Some(Action::TokenRevoked),
-            _ => Some(Action::Error(Error::InvalidServerMessage)),
+        let response = self.net.request(ServerboundRequest::RevokeToken { device_id: to_revoke, password: Some(password) });
+        self.bind(response, |response| match response {
+            OkResponse::NoData => Some(Action::TokenRevoked),
+            _ => Some(Action::Error(Error::UnexpectedResponse)),
         });
-
-        Ok(())
     }
 
     pub fn revoke_current_token(&mut self) -> Result<()> {
         if let Some(device_id) = self.device_id {
-            self.net.send(ClientRequest::RevokeToken { device_id, password: None });
-            self.add_callback_success(|_, success| match success {
-                Success::NoData => Some(Action::TokenRevoked),
-                _ => Some(Action::Error(Error::InvalidServerMessage)),
+            let response = self.net.request(ServerboundRequest::RevokeToken { device_id, password: None });
+            self.bind(response, |response| match response {
+                OkResponse::NoData => Some(Action::TokenRevoked),
+                _ => Some(Action::Error(Error::UnexpectedResponse)),
             });
             Ok(())
         } else {
@@ -216,41 +209,41 @@ impl Vertex {
         }
     }
 
-    pub fn create_room(&mut self) -> Result<()> {
+    pub fn create_room(&mut self) {
         if !self.logged_in {
             return Err(Error::NotLoggedIn);
         }
 
-        self.net.send(ClientRequest::CreateRoom);
-        self.add_callback_success(|_, success| match success {
-            Success::Room(id) => Some(Action::AddRoom(id)),
-            _ => Some(Action::Error(Error::InvalidServerMessage)),
+        let response = self.net.request(ServerboundRequest::CreateRoom);
+        self.bind(response, |response| {
+            match response {
+                OkResponse::Room(id) => Some(Action::AddRoom(id)),
+                _ => Some(Action::Error(Error::UnexpectedResponse)),
+            }
         });
-        Ok(())
     }
 
-    pub fn join_room(&mut self, room: RoomId) -> Result<()> {
+    pub fn join_room(&mut self, room: RoomId) {
         if !self.logged_in {
             return Err(Error::NotLoggedIn);
         }
 
-        self.net.send(ClientRequest::JoinRoom(room));
-        self.add_callback_success(|_vertex, _res| None);
-        Ok(())
+        let response = self.net.request(ServerboundRequest::JoinRoom(room));
+        self.bind(response, |_| None);
     }
 
     /// Sends a message, returning the request id if it was sent successfully
-    pub fn send_message(&mut self, content: String, to_room: RoomId) -> Result<()> {
+    pub fn send_message(&mut self, content: String, to_room: RoomId) {
         if !self.logged_in {
-            return Err(Error::NotLoggedIn);
+            return future::err(Error::NotLoggedIn);
         }
 
-        self.net.send(ClientRequest::SendMessage(ClientSentMessage {
+        let response = self.net.request(ServerboundRequest::SendMessage(ClientSentMessage {
             to_room,
             content,
         }));
-        self.add_callback_success(|_vertex, _res| None);
-        Ok(())
+
+        self.bind(response, |_| None);
     }
 
     /// Should be called once every `HEARTBEAT_INTERVAL`
@@ -304,21 +297,22 @@ pub enum Error {
     AlreadyLoggedIn,
     WebSocketError(WebSocketError),
     /// A message from the server that doesn't deserialize correctly
-    InvalidServerMessage,
+    UnexpectedResponse,
     ServerError(ServerError),
     ServerTimedOut,
     ServerClosed,
     MalformedResponse,
-}
-
-impl From<WebSocketError> for Error {
-    fn from(err: WebSocketError) -> Self {
-        Error::WebSocketError(err)
-    }
+    ChannelClosed,
 }
 
 impl From<ServerError> for Error {
     fn from(err: ServerError) -> Self {
         Error::ServerError(err)
+    }
+}
+
+impl From<WebSocketError> for Error {
+    fn from(err: WebSocketError) -> Self {
+        Error::WebSocketError(err)
     }
 }

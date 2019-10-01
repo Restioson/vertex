@@ -13,3 +13,6 @@ vertex_common = { path = "../../common/" }
 url = "^1.7"
 chrono = { version = "^0.4", features = ["serde"] }
 native-tls = "^0.2"
+tokio-tls = "0.2.1"
+tokio-tcp = "0.1.3"
+futures = "^0.1"

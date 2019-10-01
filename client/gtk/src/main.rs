@@ -112,7 +112,6 @@ impl Win {
         let grid = Grid::new();
         grid.insert_column(0);
         grid.insert_column(1);
-        grid.insert_column(2);
 
         grid.set_column_spacing(10);
 
@@ -137,11 +136,9 @@ impl Update for Win {
         let ip = args.ip.clone().unwrap_or("127.0.0.1:8080".to_string());
         println!("Connecting to {}", ip);
 
-        let config = Config {
-            url: Url::parse(&format!("ws://{}/client/", ip)).unwrap(),
-        };
+        let net = net::connect(Url::parse(&format!("ws://{}/client/", ip)).unwrap());
 
-        let vertex = Vertex::connect(config);
+        let vertex = Vertex::new(net);
 
         VertexModel {
             vertex,

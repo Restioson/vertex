@@ -29,20 +29,29 @@ pub struct DeviceId(pub Uuid);
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct AuthToken(pub String);
 
-impl Into<Bytes> for ClientRequest {
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct RequestId(pub u64);
+
+impl Into<Bytes> for ServerboundRequest {
     fn into(self) -> Bytes {
         serde_cbor::to_vec(&self).unwrap().into()
     }
 }
 
-impl Into<Vec<u8>> for ClientRequest {
+impl Into<Vec<u8>> for ServerboundRequest {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ClientRequest {
+pub struct ServerboundMessage {
+    pub id: RequestId,
+    pub request: ServerboundRequest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ServerboundRequest {
     Login {
         device_id: DeviceId,
         token: AuthToken,
@@ -96,7 +105,7 @@ impl ClientMessageType for ClientSentMessage {}
 
 #[cfg(feature = "enable-actix")]
 impl Message for ClientSentMessage {
-    type Result = Response;
+    type Result = OkResponse;
 }
 
 #[cfg_attr(feature = "enable-actix", derive(Message))]
@@ -133,7 +142,7 @@ impl ClientMessageType for Edit {}
 
 #[cfg(feature = "enable-actix")]
 impl Message for Edit {
-    type Result = Response;
+    type Result = OkResponse;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,7 +155,7 @@ impl ClientMessageType for Delete {}
 
 #[cfg(feature = "enable-actix")]
 impl Message for Delete {
-    type Result = Response;
+    type Result = OkResponse;
 }
 
 bitflags! {
@@ -183,11 +192,19 @@ impl TokenPermissionFlags {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientboundMessage {
+    Action(ClientboundAction),
+    Response {
+        id: RequestId,
+        result: Result<OkResponse, ServerError>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ClientboundAction {
     Message(ForwardedMessage),
     EditMessage(Edit),
     DeleteMessage(Delete),
-    Response(Response),
-    SessionLoggedOut
+    SessionLoggedOut,
 }
 
 impl Into<Bytes> for ClientboundMessage {
@@ -203,31 +220,22 @@ impl Into<Vec<u8>> for ClientboundMessage {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Response {
-    Success(Success),
-    Error(ServerError),
-}
-
-impl Response {
-    pub fn success() -> Self {
-        Response::Success(Success::NoData)
-    }
-    pub fn room(id: RoomId) -> Self {
-        Response::Success(Success::Room(id))
-    }
-    pub fn user(id: UserId) -> Self {
-        Response::Success(Success::User(id))
-    }
-    pub fn token(device_id: DeviceId, token: AuthToken) -> Self {
-        Response::Success(Success::Token { device_id, token })
-    }
+pub enum OkResponse {
+    NoData,
+    Room(RoomId),
+    MessageSent(MessageId),
+    User(UserId),
+    Token {
+        device_id: DeviceId,
+        token: AuthToken,
+    },
 }
 
 #[cfg(feature = "enable-actix")]
-impl<A, M> actix::dev::MessageResponse<A, M> for Response
-where
-    A: actix::Actor,
-    M: actix::Message<Result = Self>,
+impl<A, M> actix::dev::MessageResponse<A, M> for OkResponse
+    where
+        A: actix::Actor,
+        M: actix::Message<Result=Self>,
 {
     fn handle<R: actix::dev::ResponseChannel<M>>(self, _ctx: &mut A::Context, tx: Option<R>) {
         if let Some(tx) = tx {
@@ -259,18 +267,6 @@ pub enum ServerError {
     AccessDenied,
     InvalidRoom,
     AlreadyInRoom,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Success {
-    NoData,
-    Room (RoomId),
-    MessageSent(MessageId),
-    User(UserId),
-    Token {
-        device_id: DeviceId,
-        token: AuthToken,
-    },
 }
 
 #[macro_export]
