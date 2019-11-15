@@ -8,11 +8,15 @@ use vertex_common::{DeviceId, ServerError, UserId};
 
 mod token;
 mod user;
+mod rooms;
+mod room_membership;
 
 use crate::client::{ClientServer, LogoutSessions};
 use crate::config::Config;
 pub use token::*;
 pub use user::*;
+pub use rooms::*;
+pub use room_membership::*;
 
 pub struct DatabaseServer {
     pool: l337::Pool<PostgresConnectionManager<NoTls>>,
@@ -51,7 +55,7 @@ impl DatabaseServer {
                     .prepare(CREATE_USERS_TABLE)
                     .and_then(move |stmt| conn.client.execute(&stmt, &[]))
                     .map(|_| ())
-                    .map_err(|e| panic!("db error: {:?}", e))
+                    .map_err(|e| panic!("db error: {:#?}", e))
             })
             .map_err(|e| panic!("db connection pool error: {:?}", e));
 
@@ -63,11 +67,35 @@ impl DatabaseServer {
                     .prepare(CREATE_TOKENS_TABLE)
                     .and_then(move |stmt| conn.client.execute(&stmt, &[]))
                     .map(|_| ())
-                    .map_err(|e| panic!("db error: {:?}", e))
+                    .map_err(|e| panic!("db error: {:#?}", e))
             })
             .map_err(|e| panic!("db connection pool error: {:?}", e));
 
-        users.and_then(|_| login_tokens)
+        let rooms = self
+            .pool
+            .connection()
+            .and_then(|mut conn| {
+                conn.client
+                    .prepare(CREATE_ROOMS_TABLE)
+                    .and_then(move |stmt| conn.client.execute(&stmt, &[]))
+                    .map(|_| ())
+                    .map_err(|e| panic!("db error: {:#?}", e))
+            })
+            .map_err(|e| panic!("db connection pool error: {:?}", e));
+
+        let room_membership = self
+            .pool
+            .connection()
+            .and_then(|mut conn| {
+                conn.client
+                    .prepare(CREATE_ROOM_MEMBERSHIP_TABLE)
+                    .and_then(move |stmt| conn.client.execute(&stmt, &[]))
+                    .map(|_| ())
+                    .map_err(|e| panic!("db error: {:#?}", e))
+            })
+            .map_err(|e| panic!("db connection pool error: {:?}", e));
+
+        users.and_then(|_| login_tokens).and_then(|_| rooms).and_then(|_| room_membership)
     }
 
     fn expired_tokens(
@@ -108,7 +136,7 @@ impl DatabaseServer {
 
         self.expired_tokens(self.token_expiry_days)
             .collect()
-            .map_err(|e| panic!("db error: {:?}", e))
+            .map_err(|e| panic!("db error: {:#?}", e))
             .into_actor(self)
             .map(move |list, act, _ctx| act.client_server.do_send(LogoutSessions { list }))
             .map(move |_, act, _ctx| {
@@ -139,10 +167,10 @@ impl Actor for DatabaseServer {
 fn handle_error(error: l337::Error<tokio_postgres::Error>) -> ServerError {
     match error {
         l337::Error::Internal(e) => {
-            error!("Database connection pooling error: {:?}", e);
+            error!("Database connection pooling error: {:#?}", e);
         }
         l337::Error::External(sql_error) => {
-            error!("Database error: {:?}", sql_error);
+            error!("Database error: {:#?}", sql_error);
         }
     }
 

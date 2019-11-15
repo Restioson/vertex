@@ -8,12 +8,13 @@ use std::convert::TryFrom;
 use tokio_postgres::Row;
 use vertex_common::{DeviceId, ServerError, TokenPermissionFlags, UserId};
 
-pub(super) const CREATE_TOKENS_TABLE: &'static str = "CREATE TABLE IF NOT EXISTS login_tokens (
+pub(super) const CREATE_TOKENS_TABLE: &'static str = "
+CREATE TABLE IF NOT EXISTS login_tokens (
     device_id            UUID PRIMARY KEY,
     device_name          VARCHAR,
     token_hash           VARCHAR NOT NULL,
     hash_scheme_version  SMALLINT NOT NULL,
-    user_id              UUID NOT NULL,
+    user_id              UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     last_used            TIMESTAMP WITH TIME ZONE NOT NULL,
     expiration_date      TIMESTAMP WITH TIME ZONE,
     permission_flags     BIGINT NOT NULL
@@ -91,9 +92,9 @@ impl Handler<GetToken> for DatabaseServer {
                         .and_then(move |stmt| {
                             conn.client
                                 .query(&stmt, &[&get.device_id.0])
-                                .map(|row| Token::try_from(row))
+                                .map(|token| Token::try_from(token))
                                 .into_future()
-                                .map(|(user, _stream)| user)
+                                .map(|(token, _stream)| token)
                                 .map_err(|(err, _stream)| err)
                         })
                         .and_then(|x| x.transpose()) // Fut<Opt<Res<Usr, Err>>, Err> -> Fut<Opt<Usr>, Err>
@@ -116,17 +117,17 @@ impl Handler<CreateToken> for DatabaseServer {
                     conn.client
                         .prepare(
                             "INSERT INTO login_tokens
-                        (
-                            device_id,
-                            device_name,
-                            token_hash,
-                            hash_scheme_version,
-                            user_id,
-                            last_used,
-                            expiration_date,
-                            permission_flags
-                        )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                            (
+                                device_id,
+                                device_name,
+                                token_hash,
+                                hash_scheme_version,
+                                user_id,
+                                last_used,
+                                expiration_date,
+                                permission_flags
+                            )
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                         )
                         .and_then(move |stmt| {
                             conn.client.execute(

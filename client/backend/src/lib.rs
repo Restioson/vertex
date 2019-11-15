@@ -343,12 +343,12 @@ impl Vertex {
         }
     }
 
-    pub fn create_room(&mut self) -> Result<RoomId, Error> {
+    pub fn create_room(&mut self, name: String) -> Result<RoomId, Error> {
         if !self.logged_in {
             return Err(Error::NotLoggedIn);
         }
 
-        let request_id = self.request(ClientMessage::CreateRoom)?;
+        let request_id = self.request(ClientMessage::CreateRoom { name })?;
 
         let msg = self.receive_blocking()?;
         match msg.clone() {

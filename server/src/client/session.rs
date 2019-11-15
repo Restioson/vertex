@@ -274,37 +274,15 @@ impl ClientWsSession {
                         return;
                     }
 
-                    self.respond(
-                        self.client_server
-                            .send(IdentifiedMessage {
-                                user_id,
-                                device_id,
-                                request_id,
-                                msg: Join { room },
-                            })
-                            .into_actor(self),
-                        request_id,
-                        ctx,
-                    )
+                    self.join_room(user_id, device_id, room, request_id, ctx)
                 }
-                ClientMessage::CreateRoom => {
+                ClientMessage::CreateRoom { name } => {
                     if !perms.has_perms(TokenPermissionFlags::CREATE_ROOMS) {
                         self.respond_error(ServerError::AccessDenied, request_id, ctx);
                         return;
                     }
 
-                    self.respond(
-                        self.client_server
-                            .send(IdentifiedMessage {
-                                user_id,
-                                device_id,
-                                request_id,
-                                msg: CreateRoom,
-                            })
-                            .into_actor(self),
-                        request_id,
-                        ctx,
-                    )
+                    self.create_room(user_id, device_id, name,  request_id, ctx);
                 }
                 ClientMessage::RevokeToken {
                     device_id: to_revoke,
@@ -774,6 +752,60 @@ impl ClientWsSession {
                 ),
                 response => fut::Either::B(fut::ok(response)),
             });
+
+        self.respond(fut, request_id, ctx)
+    }
+
+    fn create_room(&mut self, user_id: UserId, device_id: DeviceId, room_name: String, request_id: RequestId, ctx: &mut WebsocketContext<Self>) {
+        let fut = self.database_server.send(CreateRoom { name: room_name })
+            .into_actor(self)
+            .and_then(move |res, act, _ctx| {
+                match res {
+                    Ok(room) => {
+                        let room_id = room.id;
+                        fut::Either::A(act.client_server
+                            .send(IdentifiedMessage {
+                                user_id,
+                                device_id,
+                                request_id,
+                                msg: CreateRoomActor(room),
+                            })
+                            .map(move |_| Ok(room_id))
+                            .into_actor(act))
+                    }
+                    Err(e) => fut::Either::B(fut::ok(Err(e))),
+                }
+            })
+            .map(move |res, _act, _ctx| match res {
+                Ok(room_id) => RequestResponse::room(room_id),
+                Err(e) => RequestResponse::Error(e),
+            });
+
+        self.respond(fut, request_id, ctx)
+    }
+
+    fn join_room(&mut self, user_id: UserId, device_id: DeviceId, room: RoomId, request_id: RequestId, ctx: &mut WebsocketContext<Self>) {
+        let fut = self.database_server.send(AddToRoom { room, user: user_id })
+        .into_actor(self)
+        .and_then(move |res, act, _ctx| {
+            match res {
+                Ok(()) => {
+                    fut::Either::A(act.client_server
+                        .send(IdentifiedMessage {
+                            user_id,
+                            device_id,
+                            request_id,
+                            msg: Join { room },
+                        })
+                        .into_actor(act))
+                }
+                Err(e) => fut::Either::B(fut::ok(Err(e))),
+            }
+        })
+        .map(move |res, _act, _ctx| match res {
+            Ok(_) => RequestResponse::success(),
+            Err(e) => RequestResponse::Error(e),
+        });
 
         self.respond(fut, request_id, ctx)
     }

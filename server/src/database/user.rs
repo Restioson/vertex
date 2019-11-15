@@ -125,18 +125,18 @@ impl Handler<CreateUser> for DatabaseServer {
                     conn.client
                         .prepare(
                             "INSERT INTO users
-                        (
-                            id,
-                            username,
-                            display_name,
-                            password_hash,
-                            hash_scheme_version,
-                            compromised,
-                            locked,
-                            banned
-                        )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    ON CONFLICT DO NOTHING",
+                            (
+                                id,
+                                username,
+                                display_name,
+                                password_hash,
+                                hash_scheme_version,
+                                compromised,
+                                locked,
+                                banned
+                            )
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                            ON CONFLICT DO NOTHING",
                         )
                         .and_then(move |stmt| {
                             conn.client.execute(
@@ -176,7 +176,7 @@ impl Handler<GetUserById> for DatabaseServer {
                         .and_then(move |stmt| {
                             conn.client
                                 .query(&stmt, &[&id.0])
-                                .map(|row| User::try_from(row))
+                                .map(|user| User::try_from(user))
                                 .into_future()
                                 .map(|(user, _stream)| user)
                                 .map_err(|(err, _stream)| err)
@@ -204,7 +204,7 @@ impl Handler<GetUserByName> for DatabaseServer {
                         .and_then(move |stmt| {
                             conn.client
                                 .query(&stmt, &[&name])
-                                .map(|row| User::try_from(row))
+                                .map(|user| User::try_from(user))
                                 .into_future()
                                 .map(|(user, _stream)| user)
                                 .map_err(|(err, _stream)| err)

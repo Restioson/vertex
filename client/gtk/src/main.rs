@@ -128,25 +128,30 @@ impl Update for Win {
                             }
                         }
                         "/createroom" => {
-                            text_buffer
-                                .insert(&mut text_buffer.get_end_iter(), "Creating room...\n");
+                            if v.len() == 2 {
+                                text_buffer
+                                    .insert(&mut text_buffer.get_end_iter(), "Creating room...\n");
 
-                            let room = self
-                                .model
-                                .vertex
-                                .create_room()
-                                .expect("Error creating room");
-                            text_buffer.insert(
-                                &mut text_buffer.get_end_iter(),
-                                &format!("Joined room {}\n", room.0),
-                            );
+                                let room = self
+                                    .model
+                                    .vertex
+                                    .create_room(v[1].to_string())
+                                    .expect("Error creating room");
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    &format!("Joined room {}\n", room.0),
+                                );
 
-                            self.model.room = Some(room);
-                            let txt: &str = &format!("#{}", room.0);
-                            let room_label = Label::new(Some(txt));
-                            self.widgets.rooms.insert(&room_label, -1);
-                            self.model.room_list.push(room);
-                            room_label.show_all();
+                                self.model.room = Some(room);
+                                let txt: &str = &format!("#{}", room.0);
+                                let room_label = Label::new(Some(txt));
+                                self.widgets.rooms.insert(&room_label, -1);
+                                self.model.room_list.push(room);
+                                room_label.show_all();
+                            } else {
+                                text_buffer
+                                    .insert(&mut text_buffer.get_end_iter(), "Room name required");
+                            }
                         }
                         "/login" => {
                             if v.len() > 2 {

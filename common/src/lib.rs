@@ -10,7 +10,7 @@ use uuid::Uuid;
 #[macro_use]
 extern crate serde_derive;
 
-pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(10);
+pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub trait ClientMessageType {}
 
@@ -89,7 +89,9 @@ pub enum ClientMessage {
     },
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
-    CreateRoom,
+    CreateRoom {
+        name: String,
+    },
     JoinRoom(RoomId),
     Delete(Delete),
     ChangeUsername {
@@ -280,6 +282,7 @@ pub enum ServerError {
     /// revoke authentication token requires re-entry of password.
     AccessDenied,
     InvalidRoom,
+    InvalidUser,
     AlreadyInRoom,
 }
 

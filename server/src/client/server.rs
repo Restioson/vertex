@@ -5,6 +5,7 @@ use dashmap::DashMap;
 use std::fmt::Debug;
 use uuid::Uuid;
 use vertex_common::*;
+use crate::database::Room;
 
 #[derive(Message)]
 pub struct Connect {
@@ -35,22 +36,22 @@ pub struct Join {
 }
 
 impl Message for Join {
-    type Result = RequestResponse;
+    type Result = Result<(), ServerError>;
 }
 
 impl ClientMessageType for Join {}
 
 #[derive(Debug)]
-pub struct CreateRoom;
+pub struct CreateRoomActor(pub Room);
 
-impl ClientMessageType for CreateRoom {}
+impl ClientMessageType for CreateRoomActor {}
 
-impl Message for CreateRoom {
+impl Message for CreateRoomActor {
     type Result = RequestResponse;
 }
 
 #[derive(Debug)]
-pub struct IdentifiedMessage<T: Message + ClientMessageType + Debug> {
+pub struct IdentifiedMessage<T: Message + ClientMessageType + Debug> { // TODO CMT
     pub user_id: UserId,
     pub device_id: DeviceId,
     pub request_id: RequestId,
@@ -178,37 +179,33 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for ClientServer {
     }
 }
 
-impl Handler<IdentifiedMessage<CreateRoom>> for ClientServer {
+impl Handler<IdentifiedMessage<CreateRoomActor>> for ClientServer {
     type Result = RequestResponse;
 
     fn handle(
         &mut self,
-        m: IdentifiedMessage<CreateRoom>,
+        m: IdentifiedMessage<CreateRoomActor>,
         _: &mut Context<Self>,
     ) -> RequestResponse {
-        let id = RoomId(Uuid::new_v4());
+        let id = m.msg.0.id;
         self.rooms.insert(id, vec![m.user_id]);
         RequestResponse::room(id)
     }
 }
 
 impl Handler<IdentifiedMessage<Join>> for ClientServer {
-    type Result = RequestResponse;
+    type Result = Result<(), ServerError>;
 
-    fn handle(&mut self, m: IdentifiedMessage<Join>, _: &mut Context<Self>) -> RequestResponse {
+    fn handle(&mut self, m: IdentifiedMessage<Join>, _: &mut Context<Self>) -> Result<(), ServerError> {
         let mut room = match self.rooms.get_mut(&m.msg.room) {
             Some(r) => r,
             // In future, this error can also be used for rooms that the user is banned from/not
             // invited to
-            None => return RequestResponse::Error(ServerError::InvalidRoom),
+            None => return Err(ServerError::InvalidRoom),
         };
 
-        if !room.contains(&m.user_id) {
-            room.push(m.user_id);
-            RequestResponse::success()
-        } else {
-            RequestResponse::Error(ServerError::AlreadyInRoom)
-        }
+        room.push(m.user_id);
+        Ok(())
     }
 }
 
