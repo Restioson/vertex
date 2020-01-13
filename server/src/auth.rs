@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::database::User;
+use crate::database::UserRecord;
 use futures::{future, Future};
 use lazy_static::lazy_static;
 use rand::RngCore;
@@ -97,10 +97,10 @@ pub fn verify<E: Send + 'static>(
 }
 
 pub fn verify_user_password<E: Send + 'static>(
-    user: User,
+    user: UserRecord,
     password: String,
 ) -> impl Future<Item = Result<UserId, ServerError>, Error = E> {
-    let User {
+    let UserRecord {
         id: user_id,
         password_hash,
         hash_scheme_version,

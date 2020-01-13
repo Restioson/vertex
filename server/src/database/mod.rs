@@ -8,15 +8,15 @@ use vertex_common::{DeviceId, ServerError, UserId};
 
 mod token;
 mod user;
-mod rooms;
-mod room_membership;
+mod communities;
+mod community_membership;
 
 use crate::client::{ClientServer, LogoutSessions};
 use crate::config::Config;
 pub use token::*;
 pub use user::*;
-pub use rooms::*;
-pub use room_membership::*;
+pub use communities::*;
+pub use community_membership::*;
 
 pub struct DatabaseServer {
     pool: l337::Pool<PostgresConnectionManager<NoTls>>,
@@ -76,26 +76,26 @@ impl DatabaseServer {
             .connection()
             .and_then(|mut conn| {
                 conn.client
-                    .prepare(CREATE_ROOMS_TABLE)
+                    .prepare(CREATE_COMMUNITIES_TABLE)
                     .and_then(move |stmt| conn.client.execute(&stmt, &[]))
                     .map(|_| ())
                     .map_err(|e| panic!("db error: {:#?}", e))
             })
             .map_err(|e| panic!("db connection pool error: {:?}", e));
 
-        let room_membership = self
+        let community_membership = self
             .pool
             .connection()
             .and_then(|mut conn| {
                 conn.client
-                    .prepare(CREATE_ROOM_MEMBERSHIP_TABLE)
+                    .prepare(CREATE_COMMUNITY_MEMBERSHIP_TABLE)
                     .and_then(move |stmt| conn.client.execute(&stmt, &[]))
                     .map(|_| ())
                     .map_err(|e| panic!("db error: {:#?}", e))
             })
             .map_err(|e| panic!("db connection pool error: {:?}", e));
 
-        users.and_then(|_| login_tokens).and_then(|_| rooms).and_then(|_| room_membership)
+        users.and_then(|_| login_tokens).and_then(|_| rooms).and_then(|_| community_membership)
     }
 
     fn expired_tokens(

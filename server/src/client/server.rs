@@ -1,11 +1,11 @@
 use super::{ClientWsSession, LogoutThisSession};
 use crate::SendMessage;
 use actix::prelude::*;
-use dashmap::DashMap;
 use std::fmt::Debug;
-use uuid::Uuid;
 use vertex_common::*;
-use crate::database::Room;
+use crate::database::CommunityRecord;
+use std::collections::HashMap;
+use std::ops::Index;
 
 #[derive(Message)]
 pub struct Connect {
@@ -32,7 +32,7 @@ pub struct Disconnect {
 
 #[derive(Debug)]
 pub struct Join {
-    pub room: RoomId,
+    pub community: CommunityId,
 }
 
 impl Message for Join {
@@ -42,7 +42,7 @@ impl Message for Join {
 impl ClientMessageType for Join {}
 
 #[derive(Debug)]
-pub struct CreateRoomActor(pub Room);
+pub struct CreateRoomActor(pub CommunityRecord);
 
 impl ClientMessageType for CreateRoomActor {}
 
@@ -63,26 +63,25 @@ impl<T: Message + ClientMessageType + Debug> Message for IdentifiedMessage<T> {
 }
 
 pub struct ClientServer {
-    sessions: DashMap<DeviceId, Addr<ClientWsSession>>,
-    online_devices: DashMap<UserId, Vec<DeviceId>>,
-    rooms: DashMap<RoomId, Vec<UserId>>,
+    sessions: HashMap<DeviceId, Addr<ClientWsSession>>,
+    online_devices: HashMap<UserId, Vec<DeviceId>>,
+    rooms: HashMap<RoomId, Vec<UserId>>,
 }
 
 impl ClientServer {
     pub fn new() -> Self {
         ClientServer {
-            sessions: DashMap::default(),
-            online_devices: DashMap::default(),
-            rooms: DashMap::default(),
+            sessions: HashMap::default(),
+            online_devices: HashMap::default(),
+            rooms: HashMap::default(),
         }
     }
 
     fn logout_user_sessions(&mut self, user_id: &UserId) {
         if let Some(online_devices) = self.online_devices.get(user_id) {
-            online_devices
-                .iter()
-                .map(|id| self.sessions.get_mut(id).unwrap())
-                .for_each(|s| s.do_send(LogoutThisSession));
+            for id in online_devices {
+                self.sessions.get_mut(id).unwrap().do_send(LogoutThisSession)
+            }
         }
     }
 
@@ -103,15 +102,13 @@ impl ClientServer {
         let room = self.rooms.index(room);
         for user_id in room.iter() {
             if let Some(online_devices) = self.online_devices.get(user_id) {
-                online_devices
-                    .iter()
-                    .filter(|id| **id != *sender)
-                    .map(|id| self.sessions.get_mut(id).unwrap())
-                    .for_each(|s| {
-                        s.do_send(SendMessage {
+                for id in online_devices {
+                    if id != sender {
+                        self.sessions.get_mut(id).unwrap().do_send(SendMessage {
                             message: message.clone(),
-                        })
-                    });
+                        });
+                    }
+                }
             }
         }
     }
@@ -197,11 +194,11 @@ impl Handler<IdentifiedMessage<Join>> for ClientServer {
     type Result = Result<(), ServerError>;
 
     fn handle(&mut self, m: IdentifiedMessage<Join>, _: &mut Context<Self>) -> Result<(), ServerError> {
-        let mut room = match self.rooms.get_mut(&m.msg.room) {
+        let mut community = match self.rooms.get_mut(&m.msg.community) {
             Some(r) => r,
             // In future, this error can also be used for rooms that the user is banned from/not
             // invited to
-            None => return Err(ServerError::InvalidRoom),
+            None => return Err(ServerError::InvalidCommunity),
         };
 
         room.push(m.user_id);

@@ -21,6 +21,9 @@ pub struct RequestId(pub Uuid);
 pub struct UserId(pub Uuid);
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct CommunityId(pub Uuid);
+
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RoomId(pub Uuid);
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
@@ -89,10 +92,14 @@ pub enum ClientMessage {
     },
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
-    CreateRoom {
+    CreateCommunity {
         name: String,
     },
-    JoinRoom(RoomId),
+    CreateRoom {
+        name: String,
+        community: CommunityId,
+    },
+    JoinCommunity(CommunityId),
     Delete(Delete),
     ChangeUsername {
         new_username: String,
@@ -146,6 +153,7 @@ impl ForwardedMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Edit {
     pub message_id: MessageId,
+    pub community_id: CommunityId,
     pub room_id: RoomId,
 }
 
@@ -159,6 +167,7 @@ impl Message for Edit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delete {
     pub message_id: MessageId,
+    pub community_id: CommunityId,
     pub room_id: RoomId,
 }
 
@@ -188,10 +197,12 @@ bitflags! {
         const CHANGE_USERNAME = 1 << 6;
         /// Change the user's display name
         const CHANGE_DISPLAY_NAME = 1 << 7;
-        /// Join rooms
-        const JOIN_ROOMS = 1 << 8;
+        /// Join communities
+        const JOIN_COMMUNITIES = 1 << 8;
+        /// Create communities
+        const CREATE_COMMUNITIES = 1 << 9;
         /// Create rooms
-        const CREATE_ROOMS = 1 << 9;
+        const CREATE_ROOMS = 1 << 10;
     }
 }
 
@@ -239,6 +250,9 @@ impl RequestResponse {
     pub fn room(id: RoomId) -> Self {
         RequestResponse::Success(Success::Room { id })
     }
+    pub fn community(id: CommunityId) -> Self {
+        RequestResponse::Success(Success::Community { id })
+    }
     pub fn user(id: UserId) -> Self {
         RequestResponse::Success(Success::User { id })
     }
@@ -282,8 +296,9 @@ pub enum ServerError {
     /// revoke authentication token requires re-entry of password.
     AccessDenied,
     InvalidRoom,
+    InvalidCommunity,
     InvalidUser,
-    AlreadyInRoom,
+    AlreadyInCommunity,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -291,6 +306,9 @@ pub enum Success {
     NoData,
     Room {
         id: RoomId,
+    },
+    Community {
+        id: CommunityId,
     },
     MessageSent {
         id: MessageId,

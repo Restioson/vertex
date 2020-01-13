@@ -10,6 +10,7 @@ mod client;
 mod config;
 mod database;
 mod federation;
+mod community;
 
 use crate::config::Config;
 use actix_web::dev::ServiceResponse;

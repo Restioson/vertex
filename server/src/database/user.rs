@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
     banned               BOOLEAN NOT NULL
 )";
 
-pub struct User {
+pub struct UserRecord {
     pub id: UserId,
     pub username: String,
     pub display_name: String,
@@ -28,14 +28,14 @@ pub struct User {
     pub banned: bool,
 }
 
-impl User {
+impl UserRecord {
     pub fn new(
         username: String,
         display_name: String,
         password_hash: String,
         hash_scheme_version: HashSchemeVersion,
     ) -> Self {
-        User {
+        UserRecord {
             id: UserId(Uuid::new_v4()),
             username,
             display_name,
@@ -48,11 +48,11 @@ impl User {
     }
 }
 
-impl TryFrom<Row> for User {
+impl TryFrom<Row> for UserRecord {
     type Error = tokio_postgres::Error;
 
-    fn try_from(row: Row) -> Result<User, tokio_postgres::Error> {
-        Ok(User {
+    fn try_from(row: Row) -> Result<UserRecord, tokio_postgres::Error> {
+        Ok(UserRecord {
             id: UserId(row.try_get("id")?),
             username: row.try_get("username")?,
             display_name: row.try_get("display_name")?,
@@ -70,16 +70,16 @@ impl TryFrom<Row> for User {
 pub struct GetUserById(pub UserId);
 
 impl Message for GetUserById {
-    type Result = Result<Option<User>, ServerError>;
+    type Result = Result<Option<UserRecord>, ServerError>;
 }
 
 pub struct GetUserByName(pub String);
 
 impl Message for GetUserByName {
-    type Result = Result<Option<User>, ServerError>;
+    type Result = Result<Option<UserRecord>, ServerError>;
 }
 
-pub struct CreateUser(pub User);
+pub struct CreateUser(pub UserRecord);
 
 impl Message for CreateUser {
     type Result = Result<bool, ServerError>;
@@ -162,7 +162,7 @@ impl Handler<CreateUser> for DatabaseServer {
 }
 
 impl Handler<GetUserById> for DatabaseServer {
-    type Result = ResponseFuture<Option<User>, ServerError>;
+    type Result = ResponseFuture<Option<UserRecord>, ServerError>;
 
     fn handle(&mut self, get: GetUserById, _: &mut Context<Self>) -> Self::Result {
         let id = get.0;
@@ -176,7 +176,7 @@ impl Handler<GetUserById> for DatabaseServer {
                         .and_then(move |stmt| {
                             conn.client
                                 .query(&stmt, &[&id.0])
-                                .map(|user| User::try_from(user))
+                                .map(|user| UserRecord::try_from(user))
                                 .into_future()
                                 .map(|(user, _stream)| user)
                                 .map_err(|(err, _stream)| err)
@@ -190,7 +190,7 @@ impl Handler<GetUserById> for DatabaseServer {
 }
 
 impl Handler<GetUserByName> for DatabaseServer {
-    type Result = ResponseFuture<Option<User>, ServerError>;
+    type Result = ResponseFuture<Option<UserRecord>, ServerError>;
 
     fn handle(&mut self, get: GetUserByName, _: &mut Context<Self>) -> Self::Result {
         let name = get.0;
@@ -204,7 +204,7 @@ impl Handler<GetUserByName> for DatabaseServer {
                         .and_then(move |stmt| {
                             conn.client
                                 .query(&stmt, &[&name])
-                                .map(|user| User::try_from(user))
+                                .map(|user| UserRecord::try_from(user))
                                 .into_future()
                                 .map(|(user, _stream)| user)
                                 .map_err(|(err, _stream)| err)

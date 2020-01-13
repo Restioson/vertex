@@ -1,4 +1,4 @@
-use vertex_common::{RoomId, ServerError};
+use vertex_common::{RoomId, ServerError, CommunityId};
 use tokio_postgres::Row;
 use std::convert::TryFrom;
 use actix::{Message, Handler, ResponseFuture, Context};
@@ -6,58 +6,58 @@ use crate::database::{DatabaseServer, handle_error};
 use futures::{Future, Stream};
 use uuid::Uuid;
 
-pub(super) const CREATE_ROOMS_TABLE: &'static str = "
-CREATE TABLE IF NOT EXISTS rooms (
+pub(super) const CREATE_COMMUNITIES_TABLE: &'static str = "
+CREATE TABLE IF NOT EXISTS communities (
     id   UUID PRIMARY KEY,
     name VARCHAR NOT NULL
 )";
 
 #[derive(Debug, Clone)]
-pub struct Room {
-    pub id: RoomId,
+pub struct CommunityRecord {
+    pub id: CommunityId,
     pub name: String,
 }
 
-impl TryFrom<Row> for Room {
+impl TryFrom<Row> for CommunityRecord {
     type Error = tokio_postgres::Error;
 
-    fn try_from(row: Row) -> Result<Room, tokio_postgres::Error> {
-        Ok(Room {
-            id: RoomId(row.try_get("id")?),
+    fn try_from(row: Row) -> Result<CommunityRecord, tokio_postgres::Error> {
+        Ok(CommunityRecord {
+            id: CommunityId(row.try_get("id")?),
             name: row.try_get("name")?,
         })
     }
 }
 
-pub struct GetRoom(RoomId);
+pub struct GetCommunityMetadata(CommunityId);
 
-impl Message for GetRoom {
-    type Result = Result<Option<Room>, ServerError>;
+impl Message for GetCommunityMetadata {
+    type Result = Result<Option<CommunityRecord>, ServerError>;
 }
 
-pub struct CreateRoom {
+pub struct CreateCommunity {
     pub name: String,
 }
 
-impl Message for CreateRoom {
-    type Result = Result<Room, ServerError>;
+impl Message for CreateCommunity {
+    type Result = Result<CommunityRecord, ServerError>;
 }
 
 // TODO(next): load at boot
-impl Handler<GetRoom> for DatabaseServer {
-    type Result = ResponseFuture<Option<Room>, ServerError>;
+impl Handler<GetCommunityMetadata> for DatabaseServer {
+    type Result = ResponseFuture<Option<CommunityRecord>, ServerError>;
 
-    fn handle(&mut self, get: GetRoom, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, get: GetCommunityMetadata, _: &mut Context<Self>) -> Self::Result {
         Box::new(
             self.pool
                 .connection()
                 .and_then(move |mut conn| {
                     conn.client
-                        .prepare("SELECT * FROM rooms WHERE id=$1")
+                        .prepare("SELECT * FROM communities WHERE id=$1")
                         .and_then(move |stmt| {
                             conn.client
                                 .query(&stmt, &[&(get.0).0])
-                                .map(|row| Room::try_from(row))
+                                .map(|row| CommunityRecord::try_from(row))
                                 .into_future()
                                 .map(|(user, _stream)| user)
                                 .map_err(|(err, _stream)| err)
@@ -70,10 +70,10 @@ impl Handler<GetRoom> for DatabaseServer {
     }
 }
 
-impl Handler<CreateRoom> for DatabaseServer {
-    type Result = ResponseFuture<Room, ServerError>;
+impl Handler<CreateCommunity> for DatabaseServer {
+    type Result = ResponseFuture<CommunityRecord, ServerError>;
 
-    fn handle(&mut self, create: CreateRoom, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, create: CreateCommunity, _: &mut Context<Self>) -> Self::Result {
         let id = Uuid::new_v4();
 
         Box::new(
@@ -81,18 +81,18 @@ impl Handler<CreateRoom> for DatabaseServer {
                 .connection()
                 .and_then(move |mut conn| {
                     conn.client
-                        .prepare("INSERT INTO rooms (id, name) VALUES ($1, $2) RETURNING *")
+                        .prepare("INSERT INTO communities (id, name) VALUES ($1, $2) RETURNING *")
                         .and_then(move |stmt| {
                             conn.client.query(
                                     &stmt,
                                     &[&id, &create.name],
-                                ).map(|row| Room::try_from(row))
+                                ).map(|row| CommunityRecord::try_from(row))
                                 .into_future()
-                                .map(|(room, _stream)| room)
+                                .map(|(community, _stream)| community)
                                 .map_err(|(err, _stream)| err)
                         })
                         .and_then(|x| x.transpose())
-                        .map(|res| res.expect("Create room query did not return anything"))
+                        .map(|res| res.expect("Create community query did not return anything"))
                         .map_err(l337::Error::External)
                 })
                 .map_err(handle_error),

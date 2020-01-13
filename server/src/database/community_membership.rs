@@ -1,4 +1,4 @@
-use vertex_common::{RoomId, UserId, ServerError};
+use vertex_common::{RoomId, UserId, ServerError, CommunityId};
 use std::convert::TryFrom;
 use tokio_postgres::Row;
 use actix::{Message, Handler, ResponseFuture, Context};
@@ -7,20 +7,20 @@ use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
 use futures::future;
 
-pub(super) const CREATE_ROOM_MEMBERSHIP_TABLE: &'static str = "
-CREATE TABLE IF NOT EXISTS room_membership (
-    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+pub(super) const CREATE_COMMUNITY_MEMBERSHIP_TABLE: &'static str = "
+CREATE TABLE IF NOT EXISTS community_membership (
+    community_id UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
-    UNIQUE(user_id, room_id)
+    UNIQUE(user_id, community_id)
 )";
 
 /// Modified from https://stackoverflow.com/a/42217872/4871468
 const ADD_TO_ROOM: &'static str = r#"
-WITH input_rows(room_id, user_id) AS (
+WITH input_rows(community_id, user_id) AS (
     VALUES ($1::UUID, $2::UUID)
 ), ins AS (
-    INSERT INTO room_membership (room_id, user_id)
+    INSERT INTO community_membership (community_id, user_id)
         SELECT * FROM input_rows
         ON CONFLICT DO NOTHING
         RETURNING *
@@ -28,14 +28,14 @@ WITH input_rows(room_id, user_id) AS (
     SELECT 'i'::"char" AS source, * FROM ins           -- 'i' for 'inserted'
     UNION  ALL
     SELECT 's'::"char" AS source, * FROM input_rows    -- 's' for 'selected'
-    JOIN room_membership c USING (room_id, user_id)    -- columns of unique index
+    JOIN community_membership c USING (community_id, user_id)    -- columns of unique index
 ), ups AS (                                            -- RARE corner case
-   INSERT INTO room_membership AS c (room_id, user_id)
+   INSERT INTO community_membership AS c (community_id, user_id)
    SELECT i.*
    FROM input_rows i
-   LEFT JOIN sel s USING (room_id, user_id)            -- columns of unique index
+   LEFT JOIN sel s USING (community_id, user_id)            -- columns of unique index
    WHERE s.user_id IS NULL                             -- missing!
-   ON CONFLICT (room_id, user_id) DO UPDATE            -- we've asked nicely the 1st time ...
+   ON CONFLICT (community_id, user_id) DO UPDATE            -- we've asked nicely the 1st time ...
    SET user_id = c.user_id                             -- ... this time we overwrite with old value
    RETURNING 'u'::"char" AS source, *                  -- 'u' for updated
 )
@@ -46,7 +46,7 @@ TABLE  ups;
 "#;
 
 pub struct RoomMember {
-    room_id: RoomId,
+    community_id: RoomId,
     user_id: UserId,
 }
 
@@ -55,18 +55,18 @@ impl TryFrom<&Row> for RoomMember {
 
     fn try_from(row: &Row) -> Result<RoomMember, tokio_postgres::Error> {
         Ok(RoomMember {
-            room_id: RoomId(row.try_get("room_id")?),
+            community_id: RoomId(row.try_get("community_id")?),
             user_id: UserId(row.try_get("user_id")?),
         })
     }
 }
 
-pub struct AddToRoom {
-    pub room: RoomId,
+pub struct AddToCommunity {
+    pub community: CommunityId,
     pub user: UserId,
 }
 
-impl Message for AddToRoom {
+impl Message for AddToCommunity {
     type Result = Result<(), ServerError>;
 }
 
@@ -107,10 +107,10 @@ impl TryFrom<&Row> for AddToRoomResult {
     }
 }
 
-impl Handler<AddToRoom> for DatabaseServer {
+impl Handler<AddToCommunity> for DatabaseServer {
     type Result = ResponseFuture<(), ServerError>;
 
-    fn handle(&mut self, add: AddToRoom, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, add: AddToCommunity, _: &mut Context<Self>) -> Self::Result {
         use AddToRoomSource::*;
 
         Box::new(
@@ -120,7 +120,7 @@ impl Handler<AddToRoom> for DatabaseServer {
                 .and_then(|mut conn| {
                     conn.client
                         .prepare(ADD_TO_ROOM)
-                        .and_then(move |stmt| conn.client.query(&stmt, &[&(add.room).0, &(add.user.0)])
+                        .and_then(move |stmt| conn.client.query(&stmt, &[&(add.community).0, &(add.user.0)])
                             .into_future()
                             .map(|(user, _stream)| user)
                             .map_err(|(err, _stream)| err)
@@ -155,8 +155,8 @@ impl Handler<AddToRoom> for DatabaseServer {
                                     eprintln!("{:#?}", err);
 
                                     match constraint {
-                                        Some("room_membership_room_id_fkey") => ServerError::InvalidRoom,
-                                        Some("room_membership_user_id_fkey") => ServerError::InvalidUser,
+                                        Some("community_membership_community_id_fkey") => ServerError::InvalidCommunity,
+                                        Some("community_membership_user_id_fkey") => ServerError::InvalidUser,
                                         Some(_) | None => handle_error(l337::Error::External(err)),
                                     }
                                 } else {

@@ -1,7 +1,7 @@
 use super::ServerWsSession;
 use actix::prelude::*;
-use dashmap::DashMap;
 use url::Url;
+use std::collections::HashMap;
 
 #[derive(Message)]
 pub struct Connect {
@@ -10,13 +10,13 @@ pub struct Connect {
 }
 
 pub struct FederationServer {
-    servers: DashMap<Url, ServerWsSession>,
+    servers: HashMap<Url, ServerWsSession>,
 }
 
 impl FederationServer {
     pub fn new() -> Self {
         FederationServer {
-            servers: DashMap::default(),
+            servers: HashMap::default(),
         }
     }
 }

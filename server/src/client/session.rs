@@ -15,6 +15,7 @@ use std::io::Cursor;
 use std::time::Instant;
 use uuid::Uuid;
 use vertex_common::*;
+use crate::community::CommunityActor;
 
 #[derive(Eq, PartialEq)]
 enum SessionState {
@@ -268,21 +269,21 @@ impl ClientWsSession {
                         ctx,
                     )
                 }
-                ClientMessage::JoinRoom(room) => {
-                    if !perms.has_perms(TokenPermissionFlags::JOIN_ROOMS) {
+                ClientMessage::JoinCommunity(community) => {
+                    if !perms.has_perms(TokenPermissionFlags::JOIN_COMMUNITIES) {
                         self.respond_error(ServerError::AccessDenied, request_id, ctx);
                         return;
                     }
 
-                    self.join_room(user_id, device_id, room, request_id, ctx)
+                    self.join_community(user_id, device_id, community, request_id, ctx)
                 }
-                ClientMessage::CreateRoom { name } => {
-                    if !perms.has_perms(TokenPermissionFlags::CREATE_ROOMS) {
+                ClientMessage::CreateCommunity { name } => {
+                    if !perms.has_perms(TokenPermissionFlags::CREATE_COMMUNITIES) {
                         self.respond_error(ServerError::AccessDenied, request_id, ctx);
                         return;
                     }
 
-                    self.create_room(user_id, device_id, name,  request_id, ctx);
+                    self.create_community(user_id, device_id, name,  request_id, ctx);
                 }
                 ClientMessage::RevokeToken {
                     device_id: to_revoke,
@@ -609,7 +610,7 @@ impl ClientWsSession {
         let fut = auth::hash(password)
             .into_actor(self)
             .and_then(move |(hash, hash_version), act, _ctx| {
-                let user = User::new(username, display_name, hash, hash_version);
+                let user = UserRecord::new(username, display_name, hash, hash_version);
                 let id = user.id.clone();
 
                 act.database_server
@@ -756,36 +757,37 @@ impl ClientWsSession {
         self.respond(fut, request_id, ctx)
     }
 
-    fn create_room(&mut self, user_id: UserId, device_id: DeviceId, room_name: String, request_id: RequestId, ctx: &mut WebsocketContext<Self>) {
-        let fut = self.database_server.send(CreateRoom { name: room_name })
+    fn create_community(&mut self, user_id: UserId, device_id: DeviceId, community_name: String, request_id: RequestId, ctx: &mut WebsocketContext<Self>) {
+        let fut = self.database_server.send(CreateCommunity { name: community_name })
             .into_actor(self)
             .and_then(move |res, act, _ctx| {
                 match res {
-                    Ok(room) => {
-                        let room_id = room.id;
+                    Ok(community) => {
+                        let community_id = community.id;
+                        CommunityActor::new();
                         fut::Either::A(act.client_server
                             .send(IdentifiedMessage {
                                 user_id,
                                 device_id,
                                 request_id,
-                                msg: CreateRoomActor(room),
+                                msg: CreateCommunityActor(community),
                             })
-                            .map(move |_| Ok(room_id))
+                            .map(move |_| Ok(community_id))
                             .into_actor(act))
                     }
                     Err(e) => fut::Either::B(fut::ok(Err(e))),
                 }
             })
             .map(move |res, _act, _ctx| match res {
-                Ok(room_id) => RequestResponse::room(room_id),
+                Ok(community_id) => RequestResponse::community(community_id),
                 Err(e) => RequestResponse::Error(e),
             });
 
         self.respond(fut, request_id, ctx)
     }
 
-    fn join_room(&mut self, user_id: UserId, device_id: DeviceId, room: RoomId, request_id: RequestId, ctx: &mut WebsocketContext<Self>) {
-        let fut = self.database_server.send(AddToRoom { room, user: user_id })
+    fn join_community(&mut self, user_id: UserId, device_id: DeviceId, community: CommunityId, request_id: RequestId, ctx: &mut WebsocketContext<Self>) {
+        let fut = self.database_server.send(AddToCommunity { community, user: user_id })
         .into_actor(self)
         .and_then(move |res, act, _ctx| {
             match res {
@@ -795,7 +797,7 @@ impl ClientWsSession {
                             user_id,
                             device_id,
                             request_id,
-                            msg: Join { room },
+                            msg: Join { community },
                         })
                         .into_actor(act))
                 }
