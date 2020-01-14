@@ -20,6 +20,7 @@ use directories::ProjectDirs;
 use federation::{FederationServer, ServerWsSession};
 use log::info;
 use std::fs::OpenOptions;
+use crate::database::Init;
 
 #[derive(Debug, Message)]
 pub struct SendMessage<T: Debug> {
@@ -35,11 +36,11 @@ fn dispatch_client_ws(
     config: Data<config::Config>,
 ) -> Result<HttpResponse, Error> {
     let client_server = client_server.get_ref().clone();
-    let federation_server = federation_server.get_ref().clone();
+    let _federation_server = federation_server.get_ref().clone();
     let db_server = db_server.get_ref().clone();
 
     ws::start(
-        ClientWsSession::new(client_server, federation_server, db_server, config),
+        ClientWsSession::new(client_server, db_server, config),
         &request,
         stream,
     )
@@ -118,8 +119,9 @@ fn main() -> std::io::Result<()> {
     let ssl_config = config::ssl_config();
 
     let mut sys = System::new("vertex_server");
-    let client_server = ClientServer::new().start();
-    let db_server = DatabaseServer::new(&mut sys, client_server.clone(), &config).start();
+    let mut db_server = DatabaseServer::new(&mut sys, &config).start();
+    let client_server = ClientServer::new(db_server.clone()).start();
+    db_server.send(Init(client_server));
     let federation_server = FederationServer::new().start();
 
     HttpServer::new(move || {

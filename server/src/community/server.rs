@@ -23,19 +23,19 @@ impl<T: Message + Debug> Message for AuthenticatedMessage<T> {
     type Result = T::Result;
 }
 
-impl Handle<AuthenticatedMessage<GetCommunityActor>> for CommunityServer {
-    type Result = ResponseFuture<Option<CommunityActor>, ServerError>;
-
-    fn handle(&mut self, msg: AuthenticatedMessage<GetCommunityActor>, _: &mut Context<Self>) -> Self::Result {
-        match self.communities.get(&msg.msg.0) {
-            Some(addr) => {
-                addr.send()
-                    .
-            }
-            None => Either::B(fut::ok(None)),
-        }
-    }
-}
+//impl Handle<AuthenticatedMessage<GetCommunityActor>> for CommunityServer {
+//    type Result = ResponseFuture<Option<CommunityActor>, ServerError>;
+//
+//    fn handle(&mut self, msg: AuthenticatedMessage<GetCommunityActor>, _: &mut Context<Self>) -> Self::Result {
+//        match self.communities.get(&msg.msg.0) {
+//            Some(addr) => {
+//                addr.send()
+//                    .
+//            }
+//            None => Either::B(fut::ok(None)),
+//        }
+//    }
+//}
 
 impl Actor for CommunityServer {
     type Context = Context<Self>;

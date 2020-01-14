@@ -115,6 +115,7 @@ pub enum ClientMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientSentMessage {
+    pub to_community: CommunityId,
     pub to_room: RoomId,
     pub content: String,
 }
@@ -123,10 +124,11 @@ impl ClientMessageType for ClientSentMessage {}
 
 #[cfg(feature = "enable-actix")]
 impl Message for ClientSentMessage {
-    type Result = RequestResponse;
+    type Result = Result<MessageId, ServerError>; // TODO(never_type): when never_type stabilised, use !
 }
 
 #[cfg_attr(feature = "enable-actix", derive(Message))]
+#[cfg_attr(feature = "enable-actix", rtype(()))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardedMessage {
     pub room: RoomId,
@@ -259,6 +261,9 @@ impl RequestResponse {
     pub fn token(device_id: DeviceId, token: AuthToken) -> Self {
         RequestResponse::Success(Success::Token { device_id, token })
     }
+    pub fn message_id(id: MessageId) -> Self {
+        RequestResponse::Success(Success::MessageId { id })
+    }
 }
 
 #[cfg(feature = "enable-actix")]
@@ -310,7 +315,7 @@ pub enum Success {
     Community {
         id: CommunityId,
     },
-    MessageSent {
+    MessageId {
         id: MessageId,
     },
     User {

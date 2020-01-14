@@ -17,16 +17,20 @@ pub use token::*;
 pub use user::*;
 pub use communities::*;
 pub use community_membership::*;
+use std::sync::Once;
+
+#[derive(Message)]
+pub struct Init(pub Addr<ClientServer>);
 
 pub struct DatabaseServer {
     pool: l337::Pool<PostgresConnectionManager<NoTls>>,
     sweep_interval: Duration,
     token_expiry_days: u16,
-    client_server: Addr<ClientServer>,
+    client_server: Option<Addr<ClientServer>>,
 }
 
 impl DatabaseServer {
-    pub fn new(sys: &mut SystemRunner, client_server: Addr<ClientServer>, config: &Config) -> Self {
+    pub fn new(sys: &mut SystemRunner, config: &Config) -> Self {
         let mgr = PostgresConnectionManager::new(
             fs::read_to_string("db.conf")
                 .expect("db.conf not found")
@@ -42,7 +46,7 @@ impl DatabaseServer {
             pool,
             sweep_interval: Duration::from_secs(config.tokens_sweep_interval_secs),
             token_expiry_days: config.token_expiry_days,
-            client_server,
+            client_server: None,
         }
     }
 
@@ -138,7 +142,7 @@ impl DatabaseServer {
             .collect()
             .map_err(|e| panic!("db error: {:#?}", e))
             .into_actor(self)
-            .map(move |list, act, _ctx| act.client_server.do_send(LogoutSessions { list }))
+            .map(move |list, act, _ctx| act.client_server.unwrap().do_send(LogoutSessions { list }))
             .map(move |_, act, _ctx| {
                 let time_taken = Instant::now().duration_since(begin);
                 if time_taken > act.sweep_interval {
@@ -161,6 +165,14 @@ impl Actor for DatabaseServer {
         ctx.run_interval(self.sweep_interval, |db, ctx| {
             ctx.spawn(db.sweep_tokens());
         });
+    }
+}
+
+impl Handler<Init> for DatabaseServer {
+    type Result = ();
+
+    fn handle(&mut self, init: Init, _: &mut Context<Self>) {
+        self.client_server = Some(init.0)
     }
 }
 

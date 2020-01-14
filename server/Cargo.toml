@@ -5,16 +5,16 @@ authors = ["Restioson <restiosondev@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-actix = "^0.8"
-actix-web = { version = "^1", features = ["ssl"] }
-actix-web-actors = "^1"
-actix-files = "^0.1"
-actix-service = "^0.4"
+actix = "^0.9"
+actix-web = { version = "^2", features = ["open-ssl"] }
+actix-web-actors = "^2"
+actix-files = "^0.2"
+actix-service = "^1"
 serde = "^1"
 serde_cbor = "^0.10"
 websocket = "^0.23"
 url = "^2"
-futures = "^0.1"
+futures = "^0.3"
 l337 = { git = "https://github.com/OneSignal/L3-37", rev = "369454b7312ef68a60f5d2df30ad2544fec50359" }
 l337-postgres = { git = "https://github.com/OneSignal/L3-37", rev = "369454b7312ef68a60f5d2df30ad2544fec50359" }
 tokio = "^0.1"
@@ -33,4 +33,5 @@ unicode-normalization = "^0.1"
 openssl = "^0.10"
 log = "^0.4"
 fern = "^0.5"
+dashmap = "^2"
 vertex_common = { path = "../common/", features = ["enable-actix"] }

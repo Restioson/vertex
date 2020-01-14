@@ -1,9 +1,9 @@
 use actix::prelude::*;
 
-mod server;
+mod user;
 mod session;
 
-pub use server::*;
+pub use user::*;
 pub use session::*;
 
 #[derive(Debug, Message)]

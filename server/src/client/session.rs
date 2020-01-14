@@ -15,7 +15,11 @@ use std::io::Cursor;
 use std::time::Instant;
 use uuid::Uuid;
 use vertex_common::*;
-use crate::community::CommunityActor;
+use crate::community::{CommunityActor, Join};
+use log::error;
+use std::collections::HashMap;
+
+// TODO(room_persistence): make sure device isnt online when try to login
 
 #[derive(Eq, PartialEq)]
 enum SessionState {
@@ -33,9 +37,8 @@ impl SessionState {
 }
 
 pub struct ClientWsSession {
-    client_server: Addr<ClientServer>,
     database_server: Addr<DatabaseServer>,
-    federation_server: Addr<FederationServer>,
+    communities: Vec<CommunityId>,
     state: SessionState,
     heartbeat: Instant,
     config: Data<Config>,
@@ -50,8 +53,7 @@ impl Actor for ClientWsSession {
 
     fn stopped(&mut self, _ctx: &mut WebsocketContext<Self>) {
         if let Some((user_id, device_id)) = self.state.user_and_device_ids() {
-            self.client_server
-                .do_send(Disconnect { user_id, device_id });
+            self.delete(ctx); // TODO(room_persistence)
         }
     }
 }
@@ -88,8 +90,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
             }
             ws::Message::Close(_) => {
                 if let Some((user_id, device_id)) = self.state.user_and_device_ids() {
-                    self.client_server
-                        .do_send(Disconnect { user_id, device_id });
+                    self.delete();
                 }
                 ctx.stop();
             }
@@ -107,25 +108,22 @@ impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
 }
 
 impl Handler<LogoutThisSession> for ClientWsSession {
-    type Result = ();
+    type Result = ResponseFuture<(), ()>;
 
     fn handle(&mut self, _: LogoutThisSession, ctx: &mut WebsocketContext<Self>) {
         ctx.binary(ServerMessage::SessionLoggedOut);
-        self.state = SessionState::WaitingForLogin;
+        self.delete(ctx);
     }
 }
 
 impl ClientWsSession {
     pub fn new(
-        client_server: Addr<ClientServer>,
-        federation_server: Addr<FederationServer>,
         database_server: Addr<DatabaseServer>,
         config: Data<Config>,
     ) -> Self {
         ClientWsSession {
-            client_server,
             database_server,
-            federation_server,
+            communities: Vec::new(),
             state: SessionState::WaitingForLogin,
             heartbeat: Instant::now(),
             config,
@@ -139,14 +137,27 @@ impl ClientWsSession {
     fn start_heartbeat(&mut self, ctx: &mut WebsocketContext<Self>) {
         ctx.run_interval(HEARTBEAT_TIMEOUT, |session, ctx| {
             if Instant::now().duration_since(session.heartbeat) > HEARTBEAT_TIMEOUT {
-                if let Some((user_id, device_id)) = session.state.user_and_device_ids() {
-                    session
-                        .client_server
-                        .do_send(Disconnect { user_id, device_id });
-                }
-                ctx.stop();
+                session.delete(ctx);
             }
         });
+    }
+
+    /// Remove the device from wherever it is referenced
+    fn delete(&mut self, ctx: &mut WebsocketContext<Self>) {
+        if let Some((user_id, device_id)) = self.state.user_and_device_ids() {
+            if let Some(mut devices) = USERS.get_mut(user_id) {
+                // Remove the device
+                let idx = devices.position(|(id, _)| id == device_id);
+                device.remove(idx);
+
+                // Remove the entire user entry if they are no longer online
+                if devices.len() == 0 {
+                    USERS.remove(user_id);
+                }
+            }
+        }
+
+        ctx.stop();
     }
 
     /// Responds to a request with a future which will eventually resolve to the request response
@@ -156,10 +167,12 @@ impl ClientWsSession {
     {
         fut.then(move |response, _act, ctx| {
             let response = ServerMessage::Response {
-                response: if let Ok(r) = response {
-                    r
-                } else {
-                    RequestResponse::Error(ServerError::Internal)
+                response: match response {
+                    Ok(r) => r,
+                    Err(e) => {
+                        error!("Actix mailbox error: {:#?}", e);
+                        RequestResponse::Error(ServerError::Internal)
+                    }
                 },
                 request_id,
             };
@@ -236,14 +249,31 @@ impl ClientWsSession {
                         return;
                     }
 
+                    let community = match self.communities.get(&msg.to_community) {
+                        Some(c) => c,
+                        None => return self.respond_error(ServerError::InvalidCommunity, request_id, ctx),
+                    };
+
                     self.respond(
-                        self.client_server
-                            .send(IdentifiedMessage {
-                                user_id,
-                                device_id,
-                                request_id,
-                                msg,
-                            })
+                        community.send(IdentifiedMessage {
+                            user_id,
+                            device_id,
+                            request_id,
+                            msg,
+                        }).then(|res| {
+                                let r = match res {
+                                    Ok(r) => match r {
+                                        Ok(id) => RequestResponse::message_id(id),
+                                        Err(e) => RequestResponse::Error(e),
+                                    }
+                                    Err(e) => {
+                                        error!("Actix mailbox error: {:#?}", e);
+                                        RequestResponse::Error(ServerError::Internal)
+                                    }
+                                };
+
+                                future::ok(r)
+                        })
                             .into_actor(self),
                         request_id,
                         ctx,
@@ -256,15 +286,22 @@ impl ClientWsSession {
                         return;
                     }
 
+                    if !self.communities.contains(&edit.community_id) {
+                        self.respond_error(ServerError::InvalidCommunity, request_id, ctx);
+                        return;
+                    }
+
                     self.respond(
-                        self.client_server
-                            .send(IdentifiedMessage {
-                                user_id,
-                                device_id,
-                                request_id,
-                                msg: edit,
-                            })
-                            .into_actor(self),
+                        COMMUNITIES.get(&edit.community_id)
+                            .and_then(|opt| match opt {
+                                Some(community) => Either::A(community.send(IdentifiedMessage {
+                                    user_id,
+                                    device_id,
+                                    request_id,
+                                    msg: edit,
+                                })),
+                                None => Either::B(future::ok(ServerError::InvalidCommunity)),
+                            }),
                         request_id,
                         ctx,
                     )
@@ -407,17 +444,14 @@ impl ClientWsSession {
                 Err(e) => fut::Either::B(fut::ok(Err(e))),
             })
             .and_then(move |res, act, ctx| match res {
-                Ok((user_id, device_id, perms)) => fut::Either::A(
-                    act.client_server
-                        .send(Connect {
-                            session: ctx.address(),
-                            device_id,
-                            user_id,
-                        })
-                        .map(move |_| Ok((user_id, device_id, perms)))
-                        .into_actor(act),
-                ),
-                Err(e) => fut::Either::B(fut::ok(Err(e))),
+                Ok((user_id, device_id, perms)) => {
+                    USERS.entry(user_id)
+                        .or_insert_with(|| Vec::with_capacity(1))
+                        .and_modify(|user| user.push((device_id, ctx.address())));
+
+                    fut::ok(Ok((user_id, device_id, perms)))
+                },
+                Err(e) => fut::ok(Err(e)),
             })
             .map(move |res, act, _ctx| match res {
                 Ok((user_id, device_id, perms)) => {
@@ -516,24 +550,15 @@ impl ClientWsSession {
             ),
             Err(e) => fut::Either::B(fut::ok(Err(e))),
         })
-        .and_then(move |res, act, _ctx| match res {
+        .and_then(move |res, act, ctx| match res {
             Ok(()) => {
                 if to_revoke == current_device_id {
                     act.state = SessionState::WaitingForLogin;
-                    fut::Either::A(
-                        act.client_server
-                            .send(Disconnect {
-                                user_id,
-                                device_id: current_device_id,
-                            })
-                            .map(|_| Ok(()))
-                            .into_actor(act),
-                    )
-                } else {
-                    fut::Either::B(fut::ok(Ok(())))
+                    ctx.notify(LogoutThisSession);
                 }
+                fut::ok(Ok(()))
             }
-            Err(e) => fut::Either::B(fut::ok(Err(e))),
+            Err(e) => fut::ok(Err(e)),
         })
         .map(|res, _act, _ctx| match res {
             Ok(()) => RequestResponse::success(),
@@ -745,37 +770,30 @@ impl ClientWsSession {
                 fut.into_actor(act)
             })
             .and_then(move |res, act, _ctx| match res {
-                RequestResponse::Success(success) => fut::Either::A(
-                    act.client_server
-                        .send(LogoutUserSessions { user_id })
-                        .map(|_| RequestResponse::Success(success))
-                        .into_actor(act),
-                ),
-                response => fut::Either::B(fut::ok(response)),
+                RequestResponse::Success(success) => {
+                    USERS.get_mut(user_id).map(|user| user.log_out_all());
+                    fut::ok(RequestResponse::Success(success))
+                },
+                response => fut::ok(response),
             });
 
         self.respond(fut, request_id, ctx)
     }
 
     fn create_community(&mut self, user_id: UserId, device_id: DeviceId, community_name: String, request_id: RequestId, ctx: &mut WebsocketContext<Self>) {
+        // TODO check perms ?
         let fut = self.database_server.send(CreateCommunity { name: community_name })
             .into_actor(self)
             .and_then(move |res, act, _ctx| {
                 match res {
                     Ok(community) => {
                         let community_id = community.id;
-                        CommunityActor::new();
-                        fut::Either::A(act.client_server
-                            .send(IdentifiedMessage {
-                                user_id,
-                                device_id,
-                                request_id,
-                                msg: CreateCommunityActor(community),
-                            })
-                            .map(move |_| Ok(community_id))
-                            .into_actor(act))
+                        let community = CommunityActor::new(user_id, vec![]); // TODO(room_persistence) populate to all online devices?
+                        COMMUNITIES.insert(community_id, community.start());
+
+                        fut::ok(Ok(community_id))
                     }
-                    Err(e) => fut::Either::B(fut::ok(Err(e))),
+                    Err(e) => fut::ok(Err(e)),
                 }
             })
             .map(move |res, _act, _ctx| match res {
@@ -792,20 +810,15 @@ impl ClientWsSession {
         .and_then(move |res, act, _ctx| {
             match res {
                 Ok(()) => {
-                    fut::Either::A(act.client_server
-                        .send(IdentifiedMessage {
-                            user_id,
-                            device_id,
-                            request_id,
-                            msg: Join { community },
-                        })
-                        .into_actor(act))
+                    COMMUNITIES.get(community)
+                        .send(Join { user_id })
                 }
                 Err(e) => fut::Either::B(fut::ok(Err(e))),
             }
         })
         .map(move |res, _act, _ctx| match res {
-            Ok(_) => RequestResponse::success(),
+            Ok(true) => RequestResponse::success(),
+            Ok(false) => RequestResponse::Error(ServerError::InvalidCommunity),
             Err(e) => RequestResponse::Error(e),
         });
 
