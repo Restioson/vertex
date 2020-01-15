@@ -133,7 +133,7 @@ impl Handler<AddToCommunity> for DatabaseServer {
 
                         // Row already existed - conflict of some sort
                         Select | Update => {
-                            Err(ServerError::AlreadyInCommunity) // TODO banning
+                            Err(ServerError::AlreadyInCommunity) // TODO(room_persistence): banning
                         }
                     }
                 }

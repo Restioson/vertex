@@ -220,6 +220,7 @@ pub enum ServerMessage {
     Edit(Edit),
     Delete(Delete),
     SessionLoggedOut,
+    LeftCommunity(LeftCommunityReason),
 }
 
 impl Into<Bytes> for ServerMessage {
@@ -232,6 +233,12 @@ impl Into<Vec<u8>> for ServerMessage {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum LeftCommunityReason {
+    /// The community was deleted
+    Deleted,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

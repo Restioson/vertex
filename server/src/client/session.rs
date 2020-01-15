@@ -47,11 +47,12 @@ impl Actor for ClientWsSession {
         self.start_heartbeat(ctx);
     }
 
-    fn stopped(&mut self, ctx: &mut WebsocketContext<Self>) {
+    fn stopping(&mut self, ctx: &mut WebsocketContext<Self>) -> Running {
         if let Some(_) = self.state.user_and_device_ids() {
-            self.delete(ctx); // TODO(room_persistence)
-            println!("done");
+            self.delete();
         }
+
+        Running::Stop
     }
 }
 
@@ -64,7 +65,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
         let msg = if let Ok(msg) = msg {
             msg
         } else {
-            self.delete(ctx);
+            self.delete();
             return;
         };
 
@@ -98,7 +99,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
             }
             ws::Message::Close(_) => {
                 if let Some(_) = self.state.user_and_device_ids() {
-                    self.delete(ctx);
+                    ctx.stop();
                 } else {
                     ctx.stop();
                 }
@@ -128,7 +129,7 @@ impl Handler<LogoutThisSession> for ClientWsSession {
 
     fn handle(&mut self, _: LogoutThisSession, ctx: &mut WebsocketContext<Self>) {
         ctx.binary(ServerMessage::SessionLoggedOut);
-        self.delete(ctx);
+        self.delete();
     }
 }
 
@@ -150,31 +151,25 @@ impl ClientWsSession {
     fn start_heartbeat(&mut self, ctx: &mut WebsocketContext<Self>) {
         ctx.run_interval(HEARTBEAT_TIMEOUT, |session, ctx| {
             if Instant::now().duration_since(session.heartbeat) > HEARTBEAT_TIMEOUT {
-                session.delete(ctx);
+                ctx.stop();
             }
         });
     }
 
     /// Remove the device from wherever it is referenced
-    fn delete(&mut self, ctx: &mut WebsocketContext<Self>) {
+    fn delete(&mut self) {
         if let Some((user_id, device_id)) = self.state.user_and_device_ids() {
-            Self::remove(user_id, device_id)
-        }
+            if let Some(mut user) = USERS.get_mut(&user_id) {
+                // Remove the device
+                let devices = &mut user.sessions;
+                if let Some(idx) = devices.iter().position(|(id, _)| *id == device_id) {
+                    devices.remove(idx);
 
-        ctx.stop();
-        println!("deleted"); // TODO(test)
-    }
-
-    fn remove(user_id: UserId, device_id: DeviceId) {
-        if let Some(mut user) = USERS.get_mut(&user_id) {
-            // Remove the device
-            let devices = &mut user.sessions;
-            if let Some(idx) = devices.iter().position(|(id, _)| *id == device_id) {
-                devices.remove(idx);
-
-                // Remove the entire user entry if they are no longer online
-                if devices.len() == 0 {
-                    USERS.remove(&user_id);
+                    // Remove the entire user entry if they are no longer online
+                    if devices.len() == 0 {
+                        drop(user); // Prevent double lock on USERS
+                        USERS.remove(&user_id);
+                    }
                 }
             }
         }
@@ -322,9 +317,9 @@ impl ClientWsSession {
             });
             self.respond(fut.into_actor(self), request_id, ctx);
         } else {
-            // TODO(room_persistence): handle leaving community
             self.communities.remove_item(&message.to_community);
             self.respond_error(ServerError::InvalidCommunity, request_id, ctx);
+            ctx.binary(ServerMessage::LeftCommunity(LeftCommunityReason::Deleted));
         }
     }
 

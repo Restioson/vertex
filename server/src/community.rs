@@ -85,7 +85,7 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
         m: IdentifiedMessage<ClientSentMessage>,
         _: &mut Context<Self>,
     ) -> Self::Result {
-        // TODO
+        // TODO(implement)
         unimplemented!()
     }
 }
@@ -94,7 +94,7 @@ impl Handler<Join> for CommunityActor {
     type Result = ResponseFuture<Result<bool, ServerError>>;
 
     fn handle(&mut self, join: Join, _: &mut Context<Self>) -> Self::Result {
-        // TODO
+        // TODO(implement)
         unimplemented!()
     }
 }

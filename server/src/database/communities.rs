@@ -38,7 +38,7 @@ pub struct CreateCommunity {
     pub name: String,
 }
 
-// TODO(next): load at boot
+// TODO(room_persistence): load at boot
 impl Handler<GetCommunityMetadata> for DatabaseServer {
     type Result = ResponseFuture<Result<Option<CommunityRecord>, ServerError>>;
 
