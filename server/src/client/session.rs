@@ -2,7 +2,7 @@ use super::*;
 use crate::community::COMMUNITIES;
 use crate::config::Config;
 use crate::database::*;
-use crate::{auth, SendMessage};
+use crate::{auth, IdentifiedMessage, SendMessage};
 use actix::fut;
 use actix_web::web::Data;
 use actix_web_actors::ws::{self, WebsocketContext};
@@ -262,27 +262,7 @@ impl ClientWsSession {
             }
             SessionState::Ready(user_id, device_id, perms) => match msg {
                 ClientMessage::SendMessage(msg) => {
-                    if !perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
-                        return;
-                    }
-
-                    if !self.communities.contains(&msg.to_community) {
-                        self.respond_error(ServerError::InvalidCommunity, request_id, ctx);
-                        return;
-                    }
-
-                    if let Some(community) = COMMUNITIES.get(&msg.to_community) {
-                        let fut = community.send(msg).map_ok(|res| match res {
-                            Ok(id) => RequestResponse::message_id(id),
-                            Err(e) => RequestResponse::Error(e),
-                        });
-                        self.respond(fut.into_actor(self), request_id, ctx);
-                    } else {
-                        // TODO(room_persistence): handle leaving community
-                        self.communities.remove_item(&msg.to_community);
-                        self.respond_error(ServerError::InvalidCommunity, request_id, ctx);
-                    }
+                    self.send_message(msg, user_id, device_id, perms, request_id, ctx);
                 }
                 ClientMessage::EditMessage(edit) => {
                     unimplemented!() // TODO(implement)
@@ -309,6 +289,43 @@ impl ClientWsSession {
                 } => self.change_password(old_password, new_password, user_id, request_id, ctx),
                 _ => unreachable!(),
             },
+        }
+    }
+
+    fn send_message(
+        &mut self,
+        message: ClientSentMessage,
+        user_id: UserId,
+        device_id: DeviceId,
+        perms: TokenPermissionFlags,
+        request_id: RequestId,
+        ctx: &mut WebsocketContext<Self>,
+    ) {
+        if !perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
+            self.respond_error(ServerError::AccessDenied, request_id, ctx);
+            return;
+        }
+
+        if !self.communities.contains(&message.to_community) {
+            self.respond_error(ServerError::InvalidCommunity, request_id, ctx);
+            return;
+        }
+
+        if let Some(community) = COMMUNITIES.get(&message.to_community) {
+            let msg = IdentifiedMessage {
+                user_id,
+                device_id,
+                message,
+            };
+            let fut = community.send(msg).map_ok(|res| match res {
+                Ok(id) => RequestResponse::message_id(id),
+                Err(e) => RequestResponse::Error(e),
+            });
+            self.respond(fut.into_actor(self), request_id, ctx);
+        } else {
+            // TODO(room_persistence): handle leaving community
+            self.communities.remove_item(&message.to_community);
+            self.respond_error(ServerError::InvalidCommunity, request_id, ctx);
         }
     }
 

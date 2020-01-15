@@ -12,10 +12,17 @@ extern crate serde_derive;
 
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 
-pub trait ClientMessageType {}
-
+/// Does not need to be sequential; just unique within a desired time-span (or not, if you're a fan
+/// of trying to handle two responses with the same id attached). This exists for the client-side
+/// programmer's ease-of-use only - the server is request-id-agnostic.
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct RequestId(pub Uuid);
+pub struct RequestId(u32);
+
+impl RequestId {
+    pub fn new(id: u32) -> Self {
+        RequestId(id)
+    }
+}
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct UserId(pub Uuid);
@@ -42,10 +49,10 @@ pub struct ClientRequest {
 }
 
 impl ClientRequest {
-    pub fn new(message: ClientMessage) -> Self {
+    pub fn new(message: ClientMessage, request_id: RequestId) -> Self {
         ClientRequest {
             message,
-            request_id: RequestId(Uuid::new_v4()),
+            request_id,
         }
     }
 }
@@ -125,8 +132,6 @@ pub struct ClientSentMessage {
     pub content: String,
 }
 
-impl ClientMessageType for ClientSentMessage {}
-
 #[cfg_attr(feature = "enable-actix", derive(Message))]
 #[cfg_attr(feature = "enable-actix", rtype(result = "()"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,8 +166,6 @@ pub struct Edit {
     pub room_id: RoomId,
 }
 
-impl ClientMessageType for Edit {}
-
 #[cfg_attr(feature = "enable-actix", rtype(result = "RequestResponse"))]
 #[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,8 +174,6 @@ pub struct Delete {
     pub community_id: CommunityId,
     pub room_id: RoomId,
 }
-
-impl ClientMessageType for Delete {}
 
 bitflags! {
     #[derive(Serialize, Deserialize)]

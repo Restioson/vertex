@@ -23,6 +23,7 @@ pub struct Vertex {
     pub device_id: Option<DeviceId>,
     logged_in: bool,
     heartbeat: Instant,
+    next_request_id: u32,
 }
 
 impl Vertex {
@@ -49,6 +50,7 @@ impl Vertex {
             device_id: None,
             logged_in: false,
             heartbeat: Instant::now(),
+            next_request_id: 0,
         }
     }
 
@@ -91,7 +93,8 @@ impl Vertex {
     }
 
     fn request(&mut self, msg: ClientMessage) -> Result<RequestId, Error> {
-        let request = ClientRequest::new(msg);
+        let request = ClientRequest::new(msg, RequestId::new(self.next_request_id));
+        self.next_request_id += 1;
         let request_id = request.request_id;
         self.send(request)?;
         Ok(request_id)

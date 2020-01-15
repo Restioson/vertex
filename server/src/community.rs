@@ -1,4 +1,5 @@
 use crate::client::ClientWsSession;
+use crate::IdentifiedMessage;
 use actix::{Actor, Addr, Context, Handler, Message, ResponseFuture};
 use dashmap::DashMap;
 use lazy_static::lazy_static;
@@ -76,10 +77,14 @@ impl Handler<Connect> for CommunityActor {
     }
 }
 
-impl Handler<ClientSentMessage> for CommunityActor {
+impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
     type Result = ResponseFuture<Result<MessageId, ServerError>>;
 
-    fn handle(&mut self, m: ClientSentMessage, _: &mut Context<Self>) -> Self::Result {
+    fn handle(
+        &mut self,
+        m: IdentifiedMessage<ClientSentMessage>,
+        _: &mut Context<Self>,
+    ) -> Self::Result {
         // TODO
         unimplemented!()
     }

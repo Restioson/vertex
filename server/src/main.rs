@@ -17,11 +17,22 @@ use directories::ProjectDirs;
 use log::{info, LevelFilter};
 use std::fs::OpenOptions;
 use std::str::FromStr;
+use vertex_common::{DeviceId, UserId};
 
 #[derive(Debug, Message)]
-#[rtype(type = "()")]
+#[rtype(result = "()")]
 pub struct SendMessage<T: Debug> {
     message: T,
+}
+
+pub struct IdentifiedMessage<T: Message> {
+    user_id: UserId,
+    device_id: DeviceId,
+    message: T,
+}
+
+impl<T: Message> Message for IdentifiedMessage<T> {
+    type Result = T::Result;
 }
 
 async fn dispatch_client_ws(
