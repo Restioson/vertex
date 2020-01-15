@@ -12,21 +12,17 @@ lazy_static! {
 
 pub struct UserInCommunity(CommunityId);
 
+#[derive(Message)]
+#[rtype(result = "()")]
 pub struct Connect {
     pub user_id: UserId,
     pub session: Addr<ClientWsSession>,
 }
 
-impl Message for Connect {
-    type Result = ();
-}
-
+#[derive(Message)]
+#[rtype(result = "Result<bool, ServerError>")]
 pub struct Join {
     pub user_id: UserId,
-}
-
-impl Message for Join {
-    type Result = Result<bool, ServerError>;
 }
 
 /// A community is a collection (or "house", if you will) of rooms, as well as some metadata.

@@ -60,13 +60,11 @@ impl TryFrom<&Row> for RoomMember {
     }
 }
 
+#[derive(Message)]
+#[rtype(result = "Result<(), ServerError>")]
 pub struct AddToCommunity {
     pub community: CommunityId,
     pub user: UserId,
-}
-
-impl Message for AddToCommunity {
-    type Result = Result<(), ServerError>;
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]

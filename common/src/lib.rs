@@ -113,6 +113,8 @@ pub enum ClientMessage {
     },
 }
 
+#[cfg_attr(feature = "enable-actix", rtype(result = "Result<MessageId, ServerError>"))]
+#[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientSentMessage {
     pub to_community: CommunityId,
@@ -122,13 +124,8 @@ pub struct ClientSentMessage {
 
 impl ClientMessageType for ClientSentMessage {}
 
-#[cfg(feature = "enable-actix")]
-impl Message for ClientSentMessage {
-    type Result = Result<MessageId, ServerError>; // TODO(never_type): when never_type stabilised, use !
-}
-
 #[cfg_attr(feature = "enable-actix", derive(Message))]
-#[cfg_attr(feature = "enable-actix", rtype(type = "()"))]
+#[cfg_attr(feature = "enable-actix", rtype(result = "()"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardedMessage {
     pub room: RoomId,
@@ -152,6 +149,8 @@ impl ForwardedMessage {
     }
 }
 
+#[cfg_attr(feature = "enable-actix", rtype(result = "RequestResponse"))]
+#[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Edit {
     pub message_id: MessageId,
@@ -161,11 +160,8 @@ pub struct Edit {
 
 impl ClientMessageType for Edit {}
 
-#[cfg(feature = "enable-actix")]
-impl Message for Edit {
-    type Result = RequestResponse;
-}
-
+#[cfg_attr(feature = "enable-actix", rtype(result = "RequestResponse"))]
+#[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delete {
     pub message_id: MessageId,
@@ -174,11 +170,6 @@ pub struct Delete {
 }
 
 impl ClientMessageType for Delete {}
-
-#[cfg(feature = "enable-actix")]
-impl Message for Delete {
-    type Result = RequestResponse;
-}
 
 bitflags! {
     #[derive(Serialize, Deserialize)]

@@ -52,31 +52,23 @@ impl TryFrom<Row> for Token {
     }
 }
 
+#[derive(Message)]
+#[rtype(result = "Result<Option<Token>, ServerError>")]
 pub struct GetToken {
     pub device_id: DeviceId,
 }
 
-impl Message for GetToken {
-    type Result = Result<Option<Token>, ServerError>;
-}
-
+#[derive(Message)]
+#[rtype(result = "Result<(), ServerError>")]
 pub struct CreateToken(pub Token);
 
-impl Message for CreateToken {
-    type Result = Result<(), ServerError>;
-}
-
+#[derive(Message)]
+#[rtype(result = "Result<bool, ServerError>")]
 pub struct RevokeToken(pub DeviceId);
 
-impl Message for RevokeToken {
-    type Result = Result<bool, ServerError>;
-}
-
+#[derive(Message)]
+#[rtype(result = "Result<bool, ServerError>")]
 pub struct RefreshToken(pub DeviceId);
-
-impl Message for RefreshToken {
-    type Result = Result<bool, ServerError>;
-}
 
 impl Handler<GetToken> for DatabaseServer {
     type Result = ResponseFuture<Result<Option<Token>, ServerError>>;

@@ -28,18 +28,14 @@ impl TryFrom<Row> for CommunityRecord {
     }
 }
 
+#[derive(Message)]
+#[rtype(result = "Result<Option<CommunityRecord>, ServerError>")]
 pub struct GetCommunityMetadata(CommunityId);
 
-impl Message for GetCommunityMetadata {
-    type Result = Result<Option<CommunityRecord>, ServerError>;
-}
-
+#[derive(Message)]
+#[rtype(result = "Result<CommunityRecord, ServerError>")]
 pub struct CreateCommunity {
     pub name: String,
-}
-
-impl Message for CreateCommunity {
-    type Result = Result<CommunityRecord, ServerError>;
 }
 
 // TODO(next): load at boot

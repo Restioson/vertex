@@ -67,50 +67,38 @@ impl TryFrom<Row> for UserRecord {
     }
 }
 
+#[derive(Message)]
+#[rtype(result = "Result<Option<UserRecord>, ServerError>")]
 pub struct GetUserById(pub UserId);
 
-impl Message for GetUserById {
-    type Result = Result<Option<UserRecord>, ServerError>;
-}
-
+#[derive(Message)]
+#[rtype(result = "Result<Option<UserRecord>, ServerError>")]
 pub struct GetUserByName(pub String);
 
-impl Message for GetUserByName {
-    type Result = Result<Option<UserRecord>, ServerError>;
-}
-
+#[derive(Message)]
+#[rtype(result = "Result<bool, ServerError>")]
 pub struct CreateUser(pub UserRecord);
 
-impl Message for CreateUser {
-    type Result = Result<bool, ServerError>;
-}
-
+#[derive(Message)]
+#[rtype(result = "Result<bool, ServerError>")]
 pub struct ChangeUsername {
     pub user_id: UserId,
     pub new_username: String,
 }
 
-impl Message for ChangeUsername {
-    type Result = Result<bool, ServerError>;
-}
-
+#[derive(Message)]
+#[rtype(result = "Result<(), ServerError>")]
 pub struct ChangeDisplayName {
     pub user_id: UserId,
     pub new_display_name: String,
 }
 
-impl Message for ChangeDisplayName {
-    type Result = Result<(), ServerError>;
-}
-
+#[derive(Message)]
+#[rtype(result = "Result<(), ServerError>")]
 pub struct ChangePassword {
     pub user_id: UserId,
     pub new_password_hash: String,
     pub hash_version: HashSchemeVersion,
-}
-
-impl Message for ChangePassword {
-    type Result = Result<(), ServerError>;
 }
 
 impl Handler<CreateUser> for DatabaseServer {
