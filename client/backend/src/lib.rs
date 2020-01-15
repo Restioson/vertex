@@ -343,12 +343,41 @@ impl Vertex {
         }
     }
 
-    pub fn create_room(&mut self, name: String) -> Result<RoomId, Error> {
+    pub fn create_community(&mut self, name: String) -> Result<CommunityId, Error> {
         if !self.logged_in {
             return Err(Error::NotLoggedIn);
         }
 
-        let request_id = self.request(ClientMessage::CreateRoom { name })?;
+        let request_id = self.request(ClientMessage::CreateCommunity { name })?;
+
+        let msg = self.receive_blocking()?;
+        match msg.clone() {
+            ServerMessage::Response {
+                response,
+                request_id: response_id,
+            } => {
+                match response {
+                    // TODO do this more asynchronously @gegy1000
+                    RequestResponse::Success(Success::Community { id })
+                        if response_id == request_id =>
+                    {
+                        Ok(id)
+                    }
+                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
+                    _ => Err(Error::IncorrectServerMessage(msg)),
+                }
+            }
+            ServerMessage::Error(e) => Err(Error::ServerError(e)),
+            _ => Err(Error::IncorrectServerMessage(msg)),
+        }
+    }
+
+    pub fn create_room(&mut self, name: String, community: CommunityId) -> Result<RoomId, Error> {
+        if !self.logged_in {
+            return Err(Error::NotLoggedIn);
+        }
+
+        let request_id = self.request(ClientMessage::CreateRoom { community, name })?;
 
         let msg = self.receive_blocking()?;
         match msg.clone() {
@@ -370,12 +399,12 @@ impl Vertex {
         }
     }
 
-    pub fn join_room(&mut self, room: RoomId) -> Result<(), Error> {
+    pub fn join_community(&mut self, community: CommunityId) -> Result<(), Error> {
         if !self.logged_in {
             return Err(Error::NotLoggedIn);
         }
 
-        let request_id = self.request(ClientMessage::JoinRoom(room))?;
+        let request_id = self.request(ClientMessage::JoinCommunity(community))?;
 
         let msg = self.receive_blocking()?;
         match msg.clone() {
@@ -398,10 +427,16 @@ impl Vertex {
     }
 
     /// Sends a message
-    pub fn send_message(&mut self, msg: String, to_room: RoomId) -> Result<(), Error> {
+    pub fn send_message(
+        &mut self,
+        msg: String,
+        to_room: RoomId,
+        to_community: CommunityId,
+    ) -> Result<(), Error> {
         if self.logged_in {
             let request_id = self.request(ClientMessage::SendMessage(ClientSentMessage {
                 to_room,
+                to_community,
                 content: msg,
             }))?;
 

@@ -109,8 +109,10 @@ impl Handler<CreateUser> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let stmt = conn.client.prepare(
-                "INSERT INTO users
+            let stmt = conn
+                .client
+                .prepare(
+                    "INSERT INTO users
                 (
                     id,
                     username,
@@ -123,23 +125,29 @@ impl Handler<CreateUser> for DatabaseServer {
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 ON CONFLICT DO NOTHING",
-            ).await.map_err(handle_error_psql)?;
+                )
+                .await
+                .map_err(handle_error_psql)?;
 
-            let ret = conn.client.execute(
-                &stmt,
-                &[
-                    &user.id.0,
-                    &user.username,
-                    &user.display_name,
-                    &user.password_hash,
-                    &(user.hash_scheme_version as u8 as i16),
-                    &user.compromised,
-                    &user.locked,
-                    &user.banned,
-                ],
-            ).await.map_err(handle_error_psql)?;
+            let ret = conn
+                .client
+                .execute(
+                    &stmt,
+                    &[
+                        &user.id.0,
+                        &user.username,
+                        &user.display_name,
+                        &user.password_hash,
+                        &(user.hash_scheme_version as u8 as i16),
+                        &user.compromised,
+                        &user.locked,
+                        &user.banned,
+                    ],
+                )
+                .await
+                .map_err(handle_error_psql)?;
 
-           Ok(ret == 1)// Return true if 1 item was inserted (insert was successful)
+            Ok(ret == 1) // Return true if 1 item was inserted (insert was successful)
         })
     }
 }
@@ -152,8 +160,16 @@ impl Handler<GetUserById> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let query = conn.client.prepare("SELECT * FROM users WHERE id=$1").await.map_err(handle_error_psql)?;
-            let opt = conn.client.query_opt(&query, &[&id.0]).await.map_err(handle_error_psql)?;
+            let query = conn
+                .client
+                .prepare("SELECT * FROM users WHERE id=$1")
+                .await
+                .map_err(handle_error_psql)?;
+            let opt = conn
+                .client
+                .query_opt(&query, &[&id.0])
+                .await
+                .map_err(handle_error_psql)?;
 
             if let Some(row) = opt {
                 Ok(Some(UserRecord::try_from(row).map_err(handle_error_psql)?))
@@ -172,8 +188,16 @@ impl Handler<GetUserByName> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let query = conn.client.prepare("SELECT * FROM users WHERE username=$1").await.map_err(handle_error_psql)?;
-            let opt = conn.client.query_opt(&query, &[&name]).await.map_err(handle_error_psql)?;
+            let query = conn
+                .client
+                .prepare("SELECT * FROM users WHERE username=$1")
+                .await
+                .map_err(handle_error_psql)?;
+            let opt = conn
+                .client
+                .query_opt(&query, &[&name])
+                .await
+                .map_err(handle_error_psql)?;
 
             if let Some(row) = opt {
                 Ok(Some(UserRecord::try_from(row).map_err(handle_error_psql)?))
@@ -191,15 +215,23 @@ impl Handler<ChangeUsername> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let stmt = conn.client.prepare("UPDATE users SET username = $1 WHERE id = $2").await.map_err(handle_error_psql)?;
-            let res = conn.client.execute(&stmt, &[&change.new_username, &change.user_id.0]).await;
+            let stmt = conn
+                .client
+                .prepare("UPDATE users SET username = $1 WHERE id = $2")
+                .await
+                .map_err(handle_error_psql)?;
+            let res = conn
+                .client
+                .execute(&stmt, &[&change.new_username, &change.user_id.0])
+                .await;
             match res {
                 Ok(ret) => Ok(ret == 1),
-                Err(ref e) if e.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
-                    || e.code() == Some(&SqlState::UNIQUE_VIOLATION) =>
+                Err(ref e)
+                    if e.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
+                        || e.code() == Some(&SqlState::UNIQUE_VIOLATION) =>
                 {
                     Ok(false)
-                },
+                }
                 Err(e) => Err(handle_error_psql(e)),
             }
         })
@@ -213,8 +245,15 @@ impl Handler<ChangeDisplayName> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let stmt = conn.client.prepare("UPDATE users SET display_name = $1 WHERE id = $2").await.map_err(handle_error_psql)?;
-            conn.client.execute(&stmt, &[&change.new_display_name, &change.user_id.0]).await.map_err(handle_error_psql)?;
+            let stmt = conn
+                .client
+                .prepare("UPDATE users SET display_name = $1 WHERE id = $2")
+                .await
+                .map_err(handle_error_psql)?;
+            conn.client
+                .execute(&stmt, &[&change.new_display_name, &change.user_id.0])
+                .await
+                .map_err(handle_error_psql)?;
             Ok(())
         })
     }
@@ -227,21 +266,29 @@ impl Handler<ChangePassword> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let stmt = conn.client.prepare(
-                "UPDATE users SET
+            let stmt = conn
+                .client
+                .prepare(
+                    "UPDATE users SET
                         password_hash = $1, hash_scheme_version = $2, compromised = $3
-                    WHERE id = $4"
-            ).await.map_err(handle_error_psql)?;
+                    WHERE id = $4",
+                )
+                .await
+                .map_err(handle_error_psql)?;
 
-            let res = conn.client.execute(
-                &stmt,
-                &[
-                    &change.new_password_hash,
-                    &(change.hash_version as u8 as i16),
-                    &false,
-                    &change.user_id.0,
-                ]
-            ).await.map_err(handle_error_psql)?;
+            let res = conn
+                .client
+                .execute(
+                    &stmt,
+                    &[
+                        &change.new_password_hash,
+                        &(change.hash_version as u8 as i16),
+                        &false,
+                        &change.user_id.0,
+                    ],
+                )
+                .await
+                .map_err(handle_error_psql)?;
 
             Ok(())
         })

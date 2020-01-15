@@ -113,7 +113,10 @@ pub enum ClientMessage {
     },
 }
 
-#[cfg_attr(feature = "enable-actix", rtype(result = "Result<MessageId, ServerError>"))]
+#[cfg_attr(
+    feature = "enable-actix",
+    rtype(result = "Result<MessageId, ServerError>")
+)]
 #[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientSentMessage {
@@ -254,6 +257,12 @@ impl RequestResponse {
     }
     pub fn message_id(id: MessageId) -> Self {
         RequestResponse::Success(Success::MessageId { id })
+    }
+}
+
+impl From<ServerError> for RequestResponse {
+    fn from(e: ServerError) -> Self {
+        RequestResponse::Error(e)
     }
 }
 

@@ -1,11 +1,11 @@
 use crate::auth::HashSchemeVersion;
-use crate::database::{handle_error, DatabaseServer, handle_error_psql};
+use crate::database::{handle_error, handle_error_psql, DatabaseServer};
 use actix::{Context, Handler, Message, ResponseFuture};
 use chrono::{DateTime, Utc};
+use futures::TryFutureExt;
 use std::convert::TryFrom;
 use tokio_postgres::Row;
 use vertex_common::{DeviceId, ServerError, TokenPermissionFlags, UserId};
-use futures::TryFutureExt;
 
 pub(super) const CREATE_TOKENS_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS login_tokens (
@@ -77,8 +77,16 @@ impl Handler<GetToken> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let query = conn.client.prepare("SELECT * FROM login_tokens WHERE device_id=$1").await.map_err(handle_error_psql)?;
-            let opt = conn.client.query_opt(&query, &[&get.device_id.0]).await.map_err(handle_error_psql)?;
+            let query = conn
+                .client
+                .prepare("SELECT * FROM login_tokens WHERE device_id=$1")
+                .await
+                .map_err(handle_error_psql)?;
+            let opt = conn
+                .client
+                .query_opt(&query, &[&get.device_id.0])
+                .await
+                .map_err(handle_error_psql)?;
 
             if let Some(row) = opt {
                 Ok(Some(Token::try_from(row).map_err(handle_error_psql)?))
@@ -97,9 +105,10 @@ impl Handler<CreateToken> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let stmt = conn.client
+            let stmt = conn
+                .client
                 .prepare(
-                "INSERT INTO login_tokens
+                    "INSERT INTO login_tokens
                         (
                             device_id,
                             device_name,
@@ -111,21 +120,27 @@ impl Handler<CreateToken> for DatabaseServer {
                             permission_flags
                         )
                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-            ).await.map_err(handle_error_psql)?;
+                )
+                .await
+                .map_err(handle_error_psql)?;
 
-            conn.client.execute(
-                &stmt,
-                &[
-                    &token.device_id.0,
-                    &token.device_name,
-                    &token.token_hash,
-                    &(token.hash_scheme_version as u8 as i16),
-                    &token.user_id.0,
-                    &token.last_used,
-                    &token.expiration_date,
-                    &token.permission_flags.bits(),
-                ],
-            ).await.map(|_| ()).map_err(handle_error_psql)
+            conn.client
+                .execute(
+                    &stmt,
+                    &[
+                        &token.device_id.0,
+                        &token.device_name,
+                        &token.token_hash,
+                        &(token.hash_scheme_version as u8 as i16),
+                        &token.user_id.0,
+                        &token.last_used,
+                        &token.expiration_date,
+                        &token.permission_flags.bits(),
+                    ],
+                )
+                .await
+                .map(|_| ())
+                .map_err(handle_error_psql)
         })
     }
 }
@@ -137,9 +152,15 @@ impl Handler<RevokeToken> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let stmt = conn.client.prepare("DELETE FROM login_tokens WHERE device_id = $1").map_err(handle_error_psql).await?;
-            conn.client.execute(&stmt, &[&(revoke.0).0])
-                .await.map(|r| r == 1) // Result will be 1 if the token existed
+            let stmt = conn
+                .client
+                .prepare("DELETE FROM login_tokens WHERE device_id = $1")
+                .map_err(handle_error_psql)
+                .await?;
+            conn.client
+                .execute(&stmt, &[&(revoke.0).0])
+                .await
+                .map(|r| r == 1) // Result will be 1 if the token existed
                 .map_err(handle_error_psql)
         })
     }
@@ -152,12 +173,15 @@ impl Handler<RefreshToken> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let stmt = conn.client
+            let stmt = conn
+                .client
                 .prepare("UPDATE login_tokens SET last_used=NOW()::timestamp WHERE device_id = $1")
                 .await
                 .map_err(handle_error_psql)?;
-            conn.client.execute(&stmt, &[&(revoke.0).0])
-                .await.map(|r| r == 1) // Result will be 1 if the token existed
+            conn.client
+                .execute(&stmt, &[&(revoke.0).0])
+                .await
+                .map(|r| r == 1) // Result will be 1 if the token existed
                 .map_err(handle_error_psql)
         })
     }

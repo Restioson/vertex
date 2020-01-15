@@ -6,22 +6,21 @@ use std::time::{Duration, Instant};
 use tokio_postgres::NoTls;
 use vertex_common::{DeviceId, ServerError, UserId};
 
-mod token;
-mod user;
 mod communities;
 mod community_membership;
+mod token;
+mod user;
 
+use crate::client::LogoutThisSession;
+use crate::client::USERS;
 use crate::config::Config;
-pub use token::*;
-pub use user::*;
 pub use communities::*;
 pub use community_membership::*;
-use std::sync::Arc;
-use crate::client::USERS;
 use futures::{Future, FutureExt, TryFutureExt};
-use crate::client::LogoutThisSession;
+use std::sync::Arc;
+pub use token::*;
+pub use user::*;
 
-// TODO(room_persistence): replace manual impls with rtype
 pub struct DatabaseServer {
     pool: Arc<l337::Pool<PostgresConnectionManager<NoTls>>>,
     sweep_interval: Duration,
@@ -38,9 +37,10 @@ impl DatabaseServer {
             NoTls,
         );
 
-        let pool = Arc::new(sys
-            .block_on(l337::Pool::new(mgr, Default::default()))
-            .expect("db error"));
+        let pool = Arc::new(
+            sys.block_on(l337::Pool::new(mgr, Default::default()))
+                .expect("db error"),
+        );
 
         DatabaseServer {
             pool,
@@ -49,7 +49,9 @@ impl DatabaseServer {
         }
     }
 
-    fn create_tables(&mut self) -> impl Future<Output = Result<(), l337::Error<tokio_postgres::Error>>> {
+    fn create_tables(
+        &mut self,
+    ) -> impl Future<Output = Result<(), l337::Error<tokio_postgres::Error>>> {
         use l337::Error::External;
 
         let pool = self.pool.clone();
@@ -60,11 +62,11 @@ impl DatabaseServer {
                 CREATE_USERS_TABLE,
                 CREATE_TOKENS_TABLE,
                 CREATE_COMMUNITIES_TABLE,
-                CREATE_COMMUNITY_MEMBERSHIP_TABLE
+                CREATE_COMMUNITY_MEMBERSHIP_TABLE,
             ];
 
             for cmd in &cmds {
-                let stmt = conn.client.prepare(CREATE_USERS_TABLE).map_err(External).await?;
+                let stmt = conn.client.prepare(cmd).map_err(External).await?;
                 conn.client.execute(&stmt, &[]).await.map_err(External)?;
             }
 
@@ -75,7 +77,8 @@ impl DatabaseServer {
     fn expired_tokens(
         &self,
         token_expiry_days: u16,
-    ) -> impl Future<Output = Result<Vec<(UserId, DeviceId)>, l337::Error<tokio_postgres::Error>>> {
+    ) -> impl Future<Output = Result<Vec<(UserId, DeviceId)>, l337::Error<tokio_postgres::Error>>>
+    {
         let token_expiry_days = token_expiry_days as f64;
 
         let pool = self.pool.clone();
@@ -83,12 +86,14 @@ impl DatabaseServer {
         async move {
             let conn = pool.connection().await?;
 
-            let stmt = conn.client.prepare(
-                "DELETE FROM login_tokens
-                WHERE expiration_date < NOW()::timestamp OR
-                    DATE_PART('days', NOW()::timestamp - last_used) > $1
-                RETURNING device_id, user_id",
-            )
+            let stmt = conn
+                .client
+                .prepare(
+                    "DELETE FROM login_tokens
+                        WHERE expiration_date < NOW()::timestamp OR
+                        DATE_PART('days', NOW()::timestamp - last_used) > $1
+                    RETURNING device_id, user_id",
+                )
                 .map_err(l337::Error::External)
                 .await?;
 
@@ -120,7 +125,8 @@ impl DatabaseServer {
                 .iter()
                 .filter_map(|(user_id, device_id)| USERS.get(user_id).map(|u| ((device_id, u))))
                 .for_each(|(device_id, user)| {
-                    user.get(device_id).map(|addr| addr.do_send(LogoutThisSession));
+                    user.get(device_id)
+                        .map(|addr| addr.do_send(LogoutThisSession));
                 });
 
             let time_taken = Instant::now().duration_since(begin);
@@ -132,9 +138,6 @@ impl DatabaseServer {
                 );
             }
         }
-
-
-
     }
 }
 
@@ -142,7 +145,9 @@ impl Actor for DatabaseServer {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        let f = self.create_tables().map(|r| r.expect("Error creating SQL tables!"));
+        let f = self
+            .create_tables()
+            .map(|r| r.expect("Error creating SQL tables!"));
         Arbiter::spawn(f);
 
         ctx.run_interval(self.sweep_interval, |db, ctx| {
@@ -169,4 +174,3 @@ fn handle_error_psql(error: tokio_postgres::Error) -> ServerError {
 
     ServerError::Internal
 }
-

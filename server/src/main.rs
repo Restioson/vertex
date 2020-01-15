@@ -6,16 +6,17 @@ use std::{env, fmt::Debug, fs};
 
 mod auth;
 mod client;
+mod community;
 mod config;
 mod database;
-mod community;
 
 use crate::config::Config;
 use client::ClientWsSession;
 use database::DatabaseServer;
 use directories::ProjectDirs;
-use log::info;
+use log::{info, LevelFilter};
 use std::fs::OpenOptions;
+use std::str::FromStr;
 
 #[derive(Debug, Message)]
 #[rtype(type = "()")]
@@ -31,11 +32,7 @@ async fn dispatch_client_ws(
 ) -> Result<HttpResponse, Error> {
     let db_server = db_server.get_ref().clone();
 
-    ws::start(
-        ClientWsSession::new(db_server, config),
-        &request,
-        stream,
-    )
+    ws::start(ClientWsSession::new(db_server, config), &request, stream)
 }
 
 fn create_files_directories(config: &Config) {
@@ -49,7 +46,7 @@ fn create_files_directories(config: &Config) {
     }
 }
 
-fn setup_logging() {
+fn setup_logging(config: &Config) {
     let dirs = ProjectDirs::from("", "vertex_chat", "vertex_server")
         .expect("Error getting project directories");
     let dir = dirs.data_dir().join("logs");
@@ -69,7 +66,7 @@ fn setup_logging() {
                 message
             ))
         })
-        .level(log::LevelFilter::Info)
+        .level(LevelFilter::from_str(&config.log_level).unwrap())
         .chain(std::io::stdout())
         .chain(
             OpenOptions::new()
@@ -92,12 +89,13 @@ fn setup_logging() {
 
 fn main() -> std::io::Result<()> {
     println!("Vertex server starting...");
-    setup_logging();
+
+    let config = config::load_config();
+    setup_logging(&config);
 
     let args = env::args().collect::<Vec<_>>();
     let addr = args.get(1).cloned().unwrap_or("127.0.0.1:8080".to_string());
 
-    let config = config::load_config();
     create_files_directories(&config);
 
     let ssl_config = config::ssl_config();

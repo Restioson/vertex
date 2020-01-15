@@ -1,6 +1,7 @@
 // configuration framework rewrite time. very epic
 
 use directories::ProjectDirs;
+use log::Level;
 use openssl::pkey::PKey;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use serde::{Deserialize, Serialize};
@@ -8,6 +9,7 @@ use std::env;
 use std::fs::{self, File};
 use std::io::{BufReader, ErrorKind, Read};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -31,6 +33,8 @@ pub struct Config {
     pub token_stale_days: u16,
     #[serde(default = "token_expiry_days")]
     pub token_expiry_days: u16,
+    #[serde(default = "log_level")]
+    pub log_level: String,
 }
 
 fn max_password_len() -> u16 {
@@ -71,6 +75,10 @@ fn token_stale_days() -> u16 {
 
 fn token_expiry_days() -> u16 {
     90 // ~3 months
+}
+
+fn log_level() -> String {
+    "info".to_string()
 }
 
 pub fn load_config() -> Config {
@@ -134,6 +142,10 @@ pub fn load_config() -> Config {
 
     if config.tokens_sweep_interval_secs < 60 {
         panic!("Tokens sweep interval must be greater than 1 minute!");
+    }
+
+    if Level::from_str(&config.log_level).is_err() {
+        panic!("Invalid log level! It should be 'trace', 'debug', 'info', 'warn', or 'error'")
     }
 
     config

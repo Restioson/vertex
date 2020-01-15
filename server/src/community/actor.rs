@@ -1,10 +1,10 @@
-use vertex_common::{UserId, RoomId, CommunityId, ServerError, ClientSentMessage, MessageId};
 use crate::client::ClientWsSession;
-use actix::{Addr, Actor, Context, Message, ResponseFuture, Handler};
+use actix::{Actor, Addr, Context, Handler, Message, ResponseFuture};
+use dashmap::DashMap;
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 use uuid::Uuid;
-use lazy_static::lazy_static;
-use dashmap::DashMap;
+use vertex_common::{ClientSentMessage, CommunityId, MessageId, RoomId, ServerError, UserId};
 
 lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Addr<CommunityActor>> = DashMap::new();
@@ -39,10 +39,20 @@ impl Actor for CommunityActor {
 impl CommunityActor {
     fn new(creator: UserId, online_devices: Vec<Addr<ClientWsSession>>) -> CommunityActor {
         let mut rooms = HashMap::new();
-        rooms.insert(RoomId(Uuid::new_v4()), Room { name: "general".to_string() });
+        rooms.insert(
+            RoomId(Uuid::new_v4()),
+            Room {
+                name: "general".to_string(),
+            },
+        );
 
         let mut online_members = HashMap::new();
-        online_members.insert(creator, OnlineMember { devices: online_devices });
+        online_members.insert(
+            creator,
+            OnlineMember {
+                devices: online_devices,
+            },
+        );
 
         CommunityActor {
             rooms,
@@ -59,7 +69,8 @@ impl Handler<Connect> for CommunityActor {
         let session = join.session;
         let session_cloned = session.clone();
 
-        self.online_members.entry(user_id)
+        self.online_members
+            .entry(user_id)
             .and_modify(move |member| member.devices.push(session_cloned))
             .or_insert_with(|| OnlineMember::new(session));
     }
@@ -100,4 +111,3 @@ impl OnlineMember {
 struct Room {
     name: String,
 }
-

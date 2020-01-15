@@ -1,11 +1,11 @@
 use crate::config::Config;
 use crate::database::UserRecord;
 use futures::Future;
+use futures::FutureExt;
 use rand::RngCore;
+use tokio::task::JoinError;
 use unicode_normalization::UnicodeNormalization;
 use vertex_common::{ServerError, UserId};
-use tokio::task::JoinError;
-use futures::FutureExt;
 
 pub const MAX_TOKEN_LENGTH: usize = 45;
 
@@ -56,9 +56,7 @@ pub fn prepare_username(username: &str, config: &Config) -> Result<String, TooSh
 // The `<E: Send + 'static>`s here are to allow the caller to specify an error type for easier use,
 // since this will never return an error
 
-pub fn hash(
-    pass: String,
-) -> impl Future<Output = Result<(String, HashSchemeVersion), JoinError>> {
+pub fn hash(pass: String) -> impl Future<Output = (String, HashSchemeVersion)> {
     tokio::task::spawn_blocking(move || {
         let mut salt: [u8; 32] = [0; 32]; // 256 bits
         rand::thread_rng().fill_bytes(&mut salt);
@@ -69,13 +67,14 @@ pub fn hash(
 
         (hash, HashSchemeVersion::Argon2V1)
     })
+    .map(|r| r.expect("auth error"))
 }
 
 pub fn verify(
     pass: String,
     hash: String,
     scheme_version: HashSchemeVersion,
-) -> impl Future<Output = Result<bool, JoinError>> {
+) -> impl Future<Output = bool> {
     tokio::task::spawn_blocking(move || {
         use HashSchemeVersion::*;
 
@@ -84,26 +83,23 @@ pub fn verify(
                 .expect("Error verifying password hash"),
         }
     })
+    .map(|r| r.expect("auth error"))
 }
 
-pub fn verify_user_password<E: Send + 'static>(
+pub async fn verify_user_password(
     user: UserRecord,
     password: String,
-) -> impl Future<Output = Result<Result<UserId, ServerError>, JoinError>> {
+) -> Result<UserId, ServerError> {
     let UserRecord {
         id: user_id,
         password_hash,
         hash_scheme_version,
         ..
     } = user;
-
-    verify(password, password_hash, hash_scheme_version).map(move |res| {
-        res.map(|matches|
-            if matches {
-                Ok(user_id)
-            } else {
-                Err(ServerError::IncorrectUsernameOrPassword)
-            }
-        )
-    })
+    let matches = verify(password, password_hash, hash_scheme_version).await;
+    if matches {
+        Ok(user_id)
+    } else {
+        Err(ServerError::IncorrectUsernameOrPassword)
+    }
 }

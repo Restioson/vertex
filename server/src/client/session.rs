@@ -1,16 +1,20 @@
 use super::*;
+use crate::community::COMMUNITIES;
 use crate::config::Config;
 use crate::database::*;
-use crate::SendMessage;
+use crate::{auth, SendMessage};
 use actix::fut;
 use actix_web::web::Data;
 use actix_web_actors::ws::{self, WebsocketContext};
 use chrono::DateTime;
 use chrono::Utc;
+use futures::{FutureExt, TryFutureExt};
+use log::error;
+use rand::RngCore;
 use std::io::Cursor;
 use std::time::Instant;
+use uuid::Uuid;
 use vertex_common::*;
-use log::error;
 
 // TODO(room_persistence): make sure device isnt online when try to login
 
@@ -47,12 +51,17 @@ impl Actor for ClientWsSession {
     fn stopped(&mut self, ctx: &mut WebsocketContext<Self>) {
         if let Some(_) = self.state.user_and_device_ids() {
             self.delete(ctx); // TODO(room_persistence)
+            println!("done");
         }
     }
 }
 
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
-    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut WebsocketContext<Self>) {
+    fn handle(
+        &mut self,
+        msg: Result<ws::Message, ws::ProtocolError>,
+        ctx: &mut WebsocketContext<Self>,
+    ) {
         let msg = if let Ok(msg) = msg {
             msg
         } else {
@@ -125,10 +134,7 @@ impl Handler<LogoutThisSession> for ClientWsSession {
 }
 
 impl ClientWsSession {
-    pub fn new(
-        database_server: Addr<DatabaseServer>,
-        config: Data<Config>,
-    ) -> Self {
+    pub fn new(database_server: Addr<DatabaseServer>, config: Data<Config>) -> Self {
         ClientWsSession {
             database_server,
             communities: Vec::new(),
@@ -153,21 +159,26 @@ impl ClientWsSession {
     /// Remove the device from wherever it is referenced
     fn delete(&mut self, ctx: &mut WebsocketContext<Self>) {
         if let Some((user_id, device_id)) = self.state.user_and_device_ids() {
-            if let Some(mut user) = USERS.get_mut(&user_id) {
-                // Remove the device
-                let devices = &mut user.sessions;
-                if let Some(idx) = devices.iter().position(|(id, _)| *id == device_id) {
-                    devices.remove(idx);
-
-                    // Remove the entire user entry if they are no longer online
-                    if devices.len() == 0 {
-                        USERS.remove(&user_id);
-                    }
-                }
-            }
+            Self::remove(user_id, device_id)
         }
 
         ctx.stop();
+        println!("deleted"); // TODO(test)
+    }
+
+    fn remove(user_id: UserId, device_id: DeviceId) {
+        if let Some(mut user) = USERS.get_mut(&user_id) {
+            // Remove the device
+            let devices = &mut user.sessions;
+            if let Some(idx) = devices.iter().position(|(id, _)| *id == device_id) {
+                devices.remove(idx);
+
+                // Remove the entire user entry if they are no longer online
+                if devices.len() == 0 {
+                    USERS.remove(&user_id);
+                }
+            }
+        }
     }
 
     /// Responds to a request with a future which will eventually resolve to the request response
@@ -175,13 +186,14 @@ impl ClientWsSession {
     where
         F: ActorFuture<Output = Result<RequestResponse, MailboxError>, Actor = Self> + 'static,
     {
+        // TODO(room_persistence): do i need actorfuture?
         fut.then(move |response, _act, ctx| {
             let response = ServerMessage::Response {
                 response: match response {
                     Ok(r) => r,
                     Err(e) => {
                         error!("Actix mailbox error: {:#?}", e);
-                        RequestResponse::Error(ServerError::Internal)
+                        ServerError::Internal.into()
                     }
                 },
                 request_id,
@@ -189,7 +201,8 @@ impl ClientWsSession {
 
             ctx.binary(response);
             fut::ready(())
-        }).wait(ctx);
+        })
+        .wait(ctx);
     }
 
     fn respond_error(
@@ -245,15 +258,32 @@ impl ClientWsSession {
         ctx: &mut WebsocketContext<Self>,
     ) {
         match self.state {
-            SessionState::WaitingForLogin => self.respond(
-                futures::future::ok(RequestResponse::Error(ServerError::NotLoggedIn))
-                    .into_actor(self),
-                request_id,
-                ctx,
-            ),
+            SessionState::WaitingForLogin => {
+                self.respond(fut::ok(ServerError::NotLoggedIn.into()), request_id, ctx)
+            }
             SessionState::Ready(user_id, device_id, perms) => match msg {
                 ClientMessage::SendMessage(msg) => {
-                    unimplemented!() // TODO(implement)
+                    if !perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
+                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
+                        return;
+                    }
+
+                    if !self.communities.contains(&msg.to_community) {
+                        self.respond_error(ServerError::InvalidCommunity, request_id, ctx);
+                        return;
+                    }
+
+                    if let Some(community) = COMMUNITIES.get(&msg.to_community) {
+                        let fut = community.send(msg).map_ok(|res| match res {
+                            Ok(id) => RequestResponse::message_id(id),
+                            Err(e) => RequestResponse::Error(e),
+                        });
+                        self.respond(fut.into_actor(self), request_id, ctx);
+                    } else {
+                        // TODO(room_persistence): handle leaving community
+                        self.communities.remove_item(&msg.to_community);
+                        self.respond_error(ServerError::InvalidCommunity, request_id, ctx);
+                    }
                 }
                 ClientMessage::EditMessage(edit) => {
                     unimplemented!() // TODO(implement)
@@ -286,11 +316,92 @@ impl ClientWsSession {
     fn login(
         &mut self,
         device_id: DeviceId,
-        login_token: AuthToken,
+        token_str: AuthToken,
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
     ) {
-        unimplemented!() // TODO(implement)
+        if self.logged_in() {
+            return self.respond_error(ServerError::AlreadyLoggedIn, request_id, ctx);
+        }
+
+        let token_stale_days = self.config.token_stale_days as i64;
+        let db_server = self.database_server.clone();
+        let get_token = self.database_server.send(GetToken { device_id });
+
+        let fut = async move {
+            let token = match get_token.await? {
+                Ok(Some(token)) => token,
+                Ok(None) => return Ok(Err(ServerError::InvalidToken)),
+                Err(e) => return Ok(Err(e)),
+            };
+
+            let user = match db_server.send(GetUserById(token.user_id)).await? {
+                Ok(Some(user)) => user,
+                Ok(None) => return Ok(Err(ServerError::InvalidUser)),
+                Err(e) => return Ok(Err(e)),
+            };
+
+            // Check if can log in with this token
+            if user.locked {
+                return Ok(Err(ServerError::UserLocked));
+            } else if user.banned {
+                return Ok(Err(ServerError::UserBanned));
+            } else if user.compromised {
+                return Ok(Err(ServerError::UserCompromised));
+            } else if (Utc::now() - token.last_used).num_days() > token_stale_days {
+                return Ok(Err(ServerError::StaleToken));
+            }
+
+            if token_str.0.len() > auth::MAX_TOKEN_LENGTH {
+                return Ok(Err(ServerError::InvalidToken));
+            }
+
+            let Token {
+                token_hash,
+                hash_scheme_version,
+                user_id,
+                permission_flags,
+                ..
+            } = token;
+            let matches = auth::verify(token_str.0, token_hash, hash_scheme_version).await;
+
+            if !matches {
+                return Ok(Err(ServerError::InvalidToken));
+            }
+
+            match db_server.send(RefreshToken(device_id)).await? {
+                Ok(true) => Ok(Ok((user_id, permission_flags))),
+                Ok(false) => Ok(Err(ServerError::InvalidToken)),
+                Err(e) => Ok(Err(e)),
+            }
+        };
+
+        let fut = fut
+            .into_actor(self)
+            .map(move |res: Result<_, MailboxError>, act, ctx| {
+                match res {
+                    Ok(Ok((user_id, perms))) => {
+                        let addr = ctx.address();
+
+                        // Add this user to the users map
+                        USERS
+                            .entry(user_id)
+                            .and_modify(move |user| user.sessions.push((device_id, addr)))
+                            .or_insert_with(|| UserSessions::new((device_id, ctx.address())));
+
+                        act.state = SessionState::Ready(user_id, device_id, perms);
+
+                        Ok(RequestResponse::user(user_id))
+                    }
+                    Ok(Err(e)) => Ok(e.into()),
+                    Err(e) => {
+                        error!("Actix mailbox error: {:#?}", e);
+                        Ok(ServerError::Internal.into())
+                    }
+                }
+            });
+
+        self.respond(fut, request_id, ctx);
     }
 
     fn create_token(
@@ -303,7 +414,43 @@ impl ClientWsSession {
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
     ) {
-        unimplemented!() // TODO(implement)
+        let mut token_bytes: [u8; 32] = [0; 32]; // 256 bits
+        rand::thread_rng().fill_bytes(&mut token_bytes);
+        let token_string = base64::encode(&token_bytes);
+        let auth_token = AuthToken(token_string.clone());
+        let username = auth::process_username(&username, self.config.get_ref());
+
+        let verify = self.verify_username_password(username, password);
+        let db_server = self.database_server.clone();
+
+        let fut = async move {
+            let user_id = match verify.await {
+                Ok(id) => id,
+                Err(e) => return Ok(e.into()),
+            };
+
+            let (token_hash, hash_scheme_version) = auth::hash(token_string).await;
+
+            let device_id = DeviceId(Uuid::new_v4());
+            let token = Token {
+                token_hash,
+                hash_scheme_version,
+                user_id,
+                device_id,
+                device_name,
+                last_used: Utc::now(),
+                expiration_date,
+                permission_flags,
+            };
+
+            if let Err(e) = db_server.send(CreateToken(token)).await? {
+                return Ok(e.into());
+            };
+
+            Ok(RequestResponse::token(device_id, auth_token))
+        };
+
+        self.respond(fut.into_actor(self), request_id, ctx);
     }
 
     fn revoke_token(
@@ -337,7 +484,36 @@ impl ClientWsSession {
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
     ) {
-        unimplemented!() // TODO(implement)
+        if !auth::valid_password(&password, self.config.get_ref()) {
+            return self.respond_error(ServerError::InvalidPassword, request_id, ctx);
+        }
+
+        let username = match auth::prepare_username(&username, self.config.get_ref()) {
+            Ok(name) => name,
+            Err(auth::TooShort) => {
+                return self.respond_error(ServerError::InvalidUsername, request_id, ctx);
+            }
+        };
+
+        if !auth::valid_display_name(&display_name, self.config.get_ref()) {
+            return self.respond_error(ServerError::InvalidDisplayName, request_id, ctx);
+        }
+
+        let db_server = self.database_server.clone();
+
+        let fut = async move {
+            let (hash, hash_version) = auth::hash(password).await;
+            let user = UserRecord::new(username, display_name, hash, hash_version);
+            let id = user.id;
+
+            Ok(match db_server.send(CreateUser(user)).await? {
+                Ok(true) => RequestResponse::user(id),
+                Ok(false) => ServerError::UsernameAlreadyExists.into(),
+                Err(e) => e.into(),
+            })
+        };
+
+        self.respond(fut.into_actor(self), request_id, ctx);
     }
 
     fn change_username(
@@ -371,11 +547,25 @@ impl ClientWsSession {
         unimplemented!() // TODO(implement)
     }
 
-    fn create_community(&mut self, user_id: UserId, device_id: DeviceId, community_name: String, request_id: RequestId, ctx: &mut WebsocketContext<Self>) {
+    fn create_community(
+        &mut self,
+        user_id: UserId,
+        device_id: DeviceId,
+        community_name: String,
+        request_id: RequestId,
+        ctx: &mut WebsocketContext<Self>,
+    ) {
         unimplemented!() // TODO(implement)
     }
 
-    fn join_community(&mut self, user_id: UserId, device_id: DeviceId, community: CommunityId, request_id: RequestId, ctx: &mut WebsocketContext<Self>) {
+    fn join_community(
+        &mut self,
+        user_id: UserId,
+        device_id: DeviceId,
+        community: CommunityId,
+        request_id: RequestId,
+        ctx: &mut WebsocketContext<Self>,
+    ) {
         unimplemented!() // TODO(implement)
     }
 
@@ -387,11 +577,30 @@ impl ClientWsSession {
         unimplemented!() // TODO(implement)
     }
 
-    async fn verify_username_password(
+    fn verify_username_password(
         &mut self,
         username: String,
         password: String,
-    ) -> Result<UserId, ServerError> {
-        unimplemented!() // TODO(implement)
+    ) -> impl Future<Output = Result<UserId, ServerError>> {
+        let username = auth::process_username(&username, self.config.get_ref());
+        let user = self.database_server.send(GetUserByName(username));
+
+        async {
+            let res = match user.await {
+                Ok(res) => res,
+                Err(mailbox_error) => {
+                    error!("Actix mailbox error: {:#?}", mailbox_error);
+                    return Err(ServerError::Internal);
+                }
+            };
+
+            let user = match res {
+                Ok(Some(user)) => user,
+                Ok(None) => return Err(ServerError::IncorrectUsernameOrPassword),
+                Err(server_error) => return Err(server_error),
+            };
+
+            auth::verify_user_password(user, password).await
+        }
     }
 }

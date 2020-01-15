@@ -32,5 +32,5 @@ unicode-normalization = "^0.1"
 openssl = "^0.10"
 log = "^0.4"
 fern = "^0.5"
-dashmap = "^2"
+dashmap = "^3"
 vertex_common = { path = "../common/", features = ["enable-actix"] }

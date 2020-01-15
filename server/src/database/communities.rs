@@ -1,9 +1,9 @@
-use vertex_common::{ServerError, CommunityId};
-use tokio_postgres::Row;
+use crate::database::{handle_error, handle_error_psql, DatabaseServer};
+use actix::{Context, Handler, Message, ResponseFuture};
 use std::convert::TryFrom;
-use actix::{Message, Handler, ResponseFuture, Context};
-use crate::database::{DatabaseServer, handle_error, handle_error_psql};
+use tokio_postgres::Row;
 use uuid::Uuid;
+use vertex_common::{CommunityId, ServerError};
 
 pub(super) const CREATE_COMMUNITIES_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS communities (
@@ -46,11 +46,21 @@ impl Handler<GetCommunityMetadata> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let query = conn.client.prepare("SELECT * FROM communities WHERE id=$1").await.map_err(handle_error_psql)?;
-            let opt = conn.client.query_opt(&query, &[&(get.0).0]).await.map_err(handle_error_psql)?;
+            let query = conn
+                .client
+                .prepare("SELECT * FROM communities WHERE id=$1")
+                .await
+                .map_err(handle_error_psql)?;
+            let opt = conn
+                .client
+                .query_opt(&query, &[&(get.0).0])
+                .await
+                .map_err(handle_error_psql)?;
 
             if let Some(row) = opt {
-                Ok(Some(CommunityRecord::try_from(row).map_err(handle_error_psql)?))
+                Ok(Some(
+                    CommunityRecord::try_from(row).map_err(handle_error_psql)?,
+                ))
             } else {
                 Ok(None)
             }
@@ -66,11 +76,14 @@ impl Handler<CreateCommunity> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let query = conn.client
+            let query = conn
+                .client
                 .prepare("INSERT INTO communities (id, name) VALUES ($1, $2) RETURNING *")
                 .await
                 .map_err(handle_error_psql)?;
-            let row = conn.client.query_one(&query, &[&id, &create.name])
+            let row = conn
+                .client
+                .query_one(&query, &[&id, &create.name])
                 .await
                 .map_err(handle_error_psql)?;
             CommunityRecord::try_from(row).map_err(handle_error_psql)

@@ -21,6 +21,7 @@ const GLADE_SRC: &str = include_str!("client.glade");
 struct VertexModel {
     vertex: Vertex,
     room: Option<RoomId>,
+    community: Option<CommunityId>,
     room_list: Vec<RoomId>,
     keyring: Keyring<'static>,
 }
@@ -84,6 +85,7 @@ impl Update for Win {
                 url: Url::parse(&format!("ws://{}/client/", ip)).unwrap(),
             }),
             room: None,
+            community: None,
             room_list: Vec::new(),
             keyring: Keyring::new("vertex_client_gtk", ""), // username = ""
         };
@@ -104,38 +106,41 @@ impl Update for Win {
                     let v: Vec<&str> = msg.split(' ').collect();
 
                     match v[0] {
-                        "/join" => {
-                            if v.len() == 2 {
-                                let room = RoomId(Uuid::parse_str(v[1]).expect("Invalid room id"));
-                                self.model
-                                    .vertex
-                                    .join_room(room)
-                                    .expect("Error joining room");
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    &format!("Joined room {}\n", room.0),
-                                );
-
-                                self.model.room = Some(room);
-                                let txt: &str = &format!("#{}", room.0);
-                                let room_label = Label::new(Some(txt));
-                                self.widgets.rooms.insert(&room_label, -1);
-                                self.model.room_list.push(room);
-                                room_label.show_all();
-                            } else {
-                                text_buffer
-                                    .insert(&mut text_buffer.get_end_iter(), "Room id required");
-                            }
-                        }
+                        //                        "/join" => {
+                        //                            if v.len() == 2 {
+                        //                                let community = RoomId(Uuid::parse_str(v[1]).expect("Invalid community id"));
+                        //                                self.model
+                        //                                    .vertex
+                        //                                    .join_community(community)
+                        //                                    .expect("Error joining community");
+                        //                                text_buffer.insert(
+                        //                                    &mut text_buffer.get_end_iter(),
+                        //                                    &format!("Joined community {}\n", community.0),
+                        //                                );
+                        //
+                        //                                self.model.room = Some(room);
+                        //                                let txt: &str = &format!("#{}", room.0);
+                        //                                let room_label = Label::new(Some(txt));
+                        //                                self.widgets.rooms.insert(&room_label, -1);
+                        //                                self.model.room_list.push(community); // TODO lol
+                        //                                room_label.show_all();
+                        //                            } else {
+                        //                                text_buffer
+                        //                                    .insert(&mut text_buffer.get_end_iter(), "Room id required");
+                        //                            }
+                        //                        }
                         "/createroom" => {
-                            if v.len() == 2 {
+                            if v.len() == 3 {
                                 text_buffer
                                     .insert(&mut text_buffer.get_end_iter(), "Creating room...\n");
 
+                                let community = CommunityId(
+                                    Uuid::parse_str(v[2]).expect("Invalid community id"),
+                                );
                                 let room = self
                                     .model
                                     .vertex
-                                    .create_room(v[1].to_string())
+                                    .create_room(v[1].to_string(), community)
                                     .expect("Error creating room");
                                 text_buffer.insert(
                                     &mut text_buffer.get_end_iter(),
@@ -149,8 +154,10 @@ impl Update for Win {
                                 self.model.room_list.push(room);
                                 room_label.show_all();
                             } else {
-                                text_buffer
-                                    .insert(&mut text_buffer.get_end_iter(), "Room name required");
+                                text_buffer.insert(
+                                    &mut text_buffer.get_end_iter(),
+                                    "Room name and community id required",
+                                );
                             }
                         }
                         "/login" => {
@@ -352,9 +359,10 @@ impl Update for Win {
                 }
 
                 let room = self.model.room.expect("Not in a room").clone();
+                let community = self.model.community.expect("Not in a communtiy").clone();
                 self.model
                     .vertex
-                    .send_message(msg.to_string(), room)
+                    .send_message(msg.to_string(), room, community)
                     .expect("Error sending message"); // todo display error
 
                 let name = self

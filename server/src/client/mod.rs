@@ -1,10 +1,10 @@
 use actix::prelude::*;
 
-mod user;
 mod session;
+mod user;
 
-pub use user::*;
 pub use session::*;
+pub use user::*;
 
 #[derive(Debug, Message)]
 #[rtype(type = "()")]

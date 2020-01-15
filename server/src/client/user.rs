@@ -1,19 +1,25 @@
 use crate::client::{ClientWsSession, LogoutThisSession};
-use vertex_common::DeviceId;
 use actix::Addr;
-use lazy_static::lazy_static;
 use dashmap::DashMap;
+use lazy_static::lazy_static;
+use vertex_common::DeviceId;
 use vertex_common::UserId;
 
 lazy_static! {
-    pub static ref USERS: DashMap<UserId, User> = DashMap::new();
+    pub static ref USERS: DashMap<UserId, UserSessions> = DashMap::new();
 }
 
-pub struct User {
+pub struct UserSessions {
     pub sessions: Vec<(DeviceId, Addr<ClientWsSession>)>,
 }
 
-impl User {
+impl UserSessions {
+    pub fn new(session: (DeviceId, Addr<ClientWsSession>)) -> Self {
+        UserSessions {
+            sessions: vec![session],
+        }
+    }
+
     pub fn log_out_all(&mut self) {
         for (_, session) in &self.sessions {
             session.do_send(LogoutThisSession)
@@ -21,7 +27,10 @@ impl User {
     }
 
     pub fn get(&self, id: &DeviceId) -> Option<&Addr<ClientWsSession>> {
-        let idx = self.sessions.iter().position(|(device_id, _)| device_id == id)?;
+        let idx = self
+            .sessions
+            .iter()
+            .position(|(device_id, _)| device_id == id)?;
         self.sessions.get(idx).map(|el| &el.1)
     }
 }

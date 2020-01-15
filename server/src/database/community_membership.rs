@@ -1,10 +1,10 @@
-use vertex_common::{RoomId, UserId, ServerError, CommunityId};
-use std::convert::TryFrom;
-use tokio_postgres::Row;
-use actix::{Message, Handler, ResponseFuture, Context};
 use super::*;
+use actix::{Context, Handler, Message, ResponseFuture};
+use std::convert::TryFrom;
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
+use tokio_postgres::Row;
+use vertex_common::{CommunityId, RoomId, ServerError, UserId};
 
 pub(super) const CREATE_COMMUNITY_MEMBERSHIP_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS community_membership (
@@ -81,7 +81,7 @@ impl TryFrom<&Row> for AddToRoomSource {
         Ok(match row.try_get::<&str, i8>("source")? as u8 {
             b'i' => AddToRoomSource::Insert,
             b's' => AddToRoomSource::Select,
-            b'u' =>AddToRoomSource::Update,
+            b'u' => AddToRoomSource::Update,
             _ => panic!("Invalid AddToRoomSource type!"),
         })
     }
@@ -113,8 +113,15 @@ impl Handler<AddToCommunity> for DatabaseServer {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
-            let query = conn.client.prepare(ADD_TO_ROOM).await.map_err(handle_error_psql)?;
-            let res = conn.client.query_opt(&query, &[&(add.community).0, &(add.user.0)]).await;
+            let query = conn
+                .client
+                .prepare(ADD_TO_ROOM)
+                .await
+                .map_err(handle_error_psql)?;
+            let res = conn
+                .client
+                .query_opt(&query, &[&(add.community).0, &(add.user.0)])
+                .await;
 
             match res {
                 Ok(Some(row)) => {
@@ -129,18 +136,21 @@ impl Handler<AddToCommunity> for DatabaseServer {
                             Err(ServerError::AlreadyInCommunity) // TODO banning
                         }
                     }
-                },
+                }
                 Ok(None) => panic!("db error: add to room query did not return anything"),
                 Err(err) => {
                     let err = if err.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {
-                        let constraint = err.source()
+                        let constraint = err
+                            .source()
                             .and_then(|e| e.downcast_ref::<DbError>())
                             .and_then(|e| e.constraint());
 
                         eprintln!("{:#?}", err);
 
                         match constraint {
-                            Some("community_membership_community_id_fkey") => ServerError::InvalidCommunity,
+                            Some("community_membership_community_id_fkey") => {
+                                ServerError::InvalidCommunity
+                            }
                             Some("community_membership_user_id_fkey") => ServerError::InvalidUser,
                             Some(_) | None => handle_error(l337::Error::External(err)),
                         }
