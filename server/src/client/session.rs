@@ -104,12 +104,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                 }
             }
             ws::Message::Continuation(_) => {
-                // TODO(room_persistence): just send unexpected frame
-                if let Some(_) = self.state.user_and_device_ids() {
-                    self.delete(ctx);
-                } else {
-                    ctx.stop();
-                }
+                let error = serde_cbor::to_vec(&ServerMessage::Error(
+                    ServerError::UnexpectedContinuationFrame,
+                ))
+                .unwrap();
+                ctx.binary(error);
             }
             ws::Message::Nop => (),
         }

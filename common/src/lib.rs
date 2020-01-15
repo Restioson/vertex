@@ -284,6 +284,7 @@ where
 pub enum ServerError {
     InvalidMessage,
     UnexpectedTextFrame,
+    UnexpectedContinuationFrame,
     Internal,
     NotLoggedIn,
     AlreadyLoggedIn,
