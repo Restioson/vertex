@@ -3,7 +3,6 @@ use crate::database::UserRecord;
 use futures::Future;
 use futures::FutureExt;
 use rand::RngCore;
-use tokio::task::JoinError;
 use unicode_normalization::UnicodeNormalization;
 use vertex_common::{ServerError, UserId};
 
