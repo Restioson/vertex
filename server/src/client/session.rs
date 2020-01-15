@@ -16,8 +16,6 @@ use std::time::Instant;
 use uuid::Uuid;
 use vertex_common::*;
 
-// TODO(room_persistence): make sure device isnt online when try to login
-
 #[derive(Eq, PartialEq)]
 enum SessionState {
     WaitingForLogin,
@@ -186,7 +184,6 @@ impl ClientWsSession {
     where
         F: ActorFuture<Output = Result<RequestResponse, MailboxError>, Actor = Self> + 'static,
     {
-        // TODO(room_persistence): do i need actorfuture?
         fut.then(move |response, _act, ctx| {
             let response = ServerMessage::Response {
                 response: match response {
@@ -383,15 +380,30 @@ impl ClientWsSession {
                     Ok(Ok((user_id, perms))) => {
                         let addr = ctx.address();
 
+                        let mut inserted = false;
+
                         // Add this user to the users map
                         USERS
                             .entry(user_id)
-                            .and_modify(move |user| user.sessions.push((device_id, addr)))
-                            .or_insert_with(|| UserSessions::new((device_id, ctx.address())));
+                            .and_modify(move |user| {
+                                if user.sessions.iter().find(|(id, _)| *id == device_id).is_none() {
+                                    inserted = true;
+                                    user.sessions.push((device_id, addr));
+                                }
+                            })
+                            .or_insert_with(|| {
+                                inserted = true;
+                                UserSessions::new((device_id, ctx.address()))
+                            });
 
-                        act.state = SessionState::Ready(user_id, device_id, perms);
+                        // This token is currently in use on another device
+                        if !inserted {
+                            Ok(ServerError::TokenInUse.into())
+                        } else {
+                            act.state = SessionState::Ready(user_id, device_id, perms);
 
-                        Ok(RequestResponse::user(user_id))
+                            Ok(RequestResponse::user(user_id))
+                        }
                     }
                     Ok(Err(e)) => Ok(e.into()),
                     Err(e) => {

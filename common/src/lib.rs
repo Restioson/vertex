@@ -291,6 +291,7 @@ pub enum ServerError {
     InvalidDisplayName,
     InvalidToken,
     StaleToken,
+    TokenInUse,
     UserCompromised,
     UserLocked,
     UserBanned,
