@@ -104,6 +104,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWsSession {
                 }
             }
             ws::Message::Continuation(_) => {
+                // TODO(room_persistence): just send unexpected frame
                 if let Some(_) = self.state.user_and_device_ids() {
                     self.delete(ctx);
                 } else {
@@ -297,10 +298,10 @@ impl ClientWsSession {
                     password,
                 } => self.revoke_token(to_revoke, password, user_id, device_id, request_id, ctx),
                 ClientMessage::ChangeUsername { new_username } => {
-                    unimplemented!() // TODO(implement)
+                    self.change_username(new_username, user_id, perms, request_id, ctx);
                 }
                 ClientMessage::ChangeDisplayName { new_display_name } => {
-                    unimplemented!() // TODO(implement)
+                    self.change_display_name(new_display_name, user_id, request_id, perms, ctx);
                 }
                 ClientMessage::ChangePassword {
                     old_password,
@@ -588,9 +589,14 @@ impl ClientWsSession {
         &mut self,
         new_username: String,
         user_id: UserId,
+        perms: TokenPermissionFlags,
         request_id: RequestId,
         ctx: &mut WebsocketContext<Self>,
     ) {
+        if !perms.has_perms(TokenPermissionFlags::CHANGE_USERNAME) {
+            return self.respond_error(ServerError::AccessDenied, request_id, ctx);
+        }
+
         let new_username = match auth::prepare_username(&new_username, self.config.get_ref()) {
             Ok(name) => name,
             Err(auth::TooShort) => {
@@ -619,8 +625,12 @@ impl ClientWsSession {
         new_display_name: String,
         user_id: UserId,
         request_id: RequestId,
+        perms: TokenPermissionFlags,
         ctx: &mut WebsocketContext<Self>,
     ) {
+        if !perms.has_perms(TokenPermissionFlags::CHANGE_DISPLAY_NAME) {
+            return self.respond_error(ServerError::AccessDenied, request_id, ctx);
+        }
         if !auth::valid_display_name(&new_display_name, &self.config) {
             return self.respond_error(ServerError::InvalidDisplayName, request_id, ctx);
         };
