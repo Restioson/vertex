@@ -5,7 +5,6 @@ use actix::{Message, Handler, ResponseFuture, Context};
 use super::*;
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
-use futures::future;
 
 pub(super) const CREATE_COMMUNITY_MEMBERSHIP_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS community_membership (
@@ -108,65 +107,52 @@ impl TryFrom<&Row> for AddToRoomResult {
 }
 
 impl Handler<AddToCommunity> for DatabaseServer {
-    type Result = ResponseFuture<(), ServerError>;
+    type Result = ResponseFuture<Result<(), ServerError>>;
 
     fn handle(&mut self, add: AddToCommunity, _: &mut Context<Self>) -> Self::Result {
         use AddToRoomSource::*;
 
-        Box::new(
-            self.pool
-                .connection()
-                .map_err(handle_error)
-                .and_then(|mut conn| {
-                    conn.client
-                        .prepare(ADD_TO_ROOM)
-                        .and_then(move |stmt| conn.client.query(&stmt, &[&(add.community).0, &(add.user.0)])
-                            .into_future()
-                            .map(|(user, _stream)| user)
-                            .map_err(|(err, _stream)| err)
-                        )
-                        .then(|res| match res {
-                            Ok(Some(row)) => {
-                                let res = AddToRoomResult::try_from(&row);
-                                match res {
-                                    Ok(AddToRoomResult { source, .. }) => {
-                                        match source {
-                                            // Row did not exist - user has been successfully added
-                                            Insert => future::ok(()),
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let conn = pool.connection().await.map_err(handle_error)?;
+            let query = conn.client.prepare(ADD_TO_ROOM).await.map_err(handle_error_psql)?;
+            let res = conn.client.query_opt(&query, &[&(add.community).0, &(add.user.0)]).await;
 
-                                            // Row already existed - conflict of some sort
-                                            Select | Update => {
-                                                let err = ServerError::AlreadyInRoom;// TODO banning
-                                                future::err(err)
-                                            }
-                                        }
-                                    }
-                                    Err(e) => future::err(handle_error(l337::Error::External(e))),
-                                }
+            match res {
+                Ok(Some(row)) => {
+                    let res = AddToRoomResult::try_from(&row).map_err(handle_error_psql)?;
 
-                            },
-                            Ok(None) => panic!("Add to room query did not return anything"),
-                            Err(err) => {
-                                let err = if err.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {
-                                    let constraint = err.source()
-                                        .and_then(|e| e.downcast_ref::<DbError>())
-                                        .and_then(|e| e.constraint());
+                    match res.source {
+                        // Row did not exist - user has been successfully added
+                        Insert => Ok(()),
 
-                                    eprintln!("{:#?}", err);
+                        // Row already existed - conflict of some sort
+                        Select | Update => {
+                            Err(ServerError::AlreadyInCommunity) // TODO banning
+                        }
+                    }
+                },
+                Ok(None) => panic!("db error: add to room query did not return anything"),
+                Err(err) => {
+                    let err = if err.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {
+                        let constraint = err.source()
+                            .and_then(|e| e.downcast_ref::<DbError>())
+                            .and_then(|e| e.constraint());
 
-                                    match constraint {
-                                        Some("community_membership_community_id_fkey") => ServerError::InvalidCommunity,
-                                        Some("community_membership_user_id_fkey") => ServerError::InvalidUser,
-                                        Some(_) | None => handle_error(l337::Error::External(err)),
-                                    }
-                                } else {
-                                    handle_error(l337::Error::External(err))
-                                };
+                        eprintln!("{:#?}", err);
 
-                                future::err(err)
-                            }
-                        })
-                })
-        )
+                        match constraint {
+                            Some("community_membership_community_id_fkey") => ServerError::InvalidCommunity,
+                            Some("community_membership_user_id_fkey") => ServerError::InvalidUser,
+                            Some(_) | None => handle_error(l337::Error::External(err)),
+                        }
+                    } else {
+                        handle_error(l337::Error::External(err))
+                    };
+
+                    Err(err)
+                }
+            }
+        })
     }
 }

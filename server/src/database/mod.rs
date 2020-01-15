@@ -11,22 +11,21 @@ mod user;
 mod communities;
 mod community_membership;
 
-use crate::client::{ClientServer, LogoutSessions};
 use crate::config::Config;
 pub use token::*;
 pub use user::*;
 pub use communities::*;
 pub use community_membership::*;
-use std::sync::Once;
+use std::sync::Arc;
+use crate::client::USERS;
+use futures::{Future, FutureExt, TryFutureExt};
+use crate::client::LogoutThisSession;
 
-#[derive(Message)]
-pub struct Init(pub Addr<ClientServer>);
-
+// TODO(room_persistence): replace manual impls with rtype
 pub struct DatabaseServer {
-    pool: l337::Pool<PostgresConnectionManager<NoTls>>,
+    pool: Arc<l337::Pool<PostgresConnectionManager<NoTls>>>,
     sweep_interval: Duration,
     token_expiry_days: u16,
-    client_server: Option<Addr<ClientServer>>,
 }
 
 impl DatabaseServer {
@@ -39,120 +38,103 @@ impl DatabaseServer {
             NoTls,
         );
 
-        let pool = sys
+        let pool = Arc::new(sys
             .block_on(l337::Pool::new(mgr, Default::default()))
-            .expect("db error");
+            .expect("db error"));
+
         DatabaseServer {
             pool,
             sweep_interval: Duration::from_secs(config.tokens_sweep_interval_secs),
             token_expiry_days: config.token_expiry_days,
-            client_server: None,
         }
     }
 
-    fn create_tables(&mut self) -> impl Future<Item = (), Error = ()> {
-        let users = self
-            .pool
-            .connection()
-            .and_then(|mut conn| {
-                conn.client
-                    .prepare(CREATE_USERS_TABLE)
-                    .and_then(move |stmt| conn.client.execute(&stmt, &[]))
-                    .map(|_| ())
-                    .map_err(|e| panic!("db error: {:#?}", e))
-            })
-            .map_err(|e| panic!("db connection pool error: {:?}", e));
+    fn create_tables(&mut self) -> impl Future<Output = Result<(), l337::Error<tokio_postgres::Error>>> {
+        use l337::Error::External;
 
-        let login_tokens = self
-            .pool
-            .connection()
-            .and_then(|mut conn| {
-                conn.client
-                    .prepare(CREATE_TOKENS_TABLE)
-                    .and_then(move |stmt| conn.client.execute(&stmt, &[]))
-                    .map(|_| ())
-                    .map_err(|e| panic!("db error: {:#?}", e))
-            })
-            .map_err(|e| panic!("db connection pool error: {:?}", e));
+        let pool = self.pool.clone();
 
-        let rooms = self
-            .pool
-            .connection()
-            .and_then(|mut conn| {
-                conn.client
-                    .prepare(CREATE_COMMUNITIES_TABLE)
-                    .and_then(move |stmt| conn.client.execute(&stmt, &[]))
-                    .map(|_| ())
-                    .map_err(|e| panic!("db error: {:#?}", e))
-            })
-            .map_err(|e| panic!("db connection pool error: {:?}", e));
+        async move {
+            let conn = pool.connection().await?;
+            let cmds = [
+                CREATE_USERS_TABLE,
+                CREATE_TOKENS_TABLE,
+                CREATE_COMMUNITIES_TABLE,
+                CREATE_COMMUNITY_MEMBERSHIP_TABLE
+            ];
 
-        let community_membership = self
-            .pool
-            .connection()
-            .and_then(|mut conn| {
-                conn.client
-                    .prepare(CREATE_COMMUNITY_MEMBERSHIP_TABLE)
-                    .and_then(move |stmt| conn.client.execute(&stmt, &[]))
-                    .map(|_| ())
-                    .map_err(|e| panic!("db error: {:#?}", e))
-            })
-            .map_err(|e| panic!("db connection pool error: {:?}", e));
+            for cmd in &cmds {
+                let stmt = conn.client.prepare(CREATE_USERS_TABLE).map_err(External).await?;
+                conn.client.execute(&stmt, &[]).await.map_err(External)?;
+            }
 
-        users.and_then(|_| login_tokens).and_then(|_| rooms).and_then(|_| community_membership)
+            Ok(())
+        }
     }
 
     fn expired_tokens(
         &self,
         token_expiry_days: u16,
-    ) -> impl Stream<Item = (UserId, DeviceId), Error = l337::Error<tokio_postgres::Error>> {
+    ) -> impl Future<Output = Result<Vec<(UserId, DeviceId)>, l337::Error<tokio_postgres::Error>>> {
         let token_expiry_days = token_expiry_days as f64;
-        self.pool
-            .connection()
-            .map(move |mut conn| {
-                conn.client
-                    .prepare(
-                        "DELETE FROM login_tokens
-                            WHERE expiration_date < NOW()::timestamp OR
-                                DATE_PART('days', NOW()::timestamp - last_used) > $1
-                            RETURNING device_id, user_id",
-                    )
-                    .map_err(l337::Error::External)
-                    .map(move |stmt| {
-                        conn.client
-                            .query(&stmt, &[&token_expiry_days])
-                            .map(|row| {
-                                Ok((
-                                    UserId(row.try_get("user_id")?),
-                                    DeviceId(row.try_get("device_id")?),
-                                ))
-                            })
-                            .map_err(l337::Error::External)
-                    })
-                    .flatten_stream()
-            })
-            .flatten_stream()
-            .then(|result| result.and_then(|inner| inner.map_err(l337::Error::External)))
+
+        let pool = self.pool.clone();
+
+        async move {
+            let conn = pool.connection().await?;
+
+            let stmt = conn.client.prepare(
+                "DELETE FROM login_tokens
+                WHERE expiration_date < NOW()::timestamp OR
+                    DATE_PART('days', NOW()::timestamp - last_used) > $1
+                RETURNING device_id, user_id",
+            )
+                .map_err(l337::Error::External)
+                .await?;
+
+            conn.client
+                .query(&stmt, &[&token_expiry_days])
+                .map_err(l337::Error::External)
+                .await?
+                .iter()
+                .map(|row| {
+                    Ok((
+                        UserId(row.try_get("user_id").map_err(l337::Error::External)?),
+                        DeviceId(row.try_get("device_id").map_err(l337::Error::External)?),
+                    ))
+                })
+                .collect()
+        }
     }
 
-    fn sweep_tokens(&self) -> impl ActorFuture<Actor = Self, Item = (), Error = ()> {
+    fn sweep_tokens(&self) -> impl Future<Output = ()> {
         let begin = Instant::now();
 
-        self.expired_tokens(self.token_expiry_days)
-            .collect()
-            .map_err(|e| panic!("db error: {:#?}", e))
-            .into_actor(self)
-            .map(move |list, act, _ctx| act.client_server.unwrap().do_send(LogoutSessions { list }))
-            .map(move |_, act, _ctx| {
-                let time_taken = Instant::now().duration_since(begin);
-                if time_taken > act.sweep_interval {
-                    warn!(
-                        "Took {}s to sweep the database for expired tokens, but the interval is {}s!",
-                        time_taken.as_secs(),
-                        act.sweep_interval.as_secs(),
-                    );
-                }
-            })
+        let f = self.expired_tokens(self.token_expiry_days);
+        let sweep_interval = self.sweep_interval;
+
+        async move {
+            f.await
+                .map_err(|e| panic!("db error: {:#?}", e))
+                .unwrap()
+                .iter()
+                .filter_map(|(user_id, device_id)| USERS.get(user_id).map(|u| ((device_id, u))))
+                .for_each(|(device_id, user)| {
+                    user.get(device_id).map(|addr| addr.do_send(LogoutThisSession));
+                });
+
+            let time_taken = Instant::now().duration_since(begin);
+            if time_taken > sweep_interval {
+                warn!(
+                    "Took {}s to sweep the database for expired tokens, but the interval is {}s!",
+                    time_taken.as_secs(),
+                    sweep_interval.as_secs(),
+                );
+            }
+        }
+
+
+
     }
 }
 
@@ -160,19 +142,12 @@ impl Actor for DatabaseServer {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        Arbiter::spawn(self.create_tables());
+        let f = self.create_tables().map(|r| r.expect("Error creating SQL tables!"));
+        Arbiter::spawn(f);
 
         ctx.run_interval(self.sweep_interval, |db, ctx| {
-            ctx.spawn(db.sweep_tokens());
+            ctx.spawn(db.sweep_tokens().into_actor(db));
         });
-    }
-}
-
-impl Handler<Init> for DatabaseServer {
-    type Result = ();
-
-    fn handle(&mut self, init: Init, _: &mut Context<Self>) {
-        self.client_server = Some(init.0)
     }
 }
 
@@ -188,3 +163,10 @@ fn handle_error(error: l337::Error<tokio_postgres::Error>) -> ServerError {
 
     ServerError::Internal
 }
+
+fn handle_error_psql(error: tokio_postgres::Error) -> ServerError {
+    error!("Database error: {:#?}", error);
+
+    ServerError::Internal
+}
+

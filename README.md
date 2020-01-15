@@ -6,7 +6,7 @@ Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, feder
 ## Installation
 
 ### Development
-1. Install the latest Rust stable compiler
+1. Install the latest Rust **nightly** compiler (because of the `l337` crate)
 2. Install gtk+, cairo, and glib development libraries
 3. Install the openssl development package
 

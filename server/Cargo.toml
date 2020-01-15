@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 actix = "^0.9"
-actix-web = { version = "^2", features = ["open-ssl"] }
+actix-web = { version = "^2", features = ["openssl"] }
 actix-web-actors = "^2"
 actix-files = "^0.2"
 actix-service = "^1"
@@ -15,13 +15,12 @@ serde_cbor = "^0.10"
 websocket = "^0.23"
 url = "^2"
 futures = "^0.3"
-l337 = { git = "https://github.com/OneSignal/L3-37", rev = "369454b7312ef68a60f5d2df30ad2544fec50359" }
-l337-postgres = { git = "https://github.com/OneSignal/L3-37", rev = "369454b7312ef68a60f5d2df30ad2544fec50359" }
-tokio = "^0.1"
-tokio-postgres = { version = "0.4.0-rc.2", features = ["with-uuid-0_7", "with-chrono-0_4"] }
-uuid = { version = "0.7", features = ["serde", "v4"] }
+l337 = { git = "https://github.com/OneSignal/L3-37", rev = "a970fe669787c4caf8ae699870b97ed1d7616f00" }
+l337-postgres = { git = "https://github.com/OneSignal/L3-37", rev = "a970fe669787c4caf8ae699870b97ed1d7616f00" }
+tokio = { version = "^0.2", features = ["rt-threaded", "blocking"] }
+tokio-postgres = { version = "^0.5", features = ["with-uuid-0_8", "with-chrono-0_4"] }
+uuid = { version = "0.8", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
-tokio-threadpool = "^0.1"
 rust-argon2 = "^0.5"
 rand = "^0.7"
 lazy_static = "^1"

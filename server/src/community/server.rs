@@ -1,10 +1,8 @@
 use crate::community::CommunityActor;
-use vertex_common::{CommunityId, UserId, DeviceId, ServerError};
+use vertex_common::{CommunityId, UserId, DeviceId};
 use std::collections::HashMap;
-use actix::{Addr, Context, Actor, Message, ResponseFuture, MailboxError};
+use actix::{Addr, Context, Actor, Message};
 use std::fmt::Debug;
-use actix::prelude::fut;
-use actix::fut::Either;
 
 struct CommunityServer {
     communities: HashMap<CommunityId, Addr<CommunityActor>>,

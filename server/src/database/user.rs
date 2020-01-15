@@ -114,191 +114,148 @@ impl Message for ChangePassword {
 }
 
 impl Handler<CreateUser> for DatabaseServer {
-    type Result = ResponseFuture<bool, ServerError>;
+    type Result = ResponseFuture<Result<bool, ServerError>>;
 
     fn handle(&mut self, create: CreateUser, _: &mut Context<Self>) -> Self::Result {
         let user = create.0;
-        Box::new(
-            self.pool
-                .connection()
-                .and_then(|mut conn| {
-                    conn.client
-                        .prepare(
-                            "INSERT INTO users
-                            (
-                                id,
-                                username,
-                                display_name,
-                                password_hash,
-                                hash_scheme_version,
-                                compromised,
-                                locked,
-                                banned
-                            )
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                            ON CONFLICT DO NOTHING",
-                        )
-                        .and_then(move |stmt| {
-                            conn.client.execute(
-                                &stmt,
-                                &[
-                                    &user.id.0,
-                                    &user.username,
-                                    &user.display_name,
-                                    &user.password_hash,
-                                    &(user.hash_scheme_version as u8 as i16),
-                                    &user.compromised,
-                                    &user.locked,
-                                    &user.banned,
-                                ],
-                            )
-                        })
-                        .map_err(l337::Error::External)
-                        .map(|ret| ret == 1) // Return true if 1 item was inserted (insert was successful)
-                })
-                .map_err(handle_error),
-        )
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let conn = pool.connection().await.map_err(handle_error)?;
+            let stmt = conn.client.prepare(
+                "INSERT INTO users
+                (
+                    id,
+                    username,
+                    display_name,
+                    password_hash,
+                    hash_scheme_version,
+                    compromised,
+                    locked,
+                    banned
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT DO NOTHING",
+            ).await.map_err(handle_error_psql)?;
+
+            let ret = conn.client.execute(
+                &stmt,
+                &[
+                    &user.id.0,
+                    &user.username,
+                    &user.display_name,
+                    &user.password_hash,
+                    &(user.hash_scheme_version as u8 as i16),
+                    &user.compromised,
+                    &user.locked,
+                    &user.banned,
+                ],
+            ).await.map_err(handle_error_psql)?;
+
+           Ok(ret == 1)// Return true if 1 item was inserted (insert was successful)
+        })
     }
 }
 
 impl Handler<GetUserById> for DatabaseServer {
-    type Result = ResponseFuture<Option<UserRecord>, ServerError>;
+    type Result = ResponseFuture<Result<Option<UserRecord>, ServerError>>;
 
     fn handle(&mut self, get: GetUserById, _: &mut Context<Self>) -> Self::Result {
         let id = get.0;
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let conn = pool.connection().await.map_err(handle_error)?;
+            let query = conn.client.prepare("SELECT * FROM users WHERE id=$1").await.map_err(handle_error_psql)?;
+            let opt = conn.client.query_opt(&query, &[&id.0]).await.map_err(handle_error_psql)?;
 
-        Box::new(
-            self.pool
-                .connection()
-                .and_then(move |mut conn| {
-                    conn.client
-                        .prepare("SELECT * FROM users WHERE id=$1")
-                        .and_then(move |stmt| {
-                            conn.client
-                                .query(&stmt, &[&id.0])
-                                .map(|user| UserRecord::try_from(user))
-                                .into_future()
-                                .map(|(user, _stream)| user)
-                                .map_err(|(err, _stream)| err)
-                        })
-                        .and_then(|x| x.transpose()) // Fut<Opt<Res<Usr, Err>>, Err> -> Fut<Opt<Usr>, Err>
-                        .map_err(l337::Error::External)
-                })
-                .map_err(handle_error),
-        )
+            if let Some(row) = opt {
+                Ok(Some(UserRecord::try_from(row).map_err(handle_error_psql)?))
+            } else {
+                Ok(None)
+            }
+        })
     }
 }
 
 impl Handler<GetUserByName> for DatabaseServer {
-    type Result = ResponseFuture<Option<UserRecord>, ServerError>;
+    type Result = ResponseFuture<Result<Option<UserRecord>, ServerError>>;
 
     fn handle(&mut self, get: GetUserByName, _: &mut Context<Self>) -> Self::Result {
         let name = get.0;
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let conn = pool.connection().await.map_err(handle_error)?;
+            let query = conn.client.prepare("SELECT * FROM users WHERE username=$1").await.map_err(handle_error_psql)?;
+            let opt = conn.client.query_opt(&query, &[&name]).await.map_err(handle_error_psql)?;
 
-        Box::new(
-            self.pool
-                .connection()
-                .and_then(move |mut conn| {
-                    conn.client
-                        .prepare("SELECT * FROM users WHERE username=$1")
-                        .and_then(move |stmt| {
-                            conn.client
-                                .query(&stmt, &[&name])
-                                .map(|user| UserRecord::try_from(user))
-                                .into_future()
-                                .map(|(user, _stream)| user)
-                                .map_err(|(err, _stream)| err)
-                        })
-                        .and_then(|x| x.transpose()) // Fut<Opt<Res<Usr, Err>>, Err> -> Fut<Opt<Usr>, Err>
-                        .map_err(l337::Error::External)
-                })
-                .map_err(handle_error),
-        )
+            if let Some(row) = opt {
+                Ok(Some(UserRecord::try_from(row).map_err(handle_error_psql)?))
+            } else {
+                Ok(None)
+            }
+        })
     }
 }
 
 impl Handler<ChangeUsername> for DatabaseServer {
-    type Result = ResponseFuture<bool, ServerError>;
+    type Result = ResponseFuture<Result<bool, ServerError>>;
 
     fn handle(&mut self, change: ChangeUsername, _: &mut Context<Self>) -> Self::Result {
-        Box::new(
-            self.pool
-                .connection()
-                .and_then(move |mut conn| {
-                    conn.client
-                        .prepare("UPDATE users SET username = $1 WHERE id = $2")
-                        .and_then(move |stmt| {
-                            conn.client
-                                .execute(&stmt, &[&change.new_username, &change.user_id.0])
-                        })
-                        .map(|ret| ret == 1) // Return true if 1 item was updated (update was successful)
-                        .then(|res| match res {
-                            Err(ref e)
-                                if e.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
-                                    || e.code() == Some(&SqlState::UNIQUE_VIOLATION) =>
-                            {
-                                Ok(false)
-                            }
-                            other => other,
-                        })
-                        .map_err(l337::Error::External)
-                })
-                .map_err(handle_error),
-        )
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let conn = pool.connection().await.map_err(handle_error)?;
+            let stmt = conn.client.prepare("UPDATE users SET username = $1 WHERE id = $2").await.map_err(handle_error_psql)?;
+            let res = conn.client.execute(&stmt, &[&change.new_username, &change.user_id.0]).await;
+            match res {
+                Ok(ret) => Ok(ret == 1),
+                Err(ref e) if e.code() == Some(&SqlState::INTEGRITY_CONSTRAINT_VIOLATION)
+                    || e.code() == Some(&SqlState::UNIQUE_VIOLATION) =>
+                {
+                    Ok(false)
+                },
+                Err(e) => Err(handle_error_psql(e)),
+            }
+        })
     }
 }
 
 impl Handler<ChangeDisplayName> for DatabaseServer {
-    type Result = ResponseFuture<(), ServerError>;
+    type Result = ResponseFuture<Result<(), ServerError>>;
 
     fn handle(&mut self, change: ChangeDisplayName, _: &mut Context<Self>) -> Self::Result {
-        Box::new(
-            self.pool
-                .connection()
-                .and_then(move |mut conn| {
-                    conn.client
-                        .prepare("UPDATE users SET display_name = $1 WHERE id = $2")
-                        .and_then(move |stmt| {
-                            conn.client
-                                .execute(&stmt, &[&change.new_display_name, &change.user_id.0])
-                        })
-                        .map(|_| ())
-                        .map_err(l337::Error::External)
-                })
-                .map_err(handle_error),
-        )
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let conn = pool.connection().await.map_err(handle_error)?;
+            let stmt = conn.client.prepare("UPDATE users SET display_name = $1 WHERE id = $2").await.map_err(handle_error_psql)?;
+            conn.client.execute(&stmt, &[&change.new_display_name, &change.user_id.0]).await.map_err(handle_error_psql)?;
+            Ok(())
+        })
     }
 }
 
 impl Handler<ChangePassword> for DatabaseServer {
-    type Result = ResponseFuture<(), ServerError>;
+    type Result = ResponseFuture<Result<(), ServerError>>;
 
     fn handle(&mut self, change: ChangePassword, _: &mut Context<Self>) -> Self::Result {
-        Box::new(
-            self.pool
-                .connection()
-                .and_then(move |mut conn| {
-                    conn.client
-                        .prepare(
-                            "UPDATE users SET
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let conn = pool.connection().await.map_err(handle_error)?;
+            let stmt = conn.client.prepare(
+                "UPDATE users SET
                         password_hash = $1, hash_scheme_version = $2, compromised = $3
-                    WHERE id = $4",
-                        )
-                        .and_then(move |stmt| {
-                            conn.client.execute(
-                                &stmt,
-                                &[
-                                    &change.new_password_hash,
-                                    &(change.hash_version as u8 as i16),
-                                    &false,
-                                    &change.user_id.0,
-                                ],
-                            )
-                        })
-                        .map(|_| ())
-                        .map_err(l337::Error::External)
-                })
-                .map_err(handle_error),
-        )
+                    WHERE id = $4"
+            ).await.map_err(handle_error_psql)?;
+
+            let res = conn.client.execute(
+                &stmt,
+                &[
+                    &change.new_password_hash,
+                    &(change.hash_version as u8 as i16),
+                    &false,
+                    &change.user_id.0,
+                ]
+            ).await.map_err(handle_error_psql)?;
+
+            Ok(())
+        })
     }
 }

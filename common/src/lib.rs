@@ -128,7 +128,7 @@ impl Message for ClientSentMessage {
 }
 
 #[cfg_attr(feature = "enable-actix", derive(Message))]
-#[cfg_attr(feature = "enable-actix", rtype(()))]
+#[cfg_attr(feature = "enable-actix", rtype(type = "()"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardedMessage {
     pub room: RoomId,

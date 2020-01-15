@@ -1,5 +1,4 @@
 use actix::prelude::*;
-use actix_web::dev::ServiceRequest;
 use actix_web::web::{Data, Payload};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
@@ -9,49 +8,34 @@ mod auth;
 mod client;
 mod config;
 mod database;
-mod federation;
 mod community;
 
 use crate::config::Config;
-use actix_web::dev::ServiceResponse;
-use client::{ClientServer, ClientWsSession};
+use client::ClientWsSession;
 use database::DatabaseServer;
 use directories::ProjectDirs;
-use federation::{FederationServer, ServerWsSession};
 use log::info;
 use std::fs::OpenOptions;
-use crate::database::Init;
 
 #[derive(Debug, Message)]
+#[rtype(type = "()")]
 pub struct SendMessage<T: Debug> {
     message: T,
 }
 
-fn dispatch_client_ws(
+async fn dispatch_client_ws(
     request: HttpRequest,
     stream: Payload,
-    client_server: Data<Addr<ClientServer>>,
-    federation_server: Data<Addr<FederationServer>>,
     db_server: Data<Addr<DatabaseServer>>,
     config: Data<config::Config>,
 ) -> Result<HttpResponse, Error> {
-    let client_server = client_server.get_ref().clone();
-    let _federation_server = federation_server.get_ref().clone();
     let db_server = db_server.get_ref().clone();
 
     ws::start(
-        ClientWsSession::new(client_server, db_server, config),
+        ClientWsSession::new(db_server, config),
         &request,
         stream,
     )
-}
-
-fn dispatch_server_ws(
-    request: HttpRequest,
-    stream: Payload,
-    srv: Data<Addr<FederationServer>>,
-) -> Result<HttpResponse, Error> {
-    ServerWsSession::start_incoming(request, srv, stream)
 }
 
 fn create_files_directories(config: &Config) {
@@ -119,39 +103,17 @@ fn main() -> std::io::Result<()> {
     let ssl_config = config::ssl_config();
 
     let mut sys = System::new("vertex_server");
-    let mut db_server = DatabaseServer::new(&mut sys, &config).start();
-    let client_server = ClientServer::new(db_server.clone()).start();
-    db_server.send(Init(client_server));
-    let federation_server = FederationServer::new().start();
+    let db_server = DatabaseServer::new(&mut sys, &config).start();
 
     HttpServer::new(move || {
         App::new()
-            .data(client_server.clone())
-            .data(federation_server.clone())
             .data(db_server.clone())
             .data(config.clone())
-            .service(
-                actix_files::Files::new(
-                    "/images/profile_pictures/",
-                    config.profile_pictures.clone(),
-                )
-                .default_handler(actix_service::service_fn(|req: ServiceRequest| {
-                    req.into_response(HttpResponse::NotFound().finish())
-                }))
-                .files_listing_renderer(|_dir, req| {
-                    Ok(ServiceResponse::new(
-                        req.clone(),
-                        HttpResponse::Forbidden().finish(),
-                    ))
-                })
-                .show_files_listing(),
-            )
             .service(web::resource("/client/").route(web::get().to(dispatch_client_ws)))
-            .service(web::resource("/server/").route(web::get().to(dispatch_server_ws)))
     })
-    .bind_ssl(addr.clone(), ssl_config)
+    .bind_openssl(addr.clone(), ssl_config)
     .expect("Error binding to socket")
-    .start();
+    .run();
 
     info!("Vertex server started on addr {}", addr);
 

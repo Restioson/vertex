@@ -1,9 +1,8 @@
-use vertex_common::{RoomId, ServerError, CommunityId};
+use vertex_common::{ServerError, CommunityId};
 use tokio_postgres::Row;
 use std::convert::TryFrom;
 use actix::{Message, Handler, ResponseFuture, Context};
-use crate::database::{DatabaseServer, handle_error};
-use futures::{Future, Stream};
+use crate::database::{DatabaseServer, handle_error, handle_error_psql};
 use uuid::Uuid;
 
 pub(super) const CREATE_COMMUNITIES_TABLE: &'static str = "
@@ -45,57 +44,40 @@ impl Message for CreateCommunity {
 
 // TODO(next): load at boot
 impl Handler<GetCommunityMetadata> for DatabaseServer {
-    type Result = ResponseFuture<Option<CommunityRecord>, ServerError>;
+    type Result = ResponseFuture<Result<Option<CommunityRecord>, ServerError>>;
 
     fn handle(&mut self, get: GetCommunityMetadata, _: &mut Context<Self>) -> Self::Result {
-        Box::new(
-            self.pool
-                .connection()
-                .and_then(move |mut conn| {
-                    conn.client
-                        .prepare("SELECT * FROM communities WHERE id=$1")
-                        .and_then(move |stmt| {
-                            conn.client
-                                .query(&stmt, &[&(get.0).0])
-                                .map(|row| CommunityRecord::try_from(row))
-                                .into_future()
-                                .map(|(user, _stream)| user)
-                                .map_err(|(err, _stream)| err)
-                        })
-                        .and_then(|x| x.transpose()) // Fut<Opt<Res<Usr, Err>>, Err> -> Fut<Opt<Usr>, Err>
-                        .map_err(l337::Error::External)
-                })
-                .map_err(handle_error),
-        )
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let conn = pool.connection().await.map_err(handle_error)?;
+            let query = conn.client.prepare("SELECT * FROM communities WHERE id=$1").await.map_err(handle_error_psql)?;
+            let opt = conn.client.query_opt(&query, &[&(get.0).0]).await.map_err(handle_error_psql)?;
+
+            if let Some(row) = opt {
+                Ok(Some(CommunityRecord::try_from(row).map_err(handle_error_psql)?))
+            } else {
+                Ok(None)
+            }
+        })
     }
 }
 
 impl Handler<CreateCommunity> for DatabaseServer {
-    type Result = ResponseFuture<CommunityRecord, ServerError>;
+    type Result = ResponseFuture<Result<CommunityRecord, ServerError>>;
 
     fn handle(&mut self, create: CreateCommunity, _: &mut Context<Self>) -> Self::Result {
         let id = Uuid::new_v4();
-
-        Box::new(
-            self.pool
-                .connection()
-                .and_then(move |mut conn| {
-                    conn.client
-                        .prepare("INSERT INTO communities (id, name) VALUES ($1, $2) RETURNING *")
-                        .and_then(move |stmt| {
-                            conn.client.query(
-                                    &stmt,
-                                    &[&id, &create.name],
-                                ).map(|row| CommunityRecord::try_from(row))
-                                .into_future()
-                                .map(|(community, _stream)| community)
-                                .map_err(|(err, _stream)| err)
-                        })
-                        .and_then(|x| x.transpose())
-                        .map(|res| res.expect("Create community query did not return anything"))
-                        .map_err(l337::Error::External)
-                })
-                .map_err(handle_error),
-        )
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let conn = pool.connection().await.map_err(handle_error)?;
+            let query = conn.client
+                .prepare("INSERT INTO communities (id, name) VALUES ($1, $2) RETURNING *")
+                .await
+                .map_err(handle_error_psql)?;
+            let row = conn.client.query_one(&query, &[&id, &create.name])
+                .await
+                .map_err(handle_error_psql)?;
+            CommunityRecord::try_from(row).map_err(handle_error_psql)
+        })
     }
 }
