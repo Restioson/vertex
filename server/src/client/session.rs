@@ -120,7 +120,7 @@ impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
     type Result = ();
 
     fn handle(&mut self, msg: SendMessage<ServerMessage>, ctx: &mut WebsocketContext<Self>) {
-        ctx.binary(msg.message);
+        ctx.binary(msg.0);
     }
 }
 

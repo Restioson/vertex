@@ -1,11 +1,11 @@
 use crate::client::ClientWsSession;
-use crate::IdentifiedMessage;
+use crate::{IdentifiedMessage, SendMessage};
 use actix::{Actor, Addr, Context, Handler, Message, ResponseFuture};
 use dashmap::DashMap;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use uuid::Uuid;
-use vertex_common::{ClientSentMessage, CommunityId, MessageId, RoomId, ServerError, UserId, Edit};
+use vertex_common::*;
 
 lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Addr<CommunityActor>> = DashMap::new();
@@ -17,6 +17,7 @@ pub struct UserInCommunity(CommunityId);
 #[rtype(result = "()")]
 pub struct Connect {
     pub user: UserId,
+    pub device: DeviceId,
     pub session: Addr<ClientWsSession>,
 }
 
@@ -38,7 +39,7 @@ impl Actor for CommunityActor {
 }
 
 impl CommunityActor {
-    fn new(creator: UserId, online_devices: Vec<Addr<ClientWsSession>>) -> CommunityActor {
+    fn new(creator: UserId, online_devices: Vec<(DeviceId, Addr<ClientWsSession>)>) -> CommunityActor {
         let mut rooms = HashMap::new();
         rooms.insert(
             RoomId(Uuid::new_v4()),
@@ -65,41 +66,57 @@ impl CommunityActor {
 impl Handler<Connect> for CommunityActor {
     type Result = ();
 
-    fn handle(&mut self, join: Connect, _: &mut Context<Self>) -> Self::Result {
-        let user = join.user;
-        let session = join.session;
+    fn handle(&mut self, connect: Connect, _: &mut Context<Self>) -> Self::Result {
+        let user = connect.user;
+        let device = connect.device;
+        let session = connect.session;
         let session_cloned = session.clone();
 
         self.online_members
             .entry(user)
-            .and_modify(move |member| member.devices.push(session_cloned))
-            .or_insert_with(|| OnlineMember::new(session));
+            .and_modify(move |member| member.devices.push((device, session_cloned)))
+            .or_insert_with(|| OnlineMember::new(session, device));
     }
 }
 
 impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
-    type Result = ResponseFuture<Result<MessageId, ServerError>>;
+    type Result = Result<MessageId, ServerError>;
 
     fn handle(
         &mut self,
         m: IdentifiedMessage<ClientSentMessage>,
         _: &mut Context<Self>,
     ) -> Self::Result {
-        // TODO(implement)
-        unimplemented!()
+        let from_device = m.device;
+        let fwd = ForwardedMessage::from_message_author_device(m.message, m.user, m.device);
+        let send = SendMessage(ServerMessage::Message(fwd));
+
+        self.online_members.values()
+            .flat_map(|member| member.devices.iter())
+            .filter(|(device, _)| *device != from_device)
+            .for_each(|(_, addr)| addr.do_send(send.clone()));
+
+        Ok(MessageId(Uuid::new_v4()))
     }
 }
 
 impl Handler<IdentifiedMessage<Edit>> for CommunityActor {
-    type Result = ResponseFuture<Result<(), ServerError>>;
+    type Result = Result<(), ServerError>; // TODO(room_persistence): just make ()
 
     fn handle(
         &mut self,
         m: IdentifiedMessage<Edit>,
         _: &mut Context<Self>,
     ) -> Self::Result {
-        // TODO(implement)
-        unimplemented!()
+        let from_device = m.device;
+        let send = SendMessage(ServerMessage::Edit(m.message));
+
+        self.online_members.values()
+            .flat_map(|member| member.devices.iter())
+            .filter(|(device, _)| *device != from_device)
+            .for_each(|(_, addr)| addr.do_send(send.clone()));
+
+        Ok(())
     }
 }
 
@@ -115,13 +132,13 @@ impl Handler<Join> for CommunityActor {
 
 /// A member and all their online devices
 struct OnlineMember {
-    pub devices: Vec<Addr<ClientWsSession>>,
+    pub devices: Vec<(DeviceId, Addr<ClientWsSession>)>,
 }
 
 impl OnlineMember {
-    fn new(session: Addr<ClientWsSession>) -> OnlineMember {
+    fn new(session: Addr<ClientWsSession>, device: DeviceId) -> OnlineMember {
         OnlineMember {
-            devices: vec![session],
+            devices: vec![(device, session)],
         }
     }
 }

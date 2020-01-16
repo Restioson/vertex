@@ -19,11 +19,9 @@ use std::fs::OpenOptions;
 use std::str::FromStr;
 use vertex_common::*;
 
-#[derive(Debug, Message)]
+#[derive(Debug, Message, Clone)]
 #[rtype(result = "()")]
-pub struct SendMessage<T: Debug> {
-    message: T,
-}
+pub struct SendMessage<T: Debug>(T);
 
 /// Marker trait for `vertex_common` structs that are Actix messages too
 trait VertexActixMessage {

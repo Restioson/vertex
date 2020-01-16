@@ -124,6 +124,7 @@ pub struct ClientSentMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardedMessage {
+    pub community: CommunityId,
     pub room: RoomId,
     pub author: UserId,
     pub device: DeviceId,
@@ -137,6 +138,7 @@ impl ForwardedMessage {
         device: DeviceId,
     ) -> Self {
         ForwardedMessage {
+            community: msg.to_community,
             room: msg.to_room,
             author,
             device,
