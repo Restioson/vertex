@@ -90,14 +90,14 @@ pub async fn verify_user_password(
     password: String,
 ) -> Result<UserId, ServerError> {
     let UserRecord {
-        id: user_id,
+        id: user,
         password_hash,
         hash_scheme_version,
         ..
     } = user;
     let matches = verify(password, password_hash, hash_scheme_version).await;
     if matches {
-        Ok(user_id)
+        Ok(user)
     } else {
         Err(ServerError::IncorrectUsernameOrPassword)
     }

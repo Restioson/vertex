@@ -1,6 +1,4 @@
 //! Some definitions common between server and client
-#[cfg(feature = "enable-actix")]
-use actix::prelude::*;
 use bitflags::bitflags;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
@@ -45,15 +43,12 @@ pub struct AuthToken(pub String);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientRequest {
     pub message: ClientMessage,
-    pub request_id: RequestId,
+    pub request: RequestId,
 }
 
 impl ClientRequest {
-    pub fn new(message: ClientMessage, request_id: RequestId) -> Self {
-        ClientRequest {
-            message,
-            request_id,
-        }
+    pub fn new(message: ClientMessage, request: RequestId) -> Self {
+        ClientRequest { message, request }
     }
 }
 
@@ -72,7 +67,7 @@ impl Into<Vec<u8>> for ClientRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
     Login {
-        device_id: DeviceId,
+        device: DeviceId,
         token: AuthToken,
     },
     CreateToken {
@@ -83,12 +78,12 @@ pub enum ClientMessage {
         permission_flags: TokenPermissionFlags,
     },
     RevokeToken {
-        device_id: DeviceId,
+        device: DeviceId,
         // Require re-authentication to revoke a token other than the current
         password: Option<String>,
     },
     RefreshToken {
-        device_id: DeviceId,
+        device: DeviceId,
         username: String,
         password: String,
     },
@@ -120,11 +115,6 @@ pub enum ClientMessage {
     },
 }
 
-#[cfg_attr(
-    feature = "enable-actix",
-    rtype(result = "Result<MessageId, ServerError>")
-)]
-#[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientSentMessage {
     pub to_community: CommunityId,
@@ -132,8 +122,6 @@ pub struct ClientSentMessage {
     pub content: String,
 }
 
-#[cfg_attr(feature = "enable-actix", derive(Message))]
-#[cfg_attr(feature = "enable-actix", rtype(result = "()"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardedMessage {
     pub room: RoomId,
@@ -157,22 +145,19 @@ impl ForwardedMessage {
     }
 }
 
-#[cfg_attr(feature = "enable-actix", rtype(result = "RequestResponse"))]
-#[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Edit {
-    pub message_id: MessageId,
-    pub community_id: CommunityId,
-    pub room_id: RoomId,
+    pub message: MessageId,
+    pub community: CommunityId,
+    pub room: RoomId,
+    pub new_content: String,
 }
 
-#[cfg_attr(feature = "enable-actix", rtype(result = "RequestResponse"))]
-#[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delete {
-    pub message_id: MessageId,
-    pub community_id: CommunityId,
-    pub room_id: RoomId,
+    pub message: MessageId,
+    pub community: CommunityId,
+    pub room: RoomId,
 }
 
 bitflags! {
@@ -213,7 +198,7 @@ impl TokenPermissionFlags {
 pub enum ServerMessage {
     Response {
         response: RequestResponse,
-        request_id: RequestId,
+        request: RequestId,
     },
     Error(ServerError),
     Message(ForwardedMessage),
@@ -260,10 +245,10 @@ impl RequestResponse {
     pub fn user(id: UserId) -> Self {
         RequestResponse::Success(Success::User { id })
     }
-    pub fn token(device_id: DeviceId, token: AuthToken) -> Self {
-        RequestResponse::Success(Success::Token { device_id, token })
+    pub fn token(device: DeviceId, token: AuthToken) -> Self {
+        RequestResponse::Success(Success::Token { device, token })
     }
-    pub fn message_id(id: MessageId) -> Self {
+    pub fn message(id: MessageId) -> Self {
         RequestResponse::Success(Success::MessageId { id })
     }
 }
@@ -319,22 +304,11 @@ pub enum ServerError {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Success {
     NoData,
-    Room {
-        id: RoomId,
-    },
-    Community {
-        id: CommunityId,
-    },
-    MessageId {
-        id: MessageId,
-    },
-    User {
-        id: UserId,
-    },
-    Token {
-        device_id: DeviceId,
-        token: AuthToken,
-    },
+    Room { id: RoomId },
+    Community { id: CommunityId },
+    MessageId { id: MessageId },
+    User { id: UserId },
+    Token { device: DeviceId, token: AuthToken },
 }
 
 #[macro_export]

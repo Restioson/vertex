@@ -17,7 +17,7 @@ use directories::ProjectDirs;
 use log::{info, LevelFilter};
 use std::fs::OpenOptions;
 use std::str::FromStr;
-use vertex_common::{DeviceId, UserId};
+use vertex_common::*;
 
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
@@ -25,14 +25,30 @@ pub struct SendMessage<T: Debug> {
     message: T,
 }
 
-pub struct IdentifiedMessage<T: Message> {
-    user_id: UserId,
-    device_id: DeviceId,
+/// Marker trait for `vertex_common` structs that are Actix messages too
+trait VertexActixMessage {
+    type Result;
+}
+
+impl VertexActixMessage for ClientSentMessage {
+    type Result = MessageId;
+}
+
+impl VertexActixMessage for Edit {
+    type Result = ();
+}
+
+struct IdentifiedMessage<T: VertexActixMessage> {
+    user: UserId,
+    device: DeviceId,
     message: T,
 }
 
-impl<T: Message> Message for IdentifiedMessage<T> {
-    type Result = T::Result;
+impl<T> Message for IdentifiedMessage<T>
+    where T: VertexActixMessage,
+          T::Result: 'static
+{
+    type Result = Result<T::Result, ServerError>;
 }
 
 async fn dispatch_client_ws(

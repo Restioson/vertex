@@ -92,7 +92,7 @@ impl DatabaseServer {
                     "DELETE FROM login_tokens
                         WHERE expiration_date < NOW()::timestamp OR
                         DATE_PART('days', NOW()::timestamp - last_used) > $1
-                    RETURNING device_id, user_id",
+                    RETURNING device, user",
                 )
                 .map_err(l337::Error::External)
                 .await?;
@@ -104,8 +104,8 @@ impl DatabaseServer {
                 .iter()
                 .map(|row| {
                     Ok((
-                        UserId(row.try_get("user_id").map_err(l337::Error::External)?),
-                        DeviceId(row.try_get("device_id").map_err(l337::Error::External)?),
+                        UserId(row.try_get("user").map_err(l337::Error::External)?),
+                        DeviceId(row.try_get("device").map_err(l337::Error::External)?),
                     ))
                 })
                 .collect()
@@ -123,10 +123,9 @@ impl DatabaseServer {
                 .map_err(|e| panic!("db error: {:#?}", e))
                 .unwrap()
                 .iter()
-                .filter_map(|(user_id, device_id)| USERS.get(user_id).map(|u| ((device_id, u))))
-                .for_each(|(device_id, user)| {
-                    user.get(device_id)
-                        .map(|addr| addr.do_send(LogoutThisSession));
+                .filter_map(|(user, device)| USERS.get(user).map(|u| ((device, u))))
+                .for_each(|(device, user)| {
+                    user.get(device).map(|addr| addr.do_send(LogoutThisSession));
                 });
 
             let time_taken = Instant::now().duration_since(begin);

@@ -20,10 +20,10 @@ pub struct Vertex {
     socket: Client<TlsStream<TcpStream>>,
     pub username: Option<String>,
     pub display_name: Option<String>,
-    pub device_id: Option<DeviceId>,
+    pub device: Option<DeviceId>,
     logged_in: bool,
     heartbeat: Instant,
-    next_request_id: u32,
+    next_request: u32,
 }
 
 impl Vertex {
@@ -47,10 +47,10 @@ impl Vertex {
             socket,
             username: None,
             display_name: None,
-            device_id: None,
+            device: None,
             logged_in: false,
             heartbeat: Instant::now(),
-            next_request_id: 0,
+            next_request: 0,
         }
     }
 
@@ -64,7 +64,7 @@ impl Vertex {
         match message {
             ServerMessage::Response {
                 response,
-                request_id: _,
+                request: _,
             } => {
                 match response {
                     // TODO associate with a particular message id: @gegy1000
@@ -77,7 +77,7 @@ impl Vertex {
             ServerMessage::SessionLoggedOut => {
                 self.username = None;
                 self.display_name = None;
-                self.device_id = None;
+                self.device = None;
                 self.logged_in = false; // TODO proper log out function
 
                 Some(Action::LoggedOut)
@@ -93,9 +93,9 @@ impl Vertex {
     }
 
     fn request(&mut self, msg: ClientMessage) -> Result<RequestId, Error> {
-        let request = ClientRequest::new(msg, RequestId::new(self.next_request_id));
-        self.next_request_id += 1;
-        let request_id = request.request_id;
+        let request = ClientRequest::new(msg, RequestId::new(self.next_request));
+        self.next_request += 1;
+        let request_id = request.request;
         self.send(request)?;
         Ok(request_id)
     }
@@ -149,7 +149,7 @@ impl Vertex {
         password: &str,
     ) -> Result<UserId, Error> {
         if !self.logged_in {
-            let request_id = self.request(ClientMessage::CreateUser {
+            let request = self.request(ClientMessage::CreateUser {
                 username: username.to_string(),
                 display_name: display_name.to_string(),
                 password: password.to_string(),
@@ -159,12 +159,12 @@ impl Vertex {
             match msg.clone() {
                 ServerMessage::Response {
                     response,
-                    request_id: response_id,
+                    request: response_id,
                 } => {
                     match response {
                         // TODO do this more asynchronously @gegy1000
                         RequestResponse::Success(Success::User { id })
-                            if response_id == request_id =>
+                            if response_id == request =>
                         {
                             Ok(id)
                         }
@@ -184,7 +184,7 @@ impl Vertex {
             return Err(Error::NotLoggedIn);
         }
 
-        let request_id = self.request(ClientMessage::ChangeUsername {
+        let request = self.request(ClientMessage::ChangeUsername {
             new_username: new_username.to_string(),
         })?;
 
@@ -192,11 +192,11 @@ impl Vertex {
         match msg.clone() {
             ServerMessage::Response {
                 response,
-                request_id: response_id,
+                request: response_id,
             } => {
                 match response {
                     // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) if response_id == request_id => {
+                    RequestResponse::Success(Success::NoData) if response_id == request => {
                         self.username = Some(new_username.to_string());
                         self.change_display_name(new_username)?;
                         Ok(())
@@ -214,7 +214,7 @@ impl Vertex {
             return Err(Error::NotLoggedIn);
         }
 
-        let request_id = self.request(ClientMessage::ChangeDisplayName {
+        let request = self.request(ClientMessage::ChangeDisplayName {
             new_display_name: new_display_name.to_string(),
         })?;
 
@@ -222,11 +222,11 @@ impl Vertex {
         match msg.clone() {
             ServerMessage::Response {
                 response,
-                request_id: response_id,
+                request: response_id,
             } => {
                 match response {
                     // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) if response_id == request_id => {
+                    RequestResponse::Success(Success::NoData) if response_id == request => {
                         self.display_name = Some(new_display_name.to_string());
                         Ok(())
                     }
@@ -243,7 +243,7 @@ impl Vertex {
             return Err(Error::NotLoggedIn);
         }
 
-        let request_id = self.request(ClientMessage::ChangePassword {
+        let request = self.request(ClientMessage::ChangePassword {
             old_password: old_password.to_string(),
             new_password: new_password.to_string(),
         })?;
@@ -252,11 +252,11 @@ impl Vertex {
         match msg.clone() {
             ServerMessage::Response {
                 response,
-                request_id: response_id,
+                request: response_id,
             } => {
                 match response {
                     // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) if response_id == request_id => {
+                    RequestResponse::Success(Success::NoData) if response_id == request => {
                         // TODO request re-login here later @gegy1000
                         Ok(())
                     }
@@ -271,12 +271,12 @@ impl Vertex {
     // TODO pub just for testing. @gegy1000 if you could integrate this into the login flow...
     pub fn refresh_token(
         &mut self,
-        device_id: DeviceId,
+        device: DeviceId,
         username: &str,
         password: &str,
     ) -> Result<(), Error> {
-        let request_id = self.request(ClientMessage::RefreshToken {
-            device_id,
+        let request = self.request(ClientMessage::RefreshToken {
+            device,
             username: username.to_string(),
             password: password.to_string(),
         })?;
@@ -285,13 +285,11 @@ impl Vertex {
         match msg.clone() {
             ServerMessage::Response {
                 response,
-                request_id: response_id,
+                request: response_id,
             } => {
                 match response {
                     // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) if response_id == request_id => {
-                        Ok(())
-                    }
+                    RequestResponse::Success(Success::NoData) if response_id == request => Ok(()),
                     RequestResponse::Error(e) => Err(Error::ServerError(e)),
                     _ => Err(Error::IncorrectServerMessage(msg)),
                 }
@@ -310,14 +308,14 @@ impl Vertex {
             return Err(Error::AlreadyLoggedIn);
         }
 
-        let (device_id, token) = match token {
+        let (device, token) = match token {
             Some(token) => token,
             // TODO allow user to configure these parameters?
             None => self.create_token(username, password, None, TokenPermissionFlags::ALL)?,
         };
 
-        let request_id = self.request(ClientMessage::Login {
-            device_id,
+        let request = self.request(ClientMessage::Login {
+            device,
             token: token.clone(),
         })?;
 
@@ -325,18 +323,16 @@ impl Vertex {
         match msg.clone() {
             ServerMessage::Response {
                 response,
-                request_id: response_id,
+                request: response_id,
             } => {
                 match response {
                     // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::User { id: _ })
-                        if response_id == request_id =>
-                    {
+                    RequestResponse::Success(Success::User { id: _ }) if response_id == request => {
                         self.username = Some(username.to_string());
                         self.display_name = Some(username.to_string()); // TODO configure this
-                        self.device_id = Some(device_id);
+                        self.device = Some(device);
                         self.logged_in = true;
-                        Ok((device_id, token))
+                        Ok((device, token))
                     }
                     RequestResponse::Error(e) => Err(Error::ServerError(e)),
                     _ => Err(Error::IncorrectServerMessage(msg)),
@@ -351,18 +347,18 @@ impl Vertex {
             return Err(Error::NotLoggedIn);
         }
 
-        let request_id = self.request(ClientMessage::CreateCommunity { name })?;
+        let request = self.request(ClientMessage::CreateCommunity { name })?;
 
         let msg = self.receive_blocking()?;
         match msg.clone() {
             ServerMessage::Response {
                 response,
-                request_id: response_id,
+                request: response_id,
             } => {
                 match response {
                     // TODO do this more asynchronously @gegy1000
                     RequestResponse::Success(Success::Community { id })
-                        if response_id == request_id =>
+                        if response_id == request =>
                     {
                         Ok(id)
                     }
@@ -380,17 +376,17 @@ impl Vertex {
             return Err(Error::NotLoggedIn);
         }
 
-        let request_id = self.request(ClientMessage::CreateRoom { community, name })?;
+        let request = self.request(ClientMessage::CreateRoom { community, name })?;
 
         let msg = self.receive_blocking()?;
         match msg.clone() {
             ServerMessage::Response {
                 response,
-                request_id: response_id,
+                request: response_id,
             } => {
                 match response {
                     // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::Room { id }) if response_id == request_id => {
+                    RequestResponse::Success(Success::Room { id }) if response_id == request => {
                         Ok(id)
                     }
                     RequestResponse::Error(e) => Err(Error::ServerError(e)),
@@ -407,19 +403,17 @@ impl Vertex {
             return Err(Error::NotLoggedIn);
         }
 
-        let request_id = self.request(ClientMessage::JoinCommunity(community))?;
+        let request = self.request(ClientMessage::JoinCommunity(community))?;
 
         let msg = self.receive_blocking()?;
         match msg.clone() {
             ServerMessage::Response {
                 response,
-                request_id: response_id,
+                request: response_id,
             } => {
                 match response {
                     // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) if response_id == request_id => {
-                        Ok(())
-                    }
+                    RequestResponse::Success(Success::NoData) if response_id == request => Ok(()),
                     RequestResponse::Error(e) => Err(Error::ServerError(e)),
                     _ => Err(Error::IncorrectServerMessage(msg)),
                 }
@@ -437,7 +431,7 @@ impl Vertex {
         to_community: CommunityId,
     ) -> Result<(), Error> {
         if self.logged_in {
-            let request_id = self.request(ClientMessage::SendMessage(ClientSentMessage {
+            let request = self.request(ClientMessage::SendMessage(ClientSentMessage {
                 to_room,
                 to_community,
                 content: msg,
@@ -447,11 +441,11 @@ impl Vertex {
             match msg.clone() {
                 ServerMessage::Response {
                     response,
-                    request_id: response_id,
+                    request: response_id,
                 } => {
                     match response {
                         // TODO do this more asynchronously @gegy1000
-                        RequestResponse::Success(Success::NoData) if response_id == request_id => {
+                        RequestResponse::Success(Success::NoData) if response_id == request => {
                             Ok(())
                         }
                         RequestResponse::Error(e) => Err(Error::ServerError(e)),
@@ -479,7 +473,7 @@ impl Vertex {
         expiration_date: Option<DateTime<Utc>>,
         permission_flags: TokenPermissionFlags,
     ) -> Result<(DeviceId, AuthToken), Error> {
-        let request_id = self.request(ClientMessage::CreateToken {
+        let request = self.request(ClientMessage::CreateToken {
             username: username.to_string(),
             password: password.to_string(),
             device_name: None, // TODO
@@ -491,13 +485,13 @@ impl Vertex {
         match msg.clone() {
             ServerMessage::Response {
                 response,
-                request_id: response_id,
+                request: response_id,
             } => {
                 match response {
                     // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::Token { device_id, token }) => {
-                        if response_id == request_id {
-                            Ok((device_id, token))
+                    RequestResponse::Success(Success::Token { device, token }) => {
+                        if response_id == request {
+                            Ok((device, token))
                         } else {
                             Err(Error::IncorrectServerMessage(msg))
                         }
@@ -513,10 +507,10 @@ impl Vertex {
     pub fn revoke_token(&mut self, password: &str, to_revoke: DeviceId) -> Result<(), Error> {
         self.revoke_token_inner(Some(password), to_revoke)?;
 
-        if let Some(current_device_id) = self.device_id {
-            if current_device_id == to_revoke {
+        if let Some(current_device) = self.device {
+            if current_device == to_revoke {
                 self.logged_in = false;
-                self.device_id = None;
+                self.device = None;
                 self.username = None;
                 self.display_name = None;
             }
@@ -526,9 +520,9 @@ impl Vertex {
     }
 
     pub fn revoke_current_token(&mut self) -> Result<(), Error> {
-        self.revoke_token_inner(None, self.device_id.ok_or(Error::NotLoggedIn)?)?;
+        self.revoke_token_inner(None, self.device.ok_or(Error::NotLoggedIn)?)?;
         self.logged_in = false;
-        self.device_id = None;
+        self.device = None;
         self.username = None;
         self.display_name = None;
 
@@ -544,8 +538,8 @@ impl Vertex {
             return Err(Error::NotLoggedIn);
         }
 
-        let request_id = self.request(ClientMessage::RevokeToken {
-            device_id: to_revoke,
+        let request = self.request(ClientMessage::RevokeToken {
+            device: to_revoke,
             password: password.map(|s| s.to_string()),
         })?;
 
@@ -553,12 +547,12 @@ impl Vertex {
         match msg.clone() {
             ServerMessage::Response {
                 response,
-                request_id: response_id,
+                request: response_id,
             } => {
                 match response {
                     // TODO do this more asynchronously @gegy1000
                     RequestResponse::Success(Success::NoData) => {
-                        if response_id == request_id {
+                        if response_id == request {
                             Ok(())
                         } else {
                             Err(Error::IncorrectServerMessage(msg))

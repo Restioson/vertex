@@ -9,11 +9,11 @@ use vertex_common::{DeviceId, ServerError, TokenPermissionFlags, UserId};
 
 pub(super) const CREATE_TOKENS_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS login_tokens (
-    device_id            UUID PRIMARY KEY,
+    device              UUID PRIMARY KEY,
     device_name          VARCHAR,
     token_hash           VARCHAR NOT NULL,
     hash_scheme_version  SMALLINT NOT NULL,
-    user_id              UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     last_used            TIMESTAMP WITH TIME ZONE NOT NULL,
     expiration_date      TIMESTAMP WITH TIME ZONE,
     permission_flags     BIGINT NOT NULL
@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS login_tokens (
 pub struct Token {
     pub token_hash: String,
     pub hash_scheme_version: HashSchemeVersion,
-    pub user_id: UserId,
-    pub device_id: DeviceId,
+    pub user: UserId,
+    pub device: DeviceId,
     pub device_name: Option<String>,
     pub last_used: DateTime<Utc>,
     pub expiration_date: Option<DateTime<Utc>>,
@@ -40,8 +40,8 @@ impl TryFrom<Row> for Token {
             hash_scheme_version: HashSchemeVersion::from(
                 row.try_get::<&str, i16>("hash_scheme_version")?,
             ),
-            user_id: UserId(row.try_get("user_id")?),
-            device_id: DeviceId(row.try_get("device_id")?),
+            user: UserId(row.try_get("user")?),
+            device: DeviceId(row.try_get("device")?),
             device_name: row.try_get("device_name")?,
             last_used: row.try_get("last_used")?,
             expiration_date: row.try_get("expiration_date")?,
@@ -55,7 +55,7 @@ impl TryFrom<Row> for Token {
 #[derive(Message)]
 #[rtype(result = "Result<Option<Token>, ServerError>")]
 pub struct GetToken {
-    pub device_id: DeviceId,
+    pub device: DeviceId,
 }
 
 #[derive(Message)]
@@ -79,12 +79,12 @@ impl Handler<GetToken> for DatabaseServer {
             let conn = pool.connection().await.map_err(handle_error)?;
             let query = conn
                 .client
-                .prepare("SELECT * FROM login_tokens WHERE device_id=$1")
+                .prepare("SELECT * FROM login_tokens WHERE device=$1")
                 .await
                 .map_err(handle_error_psql)?;
             let opt = conn
                 .client
-                .query_opt(&query, &[&get.device_id.0])
+                .query_opt(&query, &[&get.device.0])
                 .await
                 .map_err(handle_error_psql)?;
 
@@ -110,11 +110,11 @@ impl Handler<CreateToken> for DatabaseServer {
                 .prepare(
                     "INSERT INTO login_tokens
                         (
-                            device_id,
+                            device,
                             device_name,
                             token_hash,
                             hash_scheme_version,
-                            user_id,
+                            user,
                             last_used,
                             expiration_date,
                             permission_flags
@@ -128,11 +128,11 @@ impl Handler<CreateToken> for DatabaseServer {
                 .execute(
                     &stmt,
                     &[
-                        &token.device_id.0,
+                        &token.device.0,
                         &token.device_name,
                         &token.token_hash,
                         &(token.hash_scheme_version as u8 as i16),
-                        &token.user_id.0,
+                        &token.user.0,
                         &token.last_used,
                         &token.expiration_date,
                         &token.permission_flags.bits(),
@@ -154,7 +154,7 @@ impl Handler<RevokeToken> for DatabaseServer {
             let conn = pool.connection().await.map_err(handle_error)?;
             let stmt = conn
                 .client
-                .prepare("DELETE FROM login_tokens WHERE device_id = $1")
+                .prepare("DELETE FROM login_tokens WHERE device = $1")
                 .map_err(handle_error_psql)
                 .await?;
             conn.client
@@ -175,7 +175,7 @@ impl Handler<RefreshToken> for DatabaseServer {
             let conn = pool.connection().await.map_err(handle_error)?;
             let stmt = conn
                 .client
-                .prepare("UPDATE login_tokens SET last_used=NOW()::timestamp WHERE device_id = $1")
+                .prepare("UPDATE login_tokens SET last_used=NOW()::timestamp WHERE device = $1")
                 .await
                 .map_err(handle_error_psql)?;
             conn.client

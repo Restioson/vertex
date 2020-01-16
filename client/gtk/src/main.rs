@@ -41,7 +41,7 @@ enum VertexMsg {
 
 #[derive(Serialize, Deserialize, Clone)]
 struct StoredToken {
-    device_id: DeviceId,
+    device: DeviceId,
     token: String,
 }
 
@@ -176,15 +176,15 @@ impl Update for Win {
                                         serde_json::from_str(&token_ser)
                                             .expect("Error deserializing token");
 
-                                    Some((stored_token.device_id, AuthToken(stored_token.token)))
+                                    Some((stored_token.device, AuthToken(stored_token.token)))
                                 } else {
                                     None
                                 };
 
                                 match self.model.vertex.login(token, v[1], v[2]) {
-                                    Ok((device_id, token)) => {
+                                    Ok((device, token)) => {
                                         let stored_token = StoredToken {
-                                            device_id,
+                                            device,
                                             token: token.0.clone(),
                                         };
                                         let token_ser = serde_json::to_string(&stored_token)
@@ -198,7 +198,7 @@ impl Update for Win {
                                             &mut text_buffer.get_end_iter(),
                                             &format!(
                                                 "Successfully logged in. Device id: {}.\n",
-                                                device_id.0,
+                                                device.0,
                                             ),
                                         );
                                     }

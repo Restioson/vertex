@@ -82,21 +82,21 @@ pub struct CreateUser(pub UserRecord);
 #[derive(Message)]
 #[rtype(result = "Result<bool, ServerError>")]
 pub struct ChangeUsername {
-    pub user_id: UserId,
+    pub user: UserId,
     pub new_username: String,
 }
 
 #[derive(Message)]
 #[rtype(result = "Result<(), ServerError>")]
 pub struct ChangeDisplayName {
-    pub user_id: UserId,
+    pub user: UserId,
     pub new_display_name: String,
 }
 
 #[derive(Message)]
 #[rtype(result = "Result<(), ServerError>")]
 pub struct ChangePassword {
-    pub user_id: UserId,
+    pub user: UserId,
     pub new_password_hash: String,
     pub hash_version: HashSchemeVersion,
 }
@@ -222,7 +222,7 @@ impl Handler<ChangeUsername> for DatabaseServer {
                 .map_err(handle_error_psql)?;
             let res = conn
                 .client
-                .execute(&stmt, &[&change.new_username, &change.user_id.0])
+                .execute(&stmt, &[&change.new_username, &change.user.0])
                 .await;
             match res {
                 Ok(ret) => Ok(ret == 1),
@@ -251,7 +251,7 @@ impl Handler<ChangeDisplayName> for DatabaseServer {
                 .await
                 .map_err(handle_error_psql)?;
             conn.client
-                .execute(&stmt, &[&change.new_display_name, &change.user_id.0])
+                .execute(&stmt, &[&change.new_display_name, &change.user.0])
                 .await
                 .map_err(handle_error_psql)?;
             Ok(())
@@ -284,7 +284,7 @@ impl Handler<ChangePassword> for DatabaseServer {
                         &change.new_password_hash,
                         &(change.hash_version as u8 as i16),
                         &false,
-                        &change.user_id.0,
+                        &change.user.0,
                     ],
                 )
                 .await

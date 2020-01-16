@@ -27,10 +27,7 @@ impl UserSessions {
     }
 
     pub fn get(&self, id: &DeviceId) -> Option<&Addr<ClientWsSession>> {
-        let idx = self
-            .sessions
-            .iter()
-            .position(|(device_id, _)| device_id == id)?;
+        let idx = self.sessions.iter().position(|(device, _)| device == id)?;
         self.sessions.get(idx).map(|el| &el.1)
     }
 }

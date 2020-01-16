@@ -5,7 +5,7 @@ use dashmap::DashMap;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use uuid::Uuid;
-use vertex_common::{ClientSentMessage, CommunityId, MessageId, RoomId, ServerError, UserId};
+use vertex_common::{ClientSentMessage, CommunityId, MessageId, RoomId, ServerError, UserId, Edit};
 
 lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Addr<CommunityActor>> = DashMap::new();
@@ -16,14 +16,14 @@ pub struct UserInCommunity(CommunityId);
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct Connect {
-    pub user_id: UserId,
+    pub user: UserId,
     pub session: Addr<ClientWsSession>,
 }
 
 #[derive(Message)]
 #[rtype(result = "Result<bool, ServerError>")]
 pub struct Join {
-    pub user_id: UserId,
+    pub user: UserId,
 }
 
 /// A community is a collection (or "house", if you will) of rooms, as well as some metadata.
@@ -66,12 +66,12 @@ impl Handler<Connect> for CommunityActor {
     type Result = ();
 
     fn handle(&mut self, join: Connect, _: &mut Context<Self>) -> Self::Result {
-        let user_id = join.user_id;
+        let user = join.user;
         let session = join.session;
         let session_cloned = session.clone();
 
         self.online_members
-            .entry(user_id)
+            .entry(user)
             .and_modify(move |member| member.devices.push(session_cloned))
             .or_insert_with(|| OnlineMember::new(session));
     }
@@ -89,6 +89,20 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
         unimplemented!()
     }
 }
+
+impl Handler<IdentifiedMessage<Edit>> for CommunityActor {
+    type Result = ResponseFuture<Result<(), ServerError>>;
+
+    fn handle(
+        &mut self,
+        m: IdentifiedMessage<Edit>,
+        _: &mut Context<Self>,
+    ) -> Self::Result {
+        // TODO(implement)
+        unimplemented!()
+    }
+}
+
 
 impl Handler<Join> for CommunityActor {
     type Result = ResponseFuture<Result<bool, ServerError>>;
