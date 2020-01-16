@@ -145,8 +145,6 @@ impl Handler<AddToCommunity> for DatabaseServer {
                             .and_then(|e| e.downcast_ref::<DbError>())
                             .and_then(|e| e.constraint());
 
-                        eprintln!("{:#?}", err);
-
                         match constraint {
                             Some("community_membership_community_id_fkey") => {
                                 ServerError::InvalidCommunity
