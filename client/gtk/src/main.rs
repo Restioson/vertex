@@ -1,9 +1,6 @@
-#[macro_use]
-extern crate serde_derive;
-
 use clap::{App, Arg};
 use gtk::prelude::*;
-use gtk::{Entry, Label, ListBox, TextView, Window};
+use gtk::{Entry, Label, ListBox, TextView, Window, ListBoxRow, Separator, Orientation, Grid};
 use keyring::Keyring;
 use relm::{connect, connect_stream, Relm, Update, Widget};
 use relm_derive::*;
@@ -11,6 +8,8 @@ use url::Url;
 use uuid::Uuid;
 use vertex_client_backend::*;
 use vertex_common::*;
+
+use serde::{Serialize, Deserialize};
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -55,19 +54,38 @@ impl Win {
     fn handle_action(&mut self, action: Action) -> () {
         match action {
             Action::AddMessage(msg) => {
-                let text_buffer = self.widgets.messages.get_buffer().unwrap();
-                let message = format!("{}: {}\n", msg.author, msg.content);
-                text_buffer.insert(&mut text_buffer.get_end_iter(), &message);
+                self.push_message(&msg.author, &msg.content);
             }
             Action::Error(_error) => {} // TODO handle this? @gegy
             Action::LoggedOut => {
-                let text_buffer = self.widgets.messages.get_buffer().unwrap();
-                text_buffer.insert(
-                    &mut text_buffer.get_end_iter(),
-                    &"Logged out -- session invalidated. Please log in again.",
-                );
+                self.push_message("Info", "Logged out -- session invalidated. Please log in again.");
             }
         }
+    }
+
+    fn push_message(&self, author: &str, content: &str) {
+        let grid = Grid::new();
+        grid.insert_column(0);
+        grid.insert_column(1);
+        grid.insert_column(2);
+
+        grid.set_column_spacing(10);
+
+        let author = Label::new(Some(author));
+        author.set_xalign(0.0);
+        grid.attach(&author, 0, 0, 1, 1);
+
+        let content = Label::new(Some(content));
+        content.set_xalign(0.0);
+        grid.attach(&content, 1, 0, 1, 1);
+
+        let separator = Separator::new(Orientation::Horizontal);
+
+        separator.show_all();
+        grid.show_all();
+
+        self.widgets.messages.insert(&separator, -1);
+        self.widgets.messages.insert(&grid, -1);
     }
 }
 
@@ -100,8 +118,6 @@ impl Update for Win {
                 self.model.room = Some(room);
             }
             VertexMsg::SendMessage(msg) => {
-                let text_buffer = self.widgets.messages.get_buffer().unwrap();
-
                 if msg.starts_with("/") {
                     let v: Vec<&str> = msg.split(' ').collect();
 
@@ -131,8 +147,7 @@ impl Update for Win {
                         //                        }
                         "/createroom" => {
                             if v.len() == 3 {
-                                text_buffer
-                                    .insert(&mut text_buffer.get_end_iter(), "Creating room...\n");
+                                self.push_message("Info", "Creating room...");
 
                                 let community = CommunityId(
                                     Uuid::parse_str(v[2]).expect("Invalid community id"),
@@ -142,10 +157,7 @@ impl Update for Win {
                                     .vertex
                                     .create_room(v[1].to_string(), community)
                                     .expect("Error creating room");
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    &format!("Joined room {}\n", room.0),
-                                );
+                                self.push_message("Info", &format!("Joined room {}", room.0));
 
                                 self.model.room = Some(room);
                                 let txt: &str = &format!("#{}", room.0);
@@ -154,16 +166,12 @@ impl Update for Win {
                                 self.model.room_list.push(room);
                                 room_label.show_all();
                             } else {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Room name and community id required",
-                                );
+                                self.push_message("Error", &format!("Room name and community id required"));
                             }
                         }
                         "/login" => {
                             if v.len() > 2 {
-                                text_buffer
-                                    .insert(&mut text_buffer.get_end_iter(), "Logging in...\n");
+                                self.push_message("Info", "Logging in...");
 
                                 let token = if v.len() == 5 {
                                     let id =
@@ -194,24 +202,12 @@ impl Update for Win {
                                             .set_password(&token_ser)
                                             .expect("Error storing token");
 
-                                        text_buffer.insert(
-                                            &mut text_buffer.get_end_iter(),
-                                            &format!(
-                                                "Successfully logged in. Device id: {}.\n",
-                                                device.0,
-                                            ),
-                                        );
+                                        self.push_message("Info", &format!("Successfully logged in. Device id: {}", device.0));
                                     }
-                                    Err(e) => text_buffer.insert(
-                                        &mut text_buffer.get_end_iter(),
-                                        &format!("Error logging in: {:?}\n", e),
-                                    ),
+                                    Err(e) => self.push_message("Error", &format!("Error logging in: {:?}", e)),
                                 }
                             } else {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Username and password required\n",
-                                );
+                                self.push_message("Error", "Username and password required");
                             }
                         }
                         "/forgettoken" => {
@@ -219,14 +215,11 @@ impl Update for Win {
                                 .keyring
                                 .delete_password()
                                 .expect("Error forgetting token");
-                            text_buffer.insert(&mut text_buffer.get_end_iter(), "Token forgot.\n");
+                            self.push_message("Info", "Token forgot");
                         }
                         "/refreshtoken" => {
                             if v.len() == 4 {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Refreshing token...\n",
-                                );
+                                self.push_message("Info", "Refreshing token...");
 
                                 let dev =
                                     DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
@@ -236,21 +229,14 @@ impl Update for Win {
                                     .refresh_token(dev, v[2], v[3])
                                     .expect("Error refreshing token");
 
-                                text_buffer
-                                    .insert(&mut text_buffer.get_end_iter(), "Token refreshed\n");
+                                self.push_message("Info", "Token refreshed");
                             } else {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Device ID, username, and password required\n",
-                                );
+                                self.push_message("Error", "Device ID, username, and password required");
                             }
                         }
                         "/register" => {
                             if v.len() == 3 {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Registering user...\n",
-                                );
+                                self.push_message("Info", "Registering user...");
 
                                 let id = self
                                     .model
@@ -258,20 +244,13 @@ impl Update for Win {
                                     .create_user(v[1], v[1], v[2])
                                     .expect("Error registering user");
 
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    &format!("Registered user with id {}.\n", id.0),
-                                );
+                                self.push_message("Info", &format!("Registered user with id {}.\n", id.0));
                             } else {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Username and password required\n",
-                                );
+                                self.push_message("Error", "Username and password required");
                             }
                         }
                         "/revokecurrent" => {
-                            text_buffer
-                                .insert(&mut text_buffer.get_end_iter(), "Revoking token...\n");
+                            self.push_message("Info", "Revoking token...");
 
                             self.model
                                 .vertex
@@ -280,8 +259,7 @@ impl Update for Win {
                         }
                         "/revoke" => {
                             if v.len() == 3 {
-                                text_buffer
-                                    .insert(&mut text_buffer.get_end_iter(), "Revoking token...\n");
+                                self.push_message("Info", "Revoking token...");
 
                                 let dev =
                                     DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
@@ -290,68 +268,47 @@ impl Update for Win {
                                     .revoke_token(v[2], dev)
                                     .expect("Error revoking token");
                             } else {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Token and password required\n",
-                                );
+                                self.push_message("Error", "Token and password required");
                             }
                         }
                         "/changeusername" => {
                             if v.len() == 2 {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Changing username...\n",
-                                );
+                                self.push_message("Info", "Changing username...");
 
                                 self.model
                                     .vertex
                                     .change_username(v[1])
                                     .expect("Error changing username");
                             } else {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "New username required\n",
-                                );
+                                self.push_message("Error", "New username required");
                             }
                         }
                         "/changedisplayname" => {
                             if v.len() == 2 {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Changing display name...\n",
-                                );
+                                self.push_message("Info", "Changing display name...");
 
                                 self.model
                                     .vertex
                                     .change_display_name(v[1])
                                     .expect("Error changing display name");
                             } else {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "New display name required\n",
-                                );
+                                self.push_message("Error", "New display name required");
                             }
                         }
                         "/changepassword" => {
                             if v.len() == 3 {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Changing password...\n",
-                                );
+                                self.push_message("Info", "Changing password...");
 
                                 self.model
                                     .vertex
                                     .change_password(v[1], v[2])
                                     .expect("Error changing password");
                             } else {
-                                text_buffer.insert(
-                                    &mut text_buffer.get_end_iter(),
-                                    "Old password and new password required\n",
-                                );
+                                self.push_message("Error", "Old password and new password required");
                             }
                         }
                         _ => {
-                            text_buffer.insert(&mut text_buffer.get_end_iter(), "Unknown command\n")
+                            self.push_message("Error", "Unknown command");
                         }
                     }
 
@@ -372,11 +329,7 @@ impl Update for Win {
                     .as_ref()
                     .expect("Not logged in");
 
-                // TODO: Unify
-                text_buffer.insert(
-                    &mut text_buffer.get_end_iter(),
-                    &format!("{}: {}\n", name, msg),
-                );
+                self.push_message(&name, &msg);
             }
             VertexMsg::Lifecycle => {
                 if let Some(action) = self.model.vertex.handle() {
@@ -406,9 +359,9 @@ impl Widget for Win {
         let builder = gtk::Builder::new_from_string(GLADE_SRC);
 
         let window: Window = builder.get_object("window").unwrap();
-        let messages: TextView = builder.get_object("messages").unwrap();
+        let messages: ListBox = builder.get_object("messages").unwrap();
         let entry: Entry = builder.get_object("message_entry").unwrap();
-        let rooms: ListBox = builder.get_object("channels").unwrap();
+        let rooms: ListBox = builder.get_object("rooms").unwrap();
 
         connect!(
             relm,
@@ -445,7 +398,7 @@ impl Widget for Win {
 }
 
 struct Widgets {
-    messages: TextView,
+    messages: ListBox,
     entry: Entry,
     rooms: ListBox,
 }
