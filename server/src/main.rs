@@ -46,7 +46,7 @@ impl<T> Message for IdentifiedMessage<T>
     where T: VertexActixMessage,
           T::Result: 'static
 {
-    type Result = Result<T::Result, ServerError>;
+    type Result = Result<T::Result, ErrResponse>;
 }
 
 async fn dispatch_client_ws(

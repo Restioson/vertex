@@ -17,9 +17,7 @@ pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 pub struct RequestId(u32);
 
 impl RequestId {
-    pub fn new(id: u32) -> Self {
-        RequestId(id)
-    }
+    pub const fn new(id: u32) -> Self { RequestId(id) }
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
@@ -41,31 +39,31 @@ pub struct DeviceId(pub Uuid);
 pub struct AuthToken(pub String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ClientRequest {
-    pub message: ClientMessage,
-    pub request: RequestId,
+pub struct ClientMessage {
+    pub id: RequestId,
+    pub request: ClientRequest,
 }
 
-impl ClientRequest {
-    pub fn new(message: ClientMessage, request: RequestId) -> Self {
-        ClientRequest { message, request }
+impl ClientMessage {
+    pub fn new(request: ClientRequest, id: RequestId) -> Self {
+        ClientMessage { request, id }
     }
 }
 
-impl Into<Bytes> for ClientRequest {
+impl Into<Bytes> for ClientMessage {
     fn into(self) -> Bytes {
         serde_cbor::to_vec(&self).unwrap().into()
     }
 }
 
-impl Into<Vec<u8>> for ClientRequest {
+impl Into<Vec<u8>> for ClientMessage {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ClientMessage {
+pub enum ClientRequest {
     Login {
         device: DeviceId,
         token: AuthToken,
@@ -198,11 +196,16 @@ impl TokenPermissionFlags {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
+    Action(ServerAction),
     Response {
-        response: RequestResponse,
-        request: RequestId,
+        id: RequestId,
+        result: Result<OkResponse, ErrResponse>,
     },
-    Error(ServerError),
+    MalformedMessage,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ServerAction {
     Message(ForwardedMessage),
     Edit(Edit),
     Delete(Delete),
@@ -228,41 +231,8 @@ pub enum LeftCommunityReason {
     Deleted,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum RequestResponse {
-    Success(Success),
-    Error(ServerError),
-}
-
-impl RequestResponse {
-    pub fn success() -> Self {
-        RequestResponse::Success(Success::NoData)
-    }
-    pub fn room(id: RoomId) -> Self {
-        RequestResponse::Success(Success::Room { id })
-    }
-    pub fn community(id: CommunityId) -> Self {
-        RequestResponse::Success(Success::Community { id })
-    }
-    pub fn user(id: UserId) -> Self {
-        RequestResponse::Success(Success::User { id })
-    }
-    pub fn token(device: DeviceId, token: AuthToken) -> Self {
-        RequestResponse::Success(Success::Token { device, token })
-    }
-    pub fn message(id: MessageId) -> Self {
-        RequestResponse::Success(Success::MessageId { id })
-    }
-}
-
-impl From<ServerError> for RequestResponse {
-    fn from(e: ServerError) -> Self {
-        RequestResponse::Error(e)
-    }
-}
-
 #[cfg(feature = "enable-actix")]
-impl<A, M> actix::dev::MessageResponse<A, M> for RequestResponse
+impl<A, M> actix::dev::MessageResponse<A, M> for OkResponse
 where
     A: actix::Actor,
     M: actix::Message<Result = Self>,
@@ -275,10 +245,17 @@ where
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ServerError {
-    InvalidMessage,
-    UnexpectedTextFrame,
-    UnexpectedContinuationFrame,
+pub enum OkResponse {
+    NoData,
+    Room { id: RoomId },
+    Community { id: CommunityId },
+    MessageId { id: MessageId },
+    User { id: UserId },
+    Token { device: DeviceId, token: AuthToken },
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ErrResponse {
     Internal,
     NotLoggedIn,
     AlreadyLoggedIn,
@@ -301,16 +278,6 @@ pub enum ServerError {
     InvalidCommunity,
     InvalidUser,
     AlreadyInCommunity,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Success {
-    NoData,
-    Room { id: RoomId },
-    Community { id: CommunityId },
-    MessageId { id: MessageId },
-    User { id: UserId },
-    Token { device: DeviceId, token: AuthToken },
 }
 
 #[macro_export]

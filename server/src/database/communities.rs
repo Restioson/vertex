@@ -3,7 +3,7 @@ use actix::{Context, Handler, Message, ResponseFuture};
 use std::convert::TryFrom;
 use tokio_postgres::Row;
 use uuid::Uuid;
-use vertex_common::{CommunityId, ServerError};
+use vertex_common::{CommunityId, ErrResponse};
 
 pub(super) const CREATE_COMMUNITIES_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS communities (
@@ -29,18 +29,18 @@ impl TryFrom<Row> for CommunityRecord {
 }
 
 #[derive(Message)]
-#[rtype(result = "Result<Option<CommunityRecord>, ServerError>")]
+#[rtype(result = "Result<Option<CommunityRecord>, ErrResponse>")]
 pub struct GetCommunityMetadata(CommunityId);
 
 #[derive(Message)]
-#[rtype(result = "Result<CommunityRecord, ServerError>")]
+#[rtype(result = "Result<CommunityRecord, ErrResponse>")]
 pub struct CreateCommunity {
     pub name: String,
 }
 
 // TODO(room_persistence): load at boot
 impl Handler<GetCommunityMetadata> for DatabaseServer {
-    type Result = ResponseFuture<Result<Option<CommunityRecord>, ServerError>>;
+    type Result = ResponseFuture<Result<Option<CommunityRecord>, ErrResponse>>;
 
     fn handle(&mut self, get: GetCommunityMetadata, _: &mut Context<Self>) -> Self::Result {
         let pool = self.pool.clone();
@@ -69,7 +69,7 @@ impl Handler<GetCommunityMetadata> for DatabaseServer {
 }
 
 impl Handler<CreateCommunity> for DatabaseServer {
-    type Result = ResponseFuture<Result<CommunityRecord, ServerError>>;
+    type Result = ResponseFuture<Result<CommunityRecord, ErrResponse>>;
 
     fn handle(&mut self, create: CreateCommunity, _: &mut Context<Self>) -> Self::Result {
         let id = Uuid::new_v4();

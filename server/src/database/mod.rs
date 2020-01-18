@@ -4,7 +4,7 @@ use log::{error, warn};
 use std::fs;
 use std::time::{Duration, Instant};
 use tokio_postgres::NoTls;
-use vertex_common::{DeviceId, ServerError, UserId};
+use vertex_common::{DeviceId, ErrResponse, UserId};
 
 mod communities;
 mod community_membership;
@@ -155,7 +155,7 @@ impl Actor for DatabaseServer {
     }
 }
 
-fn handle_error(error: l337::Error<tokio_postgres::Error>) -> ServerError {
+fn handle_error(error: l337::Error<tokio_postgres::Error>) -> ErrResponse {
     match error {
         l337::Error::Internal(e) => {
             error!("Database connection pooling error: {:#?}", e);
@@ -165,11 +165,11 @@ fn handle_error(error: l337::Error<tokio_postgres::Error>) -> ServerError {
         }
     }
 
-    ServerError::Internal
+    ErrResponse::Internal
 }
 
-fn handle_error_psql(error: tokio_postgres::Error) -> ServerError {
+fn handle_error_psql(error: tokio_postgres::Error) -> ErrResponse {
     error!("Database error: {:#?}", error);
 
-    ServerError::Internal
+    ErrResponse::Internal
 }
