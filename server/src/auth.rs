@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use rand::RngCore;
 use tokio_threadpool::ThreadPool;
 use unicode_normalization::UnicodeNormalization;
-use vertex_common::{ServerError, UserId};
+use vertex_common::{ErrResponse, UserId};
 
 pub const MAX_TOKEN_LENGTH: usize = 45;
 
@@ -99,7 +99,7 @@ pub fn verify<E: Send + 'static>(
 pub fn verify_user_password<E: Send + 'static>(
     user: User,
     password: String,
-) -> impl Future<Item = Result<UserId, ServerError>, Error = E> {
+) -> impl Future<Item = Result<UserId, ErrResponse>, Error = E> {
     let User {
         id: user_id,
         password_hash,
@@ -111,7 +111,7 @@ pub fn verify_user_password<E: Send + 'static>(
         if matches {
             Ok(user_id)
         } else {
-            Err(ServerError::IncorrectUsernameOrPassword)
+            Err(ErrResponse::IncorrectUsernameOrPassword)
         }
     })
 }

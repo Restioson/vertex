@@ -6,7 +6,7 @@ use futures::future::Future;
 use futures::stream::Stream;
 use std::convert::TryFrom;
 use tokio_postgres::Row;
-use vertex_common::{DeviceId, ServerError, TokenPermissionFlags, UserId};
+use vertex_common::{DeviceId, ErrResponse, TokenPermissionFlags, UserId};
 
 pub(super) const CREATE_TOKENS_TABLE: &'static str =
 "CREATE TABLE IF NOT EXISTS login_tokens (
@@ -58,29 +58,29 @@ pub struct GetToken {
 }
 
 impl Message for GetToken {
-    type Result = Result<Option<Token>, ServerError>;
+    type Result = Result<Option<Token>, ErrResponse>;
 }
 
 pub struct CreateToken(pub Token);
 
 impl Message for CreateToken {
-    type Result = Result<(), ServerError>;
+    type Result = Result<(), ErrResponse>;
 }
 
 pub struct RevokeToken(pub DeviceId);
 
 impl Message for RevokeToken {
-    type Result = Result<bool, ServerError>;
+    type Result = Result<bool, ErrResponse>;
 }
 
 pub struct RefreshToken(pub DeviceId);
 
 impl Message for RefreshToken {
-    type Result = Result<bool, ServerError>;
+    type Result = Result<bool, ErrResponse>;
 }
 
 impl Handler<GetToken> for DatabaseServer {
-    type Result = ResponseFuture<Option<Token>, ServerError>;
+    type Result = ResponseFuture<Option<Token>, ErrResponse>;
 
     fn handle(&mut self, get: GetToken, _: &mut Context<Self>) -> Self::Result {
         Box::new(
@@ -106,7 +106,7 @@ impl Handler<GetToken> for DatabaseServer {
 }
 
 impl Handler<CreateToken> for DatabaseServer {
-    type Result = ResponseFuture<(), ServerError>;
+    type Result = ResponseFuture<(), ErrResponse>;
 
     fn handle(&mut self, create: CreateToken, _: &mut Context<Self>) -> Self::Result {
         let token = create.0;
@@ -153,7 +153,7 @@ impl Handler<CreateToken> for DatabaseServer {
 }
 
 impl Handler<RevokeToken> for DatabaseServer {
-    type Result = ResponseFuture<bool, ServerError>;
+    type Result = ResponseFuture<bool, ErrResponse>;
 
     fn handle(&mut self, revoke: RevokeToken, _: &mut Context<Self>) -> Self::Result {
         Box::new(
@@ -172,7 +172,7 @@ impl Handler<RevokeToken> for DatabaseServer {
 }
 
 impl Handler<RefreshToken> for DatabaseServer {
-    type Result = ResponseFuture<bool, ServerError>;
+    type Result = ResponseFuture<bool, ErrResponse>;
 
     fn handle(&mut self, revoke: RefreshToken, _: &mut Context<Self>) -> Self::Result {
         Box::new(

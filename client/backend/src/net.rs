@@ -1,152 +1,169 @@
-use websocket::client::Url;
-use websocket::{ClientBuilder, OwnedMessage, WebSocketResult, WebSocketError};
-use native_tls::TlsConnector;
-
 use super::Error as VertexError;
 use super::Result as VertexResult;
 
-use vertex_common::{ServerboundRequest, ClientboundMessage, OkResponse, ServerError, RequestId, ClientboundAction};
+use vertex_common::{ServerboundRequest, ClientboundMessage, OkResponse, ErrResponse, RequestId, ClientboundAction, ServerboundMessage};
 
-use std::time::Instant;
-use futures::{Future, Async, Poll};
-use futures::stream::Stream;
-use futures::sync::{mpsc, oneshot};
-use futures::sink::Sink;
-use tokio_tcp::TcpStream;
-use tokio_tls::TlsStream;
-use std::collections::{LinkedList, HashMap};
-use futures::future::IntoFuture;
+use futures::stream::{Stream, StreamExt, SplitStream, SplitSink};
+use futures::future::FutureExt;
 
-pub fn connect(url: Url) -> impl Future<Item=Ready, Error=WebSocketError> {
-    let (send_in, recv_in) = mpsc::unbounded();
-    let (send_out, recv_out) = mpsc::unbounded();
+use futures::sink::SinkExt;
+use futures::channel::oneshot;
+use futures::task::{Context, Poll};
 
-    ClientBuilder::from_url(&url).async_connect_secure(
-        Some(TlsConnector::builder()
-            .danger_accept_invalid_certs(true) // TODO needed for self signed certs
-            .build().expect("Error setting TLS settings"))
-    ).map(move |(client, _)| {
-        Ready {
-            client,
-            send_out,
-            recv_in,
-            send_in,
-            recv_out,
+use std::collections::HashMap;
+
+use std::future::Future;
+use std::pin::Pin;
+
+use url::Url;
+
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::rc::Rc;
+use std::cell::RefCell;
+
+struct RequestIdGenerator {
+    next_request_id: AtomicU64,
+}
+
+impl RequestIdGenerator {
+    pub fn new() -> RequestIdGenerator {
+        RequestIdGenerator { next_request_id: AtomicU64::new(0) }
+    }
+
+    pub fn next(&self) -> RequestId {
+        RequestId(self.next_request_id.fetch_add(1, Ordering::SeqCst))
+    }
+}
+
+type WsClient = tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>;
+type RequestResult = Result<OkResponse, ErrResponse>;
+
+pub async fn connect(url: Url) -> VertexResult<(Sender, Receiver)> {
+    let (client, _) = tokio_tungstenite::connect_async(url).await?;
+    let (sink, stream) = client.split();
+
+    let request_tracker = RequestTracker::new();
+    let request_tracker = Rc::new(request_tracker);
+
+    Ok((
+        Sender {
+            request_tracker: request_tracker.clone(),
+            request_id_generator: RequestIdGenerator::new(),
+            sink: RefCell::new(sink),
+        },
+        Receiver {
+            request_tracker: request_tracker.clone(),
+            stream,
         }
-    })
+    ))
 }
 
-pub struct Ready {
-    client: websocket::r#async::Client<TlsStream<TcpStream>>,
-    send_in: mpsc::UnboundedSender<OwnedMessage>,
-    recv_in: mpsc::UnboundedReceiver<OwnedMessage>,
-    send_out: mpsc::UnboundedSender<OwnedMessage>,
-    recv_out: mpsc::UnboundedReceiver<OwnedMessage>,
-}
+pub struct Request(oneshot::Receiver<RequestResult>);
 
-impl Ready {
-    pub fn start(self) -> (Active, impl Future<Item=(), Error=VertexError>) {
-        let net = Active {
-            recv: self.recv_in,
-            send: self.send_out,
-            next_request_id: 0,
-            pending_requests: HashMap::new(),
-            last_message: Instant::now(),
-        };
-
-        let (sink, stream) = self.client.split();
-        let recv = stream
-            .map_err(|err| VertexError::WebSocketError(err))
-            .forward(self.send_in.sink_map_err(|_| VertexError::ServerClosed));
-
-        let send = self.recv_out
-            .map_err(|_| VertexError::ChannelClosed)
-            .forward(sink);
-
-        let future = recv.join(send).map(|_| ());
-
-        (net, future)
+impl Request {
+    pub async fn response(self) -> RequestResult {
+        self.0.map(|result| result.expect("channel closed")).await
     }
 }
 
-// TODO: really this could be split into a stream & sink
-pub struct Active {
-    recv: mpsc::UnboundedReceiver<OwnedMessage>,
-    send: mpsc::UnboundedSender<OwnedMessage>,
-    next_request_id: u64,
-    pending_requests: HashMap<RequestId, PendingRequest>,
-    last_message: Instant,
+pub struct Sender {
+    request_tracker: Rc<RequestTracker>,
+    request_id_generator: RequestIdGenerator,
+    sink: RefCell<SplitSink<WsClient, tungstenite::Message>>,
 }
 
-impl Active {
-    pub fn request(&mut self, request: ServerboundRequest) -> impl Future<Item=OkResponse, Error=ServerError> {
-        let id = RequestId(self.next_request_id);
-        self.next_request_id += 1;
+impl Sender {
+    pub async fn request(&self, request: ServerboundRequest) -> VertexResult<Request> {
+        let id = self.request_id_generator.next();
 
-        let (send, recv) = oneshot::channel();
-        self.pending_requests.insert(id, PendingRequest(send));
+        let receiver = self.request_tracker.enqueue(id)
+            .expect("unable to enqueue message");
 
-        recv.then(|result| result.expect("response channel closed"))
+        let message = ServerboundMessage { id, request };
+        self.send(message).await?;
+
+        Ok(Request(receiver))
+    }
+
+    pub async fn send(&self, message: ServerboundMessage) -> VertexResult<()> {
+        self.send_raw(tungstenite::Message::Binary(message.into())).await?;
+        Ok(())
+    }
+
+    pub async fn dispatch_heartbeat(&self) -> VertexResult<()> {
+        self.send_raw(tungstenite::Message::Ping(Vec::new())).await?;
+        Ok(())
     }
 
     #[inline]
-    pub fn send(&self, message: OwnedMessage) {
-        self.send.unbounded_send(message)
-            .expect("send channel closed")
+    async fn send_raw(&self, message: tungstenite::Message) -> VertexResult<()> {
+        self.sink.borrow_mut().send(message).await?;
+        Ok(())
     }
-
-    #[inline]
-    pub fn dispatch_heartbeat(&self) {
-        self.send(OwnedMessage::Ping(Vec::new()))
-    }
-
-    #[inline]
-    pub fn last_message(&self) -> Instant {
-        self.last_message
-    }
-
-    #[inline]
-    pub fn stream(&mut self) -> ActionStream { ActionStream(self) }
 }
 
-struct ActionStream<'a>(&'a mut Active);
+pub struct Receiver {
+    request_tracker: Rc<RequestTracker>,
+    stream: SplitStream<WsClient>,
+}
 
-impl<'a> Stream for ActionStream<'a> {
-    type Item = ClientboundAction;
-    type Error = VertexError;
+impl Receiver {
+    pub fn stream(self) -> impl Stream<Item=VertexResult<ClientboundAction>> {
+        let request_tracker = Rc::downgrade(&self.request_tracker);
 
-    fn poll(&mut self) -> Poll<Option<ClientboundAction>, VertexError> {
-        // TODO: Clean this
-        while let Async::Ready(ready) = self.0.recv.poll().map_err(|_| VertexError::ChannelClosed)? {
-            match ready {
-                Some(message) => {
-                    match message {
-                        OwnedMessage::Binary(bytes) => {
-                            match serde_cbor::from_slice::<ClientboundMessage>(&bytes) {
-                                Ok(ClientboundMessage::Action(action)) => return Ok(Async::Ready(Some(action))),
-                                Ok(ClientboundMessage::Response { id, result }) => {
-                                    if let Some(pending_request) = self.0.pending_requests.remove(&id) {
-                                        pending_request.handle(result)
-                                    }
-                                }
-                                Err(_) => return Err(VertexError::MalformedResponse),
+        self.stream.filter_map(move |result| futures::future::ready(
+            match result {
+                Ok(tungstenite::Message::Binary(bytes)) => {
+                    match serde_cbor::from_slice::<ClientboundMessage>(&bytes) {
+                        Ok(ClientboundMessage::Action(action)) => Some(Ok(action)),
+                        Ok(ClientboundMessage::Response { id, result }) => {
+                            if let Some(request_tracker) = request_tracker.upgrade() {
+                                request_tracker.complete(id, result);
                             }
+                            None
                         }
-                        OwnedMessage::Close(_) => return Err(VertexError::ServerClosed),
-                        _ => (),
+                        Err(_) => Some(Err(VertexError::MalformedResponse)),
                     }
                 }
-                None => return Ok(Async::Ready(None)),
+                Ok(tungstenite::Message::Close(_)) => Some(Err(VertexError::ServerClosed)),
+                Err(e) => Some(Err(VertexError::WebSocketError(e))),
+                _ => None,
             }
-        }
-        Ok(Async::NotReady)
+        ))
     }
 }
 
-struct PendingRequest(oneshot::Sender<Result<OkResponse, ServerError>>);
+struct RequestTracker {
+    pending_requests: RefCell<HashMap<RequestId, EnqueuedRequest>>,
+}
 
-impl PendingRequest {
-    fn handle(self, response: Result<OkResponse, ServerError>) {
-        self.0.send(response).expect("channel closed")
+impl RequestTracker {
+    fn new() -> RequestTracker {
+        RequestTracker { pending_requests: RefCell::new(HashMap::new()) }
+    }
+
+    fn enqueue(&self, id: RequestId) -> Option<oneshot::Receiver<RequestResult>> {
+        let mut pending_requests = self.pending_requests.borrow_mut();
+
+        if pending_requests.contains_key(&id) {
+            return None;
+        }
+
+        let (send, recv) = oneshot::channel();
+        pending_requests.insert(id, EnqueuedRequest(send));
+
+        return Some(recv);
+    }
+
+    fn complete(&self, id: RequestId, result: RequestResult) {
+        self.pending_requests.borrow_mut().remove(&id).map(|request| request.handle(result));
+    }
+}
+
+struct EnqueuedRequest(oneshot::Sender<RequestResult>);
+
+impl EnqueuedRequest {
+    fn handle(self, result: RequestResult) {
+        self.0.send(result).expect("channel closed")
     }
 }

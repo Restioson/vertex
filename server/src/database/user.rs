@@ -3,7 +3,7 @@ use crate::auth::HashSchemeVersion;
 use std::convert::TryFrom;
 use tokio_postgres::{error::SqlState, row::Row};
 use uuid::Uuid;
-use vertex_common::{ServerError, UserId};
+use vertex_common::{ErrResponse, UserId};
 
 pub(super) const CREATE_USERS_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS users (
@@ -70,19 +70,19 @@ impl TryFrom<Row> for User {
 pub struct GetUserById(pub UserId);
 
 impl Message for GetUserById {
-    type Result = Result<Option<User>, ServerError>;
+    type Result = Result<Option<User>, ErrResponse>;
 }
 
 pub struct GetUserByName(pub String);
 
 impl Message for GetUserByName {
-    type Result = Result<Option<User>, ServerError>;
+    type Result = Result<Option<User>, ErrResponse>;
 }
 
 pub struct CreateUser(pub User);
 
 impl Message for CreateUser {
-    type Result = Result<bool, ServerError>;
+    type Result = Result<bool, ErrResponse>;
 }
 
 pub struct ChangeUsername {
@@ -91,7 +91,7 @@ pub struct ChangeUsername {
 }
 
 impl Message for ChangeUsername {
-    type Result = Result<bool, ServerError>;
+    type Result = Result<bool, ErrResponse>;
 }
 
 pub struct ChangeDisplayName {
@@ -100,7 +100,7 @@ pub struct ChangeDisplayName {
 }
 
 impl Message for ChangeDisplayName {
-    type Result = Result<(), ServerError>;
+    type Result = Result<(), ErrResponse>;
 }
 
 pub struct ChangePassword {
@@ -110,11 +110,11 @@ pub struct ChangePassword {
 }
 
 impl Message for ChangePassword {
-    type Result = Result<(), ServerError>;
+    type Result = Result<(), ErrResponse>;
 }
 
 impl Handler<CreateUser> for DatabaseServer {
-    type Result = ResponseFuture<bool, ServerError>;
+    type Result = ResponseFuture<bool, ErrResponse>;
 
     fn handle(&mut self, create: CreateUser, _: &mut Context<Self>) -> Self::Result {
         let user = create.0;
@@ -162,7 +162,7 @@ impl Handler<CreateUser> for DatabaseServer {
 }
 
 impl Handler<GetUserById> for DatabaseServer {
-    type Result = ResponseFuture<Option<User>, ServerError>;
+    type Result = ResponseFuture<Option<User>, ErrResponse>;
 
     fn handle(&mut self, get: GetUserById, _: &mut Context<Self>) -> Self::Result {
         let id = get.0;
@@ -190,7 +190,7 @@ impl Handler<GetUserById> for DatabaseServer {
 }
 
 impl Handler<GetUserByName> for DatabaseServer {
-    type Result = ResponseFuture<Option<User>, ServerError>;
+    type Result = ResponseFuture<Option<User>, ErrResponse>;
 
     fn handle(&mut self, get: GetUserByName, _: &mut Context<Self>) -> Self::Result {
         let name = get.0;
@@ -218,7 +218,7 @@ impl Handler<GetUserByName> for DatabaseServer {
 }
 
 impl Handler<ChangeUsername> for DatabaseServer {
-    type Result = ResponseFuture<bool, ServerError>;
+    type Result = ResponseFuture<bool, ErrResponse>;
 
     fn handle(&mut self, change: ChangeUsername, _: &mut Context<Self>) -> Self::Result {
         Box::new(
@@ -249,7 +249,7 @@ impl Handler<ChangeUsername> for DatabaseServer {
 }
 
 impl Handler<ChangeDisplayName> for DatabaseServer {
-    type Result = ResponseFuture<(), ServerError>;
+    type Result = ResponseFuture<(), ErrResponse>;
 
     fn handle(&mut self, change: ChangeDisplayName, _: &mut Context<Self>) -> Self::Result {
         Box::new(
@@ -271,7 +271,7 @@ impl Handler<ChangeDisplayName> for DatabaseServer {
 }
 
 impl Handler<ChangePassword> for DatabaseServer {
-    type Result = ResponseFuture<(), ServerError>;
+    type Result = ResponseFuture<(), ErrResponse>;
 
     fn handle(&mut self, change: ChangePassword, _: &mut Context<Self>) -> Self::Result {
         Box::new(

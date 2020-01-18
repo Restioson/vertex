@@ -200,14 +200,14 @@ impl Handler<IdentifiedMessage<Join>> for ClientServer {
             Some(r) => r,
             // In future, this error can also be used for rooms that the user is banned from/not
             // invited to
-            None => return OkResponse::Err(ServerError::InvalidRoom),
+            None => return OkResponse::Err(ErrResponse::InvalidRoom),
         };
 
         if !room.contains(&m.user_id) {
             room.push(m.user_id);
             OkResponse::success()
         } else {
-            OkResponse::Err(ServerError::AlreadyInRoom)
+            OkResponse::Err(ErrResponse::AlreadyInRoom)
         }
     }
 }

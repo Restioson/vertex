@@ -66,10 +66,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                 self.heartbeat = Instant::now();
             }
             ws::Message::Text(_) => {
-                let error = serde_cbor::to_vec(&ClientboundMessage::Response(OkResponse::Err(
-                    ServerError::UnexpectedTextFrame,
-                )))
-                .unwrap();
+                let error = serde_cbor::to_vec(&ClientboundMessage::MalformedMessage).unwrap();
                 ctx.binary(error);
             }
             ws::Message::Binary(bin) => {
@@ -77,10 +74,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
                 let msg = match serde_cbor::from_reader(&mut bin) {
                     Ok(m) => m,
                     Err(_) => {
-                        let error = serde_cbor::to_vec(&ClientboundMessage::Response(
-                            OkResponse::Err(ServerError::InvalidMessage),
-                        ))
-                        .unwrap();
+                        let error = serde_cbor::to_vec(&ClientboundMessage::MalformedMessage).unwrap();
                         ctx.binary(error);
                         return;
                     }
@@ -160,7 +154,7 @@ impl ClientWsSession {
             let response = ClientboundMessage::Response(if let Ok(r) = response {
                     r
                 } else {
-                    OkResponse::Err(ServerError::Internal)
+                    OkResponse::Err(ErrResponse::Internal)
                 },
             );
 
@@ -172,7 +166,7 @@ impl ClientWsSession {
 
     fn respond_error(
         &mut self,
-        error: ServerError,
+        error: ErrResponse,
         ctx: &mut WebsocketContext<Self>,
     ) {
         ctx.binary(ClientboundMessage::Response(OkResponse::Err(error)));
@@ -218,14 +212,14 @@ impl ClientWsSession {
     ) {
         match self.state {
             SessionState::WaitingForLogin => self.respond(
-                futures::future::ok(OkResponse::Err(ServerError::NotLoggedIn))
+                futures::future::ok(OkResponse::Err(ErrResponse::NotLoggedIn))
                     .into_actor(self),
                 ctx,
             ),
             SessionState::Ready(user_id, device_id, perms) => match msg {
                 ServerboundRequest::SendMessage(msg) => {
                     if !perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
-                        self.respond_error(ServerError::AccessDenied, ctx);
+                        self.respond_error(ErrResponse::AccessDenied, ctx);
                         return;
                     }
 
@@ -243,7 +237,7 @@ impl ClientWsSession {
                 ServerboundRequest::EditMessage(edit) => {
                     // TODO when history is implemented, narrow this down according to sender too
                     if !perms.has_perms(TokenPermissionFlags::EDIT_ANY_MESSAGES) {
-                        self.respond_error(ServerError::AccessDenied, ctx);
+                        self.respond_error(ErrResponse::AccessDenied, ctx);
                         return;
                     }
 
@@ -260,7 +254,7 @@ impl ClientWsSession {
                 }
                 ServerboundRequest::JoinRoom(room) => {
                     if !perms.has_perms(TokenPermissionFlags::JOIN_ROOMS) {
-                        self.respond_error(ServerError::AccessDenied, ctx);
+                        self.respond_error(ErrResponse::AccessDenied, ctx);
                         return;
                     }
 
@@ -277,7 +271,7 @@ impl ClientWsSession {
                 }
                 ServerboundRequest::CreateRoom => {
                     if !perms.has_perms(TokenPermissionFlags::CREATE_ROOMS) {
-                        self.respond_error(ServerError::AccessDenied, ctx);
+                        self.respond_error(ErrResponse::AccessDenied, ctx);
                         return;
                     }
 
@@ -298,7 +292,7 @@ impl ClientWsSession {
                 } => self.revoke_token(to_revoke, password, user_id, device_id, ctx),
                 ServerboundRequest::ChangeUsername { new_username } => {
                     if !perms.has_perms(TokenPermissionFlags::CHANGE_USERNAME) {
-                        self.respond_error(ServerError::AccessDenied, ctx);
+                        self.respond_error(ErrResponse::AccessDenied, ctx);
                         return;
                     }
 
@@ -306,7 +300,7 @@ impl ClientWsSession {
                 }
                 ServerboundRequest::ChangeDisplayName { new_display_name } => {
                     if !perms.has_perms(TokenPermissionFlags::CHANGE_DISPLAY_NAME) {
-                        self.respond_error(ServerError::AccessDenied, ctx);
+                        self.respond_error(ErrResponse::AccessDenied, ctx);
                         return;
                     }
 
@@ -328,7 +322,7 @@ impl ClientWsSession {
         ctx: &mut WebsocketContext<Self>,
     ) {
         if self.logged_in() {
-            ctx.binary(ClientboundMessage::Response(OkResponse::Err(ServerError::AlreadyLoggedIn)));
+            ctx.binary(ClientboundMessage::Response(OkResponse::Err(ErrResponse::AlreadyLoggedIn)));
             return;
         }
 
@@ -342,12 +336,12 @@ impl ClientWsSession {
                         .send(GetUserById(token.user_id))
                         .and_then(move |user_opt| match user_opt {
                             Ok(Some(user)) => future::ok(Ok((token, user))),
-                            Ok(None) => future::ok(Err(ServerError::InvalidToken)),
+                            Ok(None) => future::ok(Err(ErrResponse::InvalidToken)),
                             Err(e) => future::ok(Err(e)),
                         })
                         .into_actor(act),
                 ),
-                Ok(None) => fut::Either::B(fut::ok(Err(ServerError::InvalidToken))),
+                Ok(None) => fut::Either::B(fut::ok(Err(ErrResponse::InvalidToken))),
                 Err(e) => fut::Either::B(fut::ok(Err(e))),
             })
             .map(|res, act, _ctx| match res {
@@ -355,13 +349,13 @@ impl ClientWsSession {
                     let token_stale_days = act.config.token_stale_days as i64;
 
                     if user.locked {
-                        Err(ServerError::UserLocked)
+                        Err(ErrResponse::UserLocked)
                     } else if user.banned {
-                        Err(ServerError::UserBanned)
+                        Err(ErrResponse::UserBanned)
                     } else if user.compromised {
-                        Err(ServerError::UserCompromised)
+                        Err(ErrResponse::UserCompromised)
                     } else if (Utc::now() - token.last_used).num_days() > token_stale_days {
-                        Err(ServerError::StaleToken)
+                        Err(ErrResponse::StaleToken)
                     } else {
                         Ok(token)
                     }
@@ -380,7 +374,7 @@ impl ClientWsSession {
                     } = token;
 
                     if login_token.0.len() > auth::MAX_TOKEN_LENGTH {
-                        fut::Either::B(fut::ok(Err(ServerError::InvalidToken)))
+                        fut::Either::B(fut::ok(Err(ErrResponse::InvalidToken)))
                     } else {
                         fut::Either::A(
                             auth::verify(login_token.0, token_hash, hash_scheme_version)
@@ -388,7 +382,7 @@ impl ClientWsSession {
                                     if matches {
                                         Ok((user_id, device_id, permission_flags))
                                     } else {
-                                        Err(ServerError::InvalidToken)
+                                        Err(ErrResponse::InvalidToken)
                                     }
                                 })
                                 .into_actor(act),
@@ -403,7 +397,7 @@ impl ClientWsSession {
                         .send(RefreshToken(device_id))
                         .map(move |res| match res {
                             Ok(true) => Ok((user_id, device_id, perms)),
-                            Ok(false) => Err(ServerError::DeviceDoesNotExist),
+                            Ok(false) => Err(ErrResponse::DeviceDoesNotExist),
                             Err(e) => Err(e),
                         })
                         .into_actor(act),
@@ -511,7 +505,7 @@ impl ClientWsSession {
                     .send(RevokeToken(to_revoke))
                     .map(|res| match res {
                         Ok(true) => Ok(()),
-                        Ok(false) => Err(ServerError::DeviceDoesNotExist),
+                        Ok(false) => Err(ErrResponse::DeviceDoesNotExist),
                         Err(e) => Err(e),
                     })
                     .into_actor(act),
@@ -561,7 +555,7 @@ impl ClientWsSession {
                         .send(RefreshToken(to_refresh))
                         .map(|res| match res {
                             Ok(true) => Ok(()),
-                            Ok(false) => Err(ServerError::DeviceDoesNotExist),
+                            Ok(false) => Err(ErrResponse::DeviceDoesNotExist),
                             Err(e) => Err(e),
                         })
                         .into_actor(act),
@@ -584,20 +578,20 @@ impl ClientWsSession {
         ctx: &mut WebsocketContext<Self>,
     ) {
         if !auth::valid_password(&password, self.config.get_ref()) {
-            ctx.binary(ClientboundMessage::Response(OkResponse::Err(ServerError::InvalidPassword)));
+            ctx.binary(ClientboundMessage::Response(OkResponse::Err(ErrResponse::InvalidPassword)));
             return;
         }
 
         let username = match auth::prepare_username(&username, self.config.get_ref()) {
             Ok(name) => name,
             Err(auth::TooShort) => {
-                ctx.binary(ClientboundMessage::Response(OkResponse::Err(ServerError::InvalidUsername)));
+                ctx.binary(ClientboundMessage::Response(OkResponse::Err(ErrResponse::InvalidUsername)));
                 return;
             }
         };
 
         if !auth::valid_display_name(&display_name, self.config.get_ref()) {
-            ctx.binary(ClientboundMessage::Response(OkResponse::Err(ServerError::InvalidDisplayName)));
+            ctx.binary(ClientboundMessage::Response(OkResponse::Err(ErrResponse::InvalidDisplayName)));
             return;
         }
 
@@ -617,7 +611,7 @@ impl ClientWsSession {
                     if success {
                         OkResponse::user(id)
                     } else {
-                        OkResponse::Err(ServerError::UsernameAlreadyExists)
+                        OkResponse::Err(ErrResponse::UsernameAlreadyExists)
                     }
                 }
                 Err(e) => OkResponse::Err(e),
@@ -635,7 +629,7 @@ impl ClientWsSession {
         let new_username = match auth::prepare_username(&new_username, self.config.get_ref()) {
             Ok(name) => name,
             Err(auth::TooShort) => {
-                ctx.binary(ClientboundMessage::Response(OkResponse::Err(ServerError::InvalidUsername)));
+                ctx.binary(ClientboundMessage::Response(OkResponse::Err(ErrResponse::InvalidUsername)));
                 return;
             }
         };
@@ -652,7 +646,7 @@ impl ClientWsSession {
                     if success {
                         OkResponse::success()
                     } else {
-                        OkResponse::Err(ServerError::UsernameAlreadyExists)
+                        OkResponse::Err(ErrResponse::UsernameAlreadyExists)
                     }
                 }
                 Err(e) => OkResponse::Err(e),
@@ -668,7 +662,7 @@ impl ClientWsSession {
         ctx: &mut WebsocketContext<Self>,
     ) {
         if !auth::valid_display_name(&new_display_name, self.config.get_ref()) {
-            ctx.binary(ClientboundMessage::Response(OkResponse::Err(ServerError::InvalidDisplayName)));
+            ctx.binary(ClientboundMessage::Response(OkResponse::Err(ErrResponse::InvalidDisplayName)));
             return;
         }
 
@@ -696,7 +690,7 @@ impl ClientWsSession {
         ctx: &mut WebsocketContext<Self>,
     ) {
         if !auth::valid_password(&new_password, self.config.get_ref()) {
-            ctx.binary(ClientboundMessage::Response(OkResponse::Err(ServerError::InvalidPassword)));
+            ctx.binary(ClientboundMessage::Response(OkResponse::Err(ErrResponse::InvalidPassword)));
             return;
         }
 
@@ -746,14 +740,14 @@ impl ClientWsSession {
         &mut self,
         user_id: UserId,
         password: String,
-    ) -> impl Future<Item = Result<(), ServerError>, Error = MailboxError> {
+    ) -> impl Future<Item = Result<(), ErrResponse>, Error = MailboxError> {
         self.database_server
             .send(GetUserById(user_id))
             .and_then(move |res| match res {
                 Ok(Some(user)) => {
                     Either::A(auth::verify_user_password(user, password).map(|res| res.map(|_| ())))
                 }
-                Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
+                Ok(None) => Either::B(future::ok(Err(ErrResponse::IncorrectUsernameOrPassword))),
                 Err(e) => Either::B(future::ok(Err(e))),
             })
     }
@@ -762,13 +756,13 @@ impl ClientWsSession {
         &mut self,
         username: String,
         password: String,
-    ) -> impl Future<Item = Result<UserId, ServerError>, Error = MailboxError> {
+    ) -> impl Future<Item = Result<UserId, ErrResponse>, Error = MailboxError> {
         let username = auth::process_username(&username, self.config.get_ref());
         self.database_server
             .send(GetUserByName(username))
             .and_then(move |res| match res {
                 Ok(Some(user)) => Either::A(auth::verify_user_password(user, password)),
-                Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
+                Ok(None) => Either::B(future::ok(Err(ErrResponse::IncorrectUsernameOrPassword))),
                 Err(e) => Either::B(future::ok(Err(e))),
             })
     }

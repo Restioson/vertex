@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 gio = "^0.6"
 glib = "^0.7"
-url = "^1.7"
+url = "^2.1"
 uuid = { version = "^0.7", features = ["serde", "v4"] }
 gtk = { version = "^0.6", features = ["v3_20"] }
 relm = "^0.16"
@@ -17,7 +17,9 @@ keyring = "^0.7"
 serde = "^1"
 serde_derive = "^1"
 serde_json = "^1"
-futures = "^0.1"
+
+tokio = { version = "0.2.9", features = ["full"] }
+futures = "^0.3"
 
 vertex_client_backend = { path = "../backend/" }
 vertex_common = { path = "../../common" }

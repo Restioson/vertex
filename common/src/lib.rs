@@ -32,22 +32,22 @@ pub struct AuthToken(pub String);
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RequestId(pub u64);
 
-impl Into<Bytes> for ServerboundRequest {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerboundMessage {
+    pub id: RequestId,
+    pub request: ServerboundRequest,
+}
+
+impl Into<Bytes> for ServerboundMessage {
     fn into(self) -> Bytes {
         serde_cbor::to_vec(&self).unwrap().into()
     }
 }
 
-impl Into<Vec<u8>> for ServerboundRequest {
+impl Into<Vec<u8>> for ServerboundMessage {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServerboundMessage {
-    pub id: RequestId,
-    pub request: ServerboundRequest,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -195,8 +195,9 @@ pub enum ClientboundMessage {
     Action(ClientboundAction),
     Response {
         id: RequestId,
-        result: Result<OkResponse, ServerError>,
+        result: Result<OkResponse, ErrResponse>,
     },
+    MalformedMessage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -245,7 +246,7 @@ impl<A, M> actix::dev::MessageResponse<A, M> for OkResponse
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ServerError {
+pub enum ErrResponse {
     InvalidMessage,
     UnexpectedTextFrame,
     Internal,
