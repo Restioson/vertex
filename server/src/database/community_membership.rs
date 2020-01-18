@@ -9,9 +9,9 @@ use vertex_common::{CommunityId, RoomId, ServerError, UserId};
 pub(super) const CREATE_COMMUNITY_MEMBERSHIP_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS community_membership (
     community UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
-    user UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    \"user\" UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
-    UNIQUE(user, community)
+    UNIQUE(\"user\", community)
 )";
 
 /// Modified from https://stackoverflow.com/a/42217872/4871468

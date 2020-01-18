@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS login_tokens (
     device_name          VARCHAR,
     token_hash           VARCHAR NOT NULL,
     hash_scheme_version  SMALLINT NOT NULL,
-    user                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    \"user\"                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     last_used            TIMESTAMP WITH TIME ZONE NOT NULL,
     expiration_date      TIMESTAMP WITH TIME ZONE,
     permission_flags     BIGINT NOT NULL
