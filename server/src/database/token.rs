@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
 use std::convert::TryFrom;
 use tokio_postgres::Row;
-use vertex_common::{DeviceId, ServerError, TokenPermissionFlags, UserId};
+use vertex_common::{DeviceId, ErrResponse, TokenPermissionFlags, UserId};
 
 pub(super) const CREATE_TOKENS_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS login_tokens (
@@ -53,25 +53,25 @@ impl TryFrom<Row> for Token {
 }
 
 #[derive(Message)]
-#[rtype(result = "Result<Option<Token>, ServerError>")]
+#[rtype(result = "Result<Option<Token>, ErrResponse>")]
 pub struct GetToken {
     pub device: DeviceId,
 }
 
 #[derive(Message)]
-#[rtype(result = "Result<(), ServerError>")]
+#[rtype(result = "Result<(), ErrResponse>")]
 pub struct CreateToken(pub Token);
 
 #[derive(Message)]
-#[rtype(result = "Result<bool, ServerError>")]
+#[rtype(result = "Result<bool, ErrResponse>")]
 pub struct RevokeToken(pub DeviceId);
 
 #[derive(Message)]
-#[rtype(result = "Result<bool, ServerError>")]
+#[rtype(result = "Result<bool, ErrResponse>")]
 pub struct RefreshToken(pub DeviceId);
 
 impl Handler<GetToken> for DatabaseServer {
-    type Result = ResponseFuture<Result<Option<Token>, ServerError>>;
+    type Result = ResponseFuture<Result<Option<Token>, ErrResponse>>;
 
     fn handle(&mut self, get: GetToken, _: &mut Context<Self>) -> Self::Result {
         let pool = self.pool.clone();
@@ -98,7 +98,7 @@ impl Handler<GetToken> for DatabaseServer {
 }
 
 impl Handler<CreateToken> for DatabaseServer {
-    type Result = ResponseFuture<Result<(), ServerError>>;
+    type Result = ResponseFuture<Result<(), ErrResponse>>;
 
     fn handle(&mut self, create: CreateToken, _: &mut Context<Self>) -> Self::Result {
         let token = create.0;
@@ -146,7 +146,7 @@ impl Handler<CreateToken> for DatabaseServer {
 }
 
 impl Handler<RevokeToken> for DatabaseServer {
-    type Result = ResponseFuture<Result<bool, ServerError>>;
+    type Result = ResponseFuture<Result<bool, ErrResponse>>;
 
     fn handle(&mut self, revoke: RevokeToken, _: &mut Context<Self>) -> Self::Result {
         let pool = self.pool.clone();
@@ -167,7 +167,7 @@ impl Handler<RevokeToken> for DatabaseServer {
 }
 
 impl Handler<RefreshToken> for DatabaseServer {
-    type Result = ResponseFuture<Result<bool, ServerError>>;
+    type Result = ResponseFuture<Result<bool, ErrResponse>>;
 
     fn handle(&mut self, revoke: RefreshToken, _: &mut Context<Self>) -> Self::Result {
         let pool = self.pool.clone();

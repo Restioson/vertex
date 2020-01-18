@@ -1,8 +1,8 @@
 use clap::{App, Arg};
 use gtk::prelude::*;
-use gtk::{Entry, Label, ListBox, TextView, Window, ListBoxRow, Separator, Orientation, Grid};
+use gtk::{Entry, Label, ListBox, Window, Separator, Orientation, Grid};
 use keyring::Keyring;
-use relm::{connect, connect_stream, Relm, Update, Widget};
+use relm::{connect, Relm, Update, Widget};
 use relm_derive::*;
 use url::Url;
 use uuid::Uuid;
@@ -10,6 +10,12 @@ use vertex_client_backend::*;
 use vertex_common::*;
 
 use serde::{Serialize, Deserialize};
+use std::rc::Rc;
+use futures::executor::{LocalPool, LocalSpawner};
+use futures::task::LocalSpawnExt;
+use futures::stream::StreamExt;
+
+use tokio::sync::mpsc;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -18,7 +24,10 @@ const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 const GLADE_SRC: &str = include_str!("client.glade");
 
 struct VertexModel {
-    vertex: Vertex,
+    executor: LocalPool,
+    spawner: LocalSpawner,
+    action_recv: mpsc::UnboundedReceiver<Action>,
+    vertex: Rc<Vertex>,
     room: Option<RoomId>,
     community: Option<CommunityId>,
     room_list: Vec<RoomId>,
@@ -98,10 +107,39 @@ impl Update for Win {
         let ip = args.ip.clone().unwrap_or("127.0.0.1:8080".to_string());
         println!("Connecting to {}", ip);
 
+        let executor = LocalPool::new();
+
+        let (action_send, action_recv) = mpsc::unbounded_channel();
+
+        let vertex = futures::executor::block_on(async {
+            let url = Url::parse(&format!("wss://{}/client/", ip)).unwrap();
+            Vertex::connect(url).await.expect("failed to connect")
+        });
+        let vertex = Rc::new(vertex);
+
+        let spawner = executor.spawner();
+        spawner.spawn_local({
+            use futures::pin_mut;
+
+            let vertex = vertex.clone();
+            async move {
+                let stream = vertex.action_stream()
+                    .expect("action stream already consumed");
+
+                pin_mut!(stream);
+                while let Some(action) = stream.next().await {
+                    if action_send.send(action).is_err() {
+                        break;
+                    }
+                }
+            }
+        }).unwrap();
+
         let model = VertexModel {
-            vertex: Vertex::new(Config {
-                url: Url::parse(&format!("ws://{}/client/", ip)).unwrap(),
-            }),
+            executor,
+            spawner,
+            action_recv,
+            vertex,
             room: None,
             community: None,
             room_list: Vec::new(),
@@ -112,6 +150,8 @@ impl Update for Win {
     }
 
     fn update(&mut self, event: VertexMsg) {
+        // TODO: Currently blocking on actions: make async!
+
         match event {
             VertexMsg::SetRoom(idx) => {
                 let room = self.model.room_list[idx];
@@ -152,19 +192,21 @@ impl Update for Win {
                                 let community = CommunityId(
                                     Uuid::parse_str(v[2]).expect("Invalid community id"),
                                 );
-                                let room = self
-                                    .model
-                                    .vertex
-                                    .create_room(v[1].to_string(), community)
-                                    .expect("Error creating room");
-                                self.push_message("Info", &format!("Joined room {}", room.0));
 
-                                self.model.room = Some(room);
-                                let txt: &str = &format!("#{}", room.0);
-                                let room_label = Label::new(Some(txt));
-                                self.widgets.rooms.insert(&room_label, -1);
-                                self.model.room_list.push(room);
-                                room_label.show_all();
+                                let vertex = self.model.vertex.clone();
+                                let name = v[1].to_owned();
+
+                                self.model.spawner.spawn_local(async move {
+                                    vertex.create_room(name, community).await.expect("Error creating room");
+                                }).unwrap();
+
+                                // TODO
+//                                self.model.room = Some(room);
+//                                let txt: &str = &format!("#{}", room.0);
+//                                let room_label = Label::new(Some(txt));
+//                                self.widgets.rooms.insert(&room_label, -1);
+//                                self.model.room_list.push(room);
+//                                room_label.show_all();
                             } else {
                                 self.push_message("Error", &format!("Room name and community id required"));
                             }
@@ -189,23 +231,32 @@ impl Update for Win {
                                     None
                                 };
 
-                                match self.model.vertex.login(token, v[1], v[2]) {
-                                    Ok((device, token)) => {
-                                        let stored_token = StoredToken {
-                                            device,
-                                            token: token.0.clone(),
-                                        };
-                                        let token_ser = serde_json::to_string(&stored_token)
-                                            .expect("Error serializing token");
-                                        self.model
-                                            .keyring
-                                            .set_password(&token_ser)
-                                            .expect("Error storing token");
+                                let vertex = self.model.vertex.clone();
+                                let username = v[1].to_owned();
+                                let password = v[2].to_owned();
 
-                                        self.push_message("Info", &format!("Successfully logged in. Device id: {}", device.0));
-                                    }
-                                    Err(e) => self.push_message("Error", &format!("Error logging in: {:?}", e)),
-                                }
+                                self.model.spawner.spawn_local(async move {
+                                    let _ = vertex.login(token, username, password).await;
+                                }).unwrap();
+
+                                // TODO
+//                                match result {
+//                                    Ok((device, token)) => {
+//                                        let stored_token = StoredToken {
+//                                            device,
+//                                            token: token.0.clone(),
+//                                        };
+//                                        let token_ser = serde_json::to_string(&stored_token)
+//                                            .expect("Error serializing token");
+//                                        self.model
+//                                            .keyring
+//                                            .set_password(&token_ser)
+//                                            .expect("Error storing token");
+//
+//                                        self.push_message("Info", &format!("Successfully logged in. Device id: {}", device.0));
+//                                    }
+//                                    Err(e) => self.push_message("Error", &format!("Error logging in: {:?}", e)),
+//                                }
                             } else {
                                 self.push_message("Error", "Username and password required");
                             }
@@ -221,15 +272,15 @@ impl Update for Win {
                             if v.len() == 4 {
                                 self.push_message("Info", "Refreshing token...");
 
-                                let dev =
-                                    DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
+                                let dev = DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
 
-                                self.model
-                                    .vertex
-                                    .refresh_token(dev, v[2], v[3])
-                                    .expect("Error refreshing token");
+                                let vertex = self.model.vertex.clone();
+                                let username = v[2].to_owned();
+                                let password = v[3].to_owned();
 
-                                self.push_message("Info", "Token refreshed");
+                                self.model.spawner.spawn_local(async move {
+                                    vertex.refresh_token(dev, username, password).await.expect("Error refreshing token")
+                                }).unwrap();
                             } else {
                                 self.push_message("Error", "Device ID, username, and password required");
                             }
@@ -238,13 +289,13 @@ impl Update for Win {
                             if v.len() == 3 {
                                 self.push_message("Info", "Registering user...");
 
-                                let id = self
-                                    .model
-                                    .vertex
-                                    .create_user(v[1], v[1], v[2])
-                                    .expect("Error registering user");
+                                let vertex = self.model.vertex.clone();
+                                let username = v[1].to_owned();
+                                let password = v[2].to_owned();
 
-                                self.push_message("Info", &format!("Registered user with id {}.\n", id.0));
+                                self.model.spawner.spawn_local(async move {
+                                    vertex.create_user(username.clone(), username, password).await.expect("Error registering user");
+                                }).unwrap();
                             } else {
                                 self.push_message("Error", "Username and password required");
                             }
@@ -252,21 +303,23 @@ impl Update for Win {
                         "/revokecurrent" => {
                             self.push_message("Info", "Revoking token...");
 
-                            self.model
-                                .vertex
-                                .revoke_current_token()
-                                .expect("Error revoking current token");
+                            let vertex = self.model.vertex.clone();
+                            self.model.spawner.spawn_local(async move {
+                                vertex.revoke_current_token().await.expect("Error revoking current token")
+                            }).unwrap();
                         }
                         "/revoke" => {
                             if v.len() == 3 {
                                 self.push_message("Info", "Revoking token...");
 
-                                let dev =
-                                    DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
-                                self.model
-                                    .vertex
-                                    .revoke_token(v[2], dev)
-                                    .expect("Error revoking token");
+                                let dev = DeviceId(Uuid::parse_str(v[1]).expect("Invalid device id"));
+
+                                let vertex = self.model.vertex.clone();
+                                let password = v[2].to_owned();
+
+                                self.model.spawner.spawn_local(async move {
+                                    vertex.revoke_token(dev, password).await.expect("Error revoking token")
+                                }).unwrap();
                             } else {
                                 self.push_message("Error", "Token and password required");
                             }
@@ -275,10 +328,12 @@ impl Update for Win {
                             if v.len() == 2 {
                                 self.push_message("Info", "Changing username...");
 
-                                self.model
-                                    .vertex
-                                    .change_username(v[1])
-                                    .expect("Error changing username");
+                                let vertex = self.model.vertex.clone();
+                                let username = v[1].to_owned();
+
+                                self.model.spawner.spawn_local(async move {
+                                    vertex.change_username(username).await.expect("Error changing username")
+                                }).unwrap();
                             } else {
                                 self.push_message("Error", "New username required");
                             }
@@ -287,10 +342,12 @@ impl Update for Win {
                             if v.len() == 2 {
                                 self.push_message("Info", "Changing display name...");
 
-                                self.model
-                                    .vertex
-                                    .change_display_name(v[1])
-                                    .expect("Error changing display name");
+                                let vertex = self.model.vertex.clone();
+                                let display_name = v[1].to_owned();
+
+                                self.model.spawner.spawn_local(async move {
+                                    vertex.change_display_name(display_name).await.expect("Error changing display name")
+                                }).unwrap();
                             } else {
                                 self.push_message("Error", "New display name required");
                             }
@@ -299,10 +356,13 @@ impl Update for Win {
                             if v.len() == 3 {
                                 self.push_message("Info", "Changing password...");
 
-                                self.model
-                                    .vertex
-                                    .change_password(v[1], v[2])
-                                    .expect("Error changing password");
+                                let vertex = self.model.vertex.clone();
+                                let old_password = v[1].to_owned();
+                                let new_password = v[2].to_owned();
+
+                                self.model.spawner.spawn_local(async move {
+                                    vertex.change_password(old_password, new_password).await.expect("Error changing password")
+                                }).unwrap();
                             } else {
                                 self.push_message("Error", "Old password and new password required");
                             }
@@ -317,31 +377,33 @@ impl Update for Win {
 
                 let room = self.model.room.expect("Not in a room").clone();
                 let community = self.model.community.expect("Not in a communtiy").clone();
-                self.model
-                    .vertex
-                    .send_message(msg.to_string(), room, community)
-                    .expect("Error sending message"); // todo display error
 
-                let name = self
-                    .model
-                    .vertex
-                    .display_name
-                    .as_ref()
+                let vertex = self.model.vertex.clone();
+                self.model.spawner.spawn_local({
+                    let msg = msg.clone();
+                    async move {
+                        vertex.send_message(msg, community, room).await.expect("Error sending message")
+                    }
+                }).unwrap();
+
+                let name = self.model.vertex.identity.borrow().as_ref()
+                    .map(|ident| ident.display_name.clone())
                     .expect("Not logged in");
 
                 self.push_message(&name, &msg);
             }
             VertexMsg::Lifecycle => {
-                if let Some(action) = self.model.vertex.handle() {
+                while let Some(action) = self.model.action_recv.try_recv().ok() {
                     println!("action {:?}", action);
                     self.handle_action(action);
                 }
             }
             VertexMsg::Heartbeat => {
-                if let Err(_) = self.model.vertex.heartbeat() {
-                    eprintln!("Server timed out");
-                    std::process::exit(1);
-                }
+                let vertex = self.model.vertex.clone();
+                self.model.spawner.spawn_local(async move {
+                    vertex.dispatch_heartbeat().await
+                        .expect("failed to dispatch heartbeat");
+                }).unwrap();
             }
             VertexMsg::Quit => gtk::main_quit(),
         }
@@ -403,7 +465,9 @@ struct Widgets {
     rooms: ListBox,
 }
 
-fn main() {
+// TODO: can we get rid of need for this? (do we need to use tokio-tungstenite or can we just use tungstenite?)
+#[tokio::main]
+async fn main() {
     let matches = App::new(NAME)
         .version(VERSION)
         .author(AUTHORS)

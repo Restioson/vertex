@@ -1,569 +1,201 @@
-use chrono::{DateTime, Utc};
-use native_tls::TlsConnector;
-use std::convert::Into;
-use std::io::{self, Cursor};
-use std::time::{Duration, Instant};
-use url::Url;
 use vertex_common::*;
-use websocket::client::ClientBuilder;
-use websocket::stream::sync::{TcpStream, TlsStream};
-use websocket::sync::Client;
-use websocket::{OwnedMessage, WebSocketError};
+
+use std::time::Duration;
+use url::Url;
+
+use std::cell::RefCell;
+use futures::{Stream, StreamExt};
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
+
+pub mod net;
+
+#[derive(Debug, Clone)]
+pub struct UserIdentity {
+    pub username: String,
+    pub display_name: String,
+    pub device_id: DeviceId,
+}
 
 pub struct Config {
     pub url: Url,
 }
 
 pub struct Vertex {
-    socket: Client<TlsStream<TcpStream>>,
-    pub username: Option<String>,
-    pub display_name: Option<String>,
-    pub device: Option<DeviceId>,
-    logged_in: bool,
-    heartbeat: Instant,
-    next_request: u32,
+    net_sender: net::Sender,
+    // TODO: does this need a refcell? is there another type we can use?
+    net_receiver: RefCell<Option<net::Receiver>>,
+    pub identity: RefCell<Option<UserIdentity>>,
 }
 
 impl Vertex {
-    pub fn new(config: Config) -> Self {
-        let socket = ClientBuilder::from_url(&config.url)
-            .connect_secure(Some(
-                TlsConnector::builder()
-                    .danger_accept_invalid_certs(true) // TODO needed for self signed certs
-                    .build()
-                    .expect("Error setting TLS settings"),
+    pub async fn connect(url: Url) -> Result<Vertex> {
+        let (net_sender, net_receiver) = net::connect(url).await?;
+        Ok(Vertex {
+            net_sender,
+            net_receiver: RefCell::new(Some(net_receiver)),
+            identity: RefCell::new(None),
+        })
+    }
+
+    pub fn action_stream(&self) -> Option<impl Stream<Item=Action>> {
+        self.net_receiver.borrow_mut().take().map(|receiver| {
+            receiver.stream().filter_map(|action| futures::future::ready(
+                match action {
+                    Ok(ServerAction::Message(message)) => Some(Action::AddMessage(message.into())),
+                    Ok(ServerAction::SessionLoggedOut) => Some(Action::LoggedOut),
+                    Err(e) => Some(Action::Error(e)),
+                    _ => None,
+                }
             ))
-            .expect("Error connecting to websocket");
-
-        socket
-            .stream_ref()
-            .get_ref()
-            .set_read_timeout(Some(Duration::from_micros(1)))
-            .unwrap();
-
-        Vertex {
-            socket,
-            username: None,
-            display_name: None,
-            device: None,
-            logged_in: false,
-            heartbeat: Instant::now(),
-            next_request: 0,
-        }
+        })
     }
 
-    pub fn handle(&mut self) -> Option<Action> {
-        let message = match self.receive() {
-            Some(Ok(m)) => m,
-            Some(Err(e)) => return Some(Action::Error(e)),
-            None => return None,
-        };
-
-        match message {
-            ServerMessage::Response {
-                response,
-                request: _,
-            } => {
-                match response {
-                    // TODO associate with a particular message id: @gegy1000
-                    RequestResponse::Success(_) => None,
-                    RequestResponse::Error(e) => Some(Action::Error(Error::ServerError(e))),
-                }
-            }
-            ServerMessage::Error(e) => Some(Action::Error(Error::ServerError(e))),
-            ServerMessage::Message(m) => Some(Action::AddMessage(m.into())),
-            ServerMessage::SessionLoggedOut => {
-                self.username = None;
-                self.display_name = None;
-                self.device = None;
-                self.logged_in = false; // TODO proper log out function
-
-                Some(Action::LoggedOut)
-            }
-            other => panic!("message {:?} is unimplemented", other),
-        }
-    }
-
-    fn send(&mut self, msg: ClientRequest) -> Result<(), Error> {
-        self.socket
-            .send_message(&OwnedMessage::Binary(msg.into()))
-            .map_err(Error::WebSocketError)
-    }
-
-    fn request(&mut self, msg: ClientMessage) -> Result<RequestId, Error> {
-        let request = ClientRequest::new(msg, RequestId::new(self.next_request));
-        self.next_request += 1;
-        let request_id = request.request;
-        self.send(request)?;
-        Ok(request_id)
-    }
-
-    fn receive(&mut self) -> Option<Result<ServerMessage, Error>> {
-        if Instant::now().duration_since(self.heartbeat) > HEARTBEAT_TIMEOUT {
-            return Some(Err(Error::ServerTimedOut));
-        }
-
-        let msg = match self.socket.recv_message() {
-            Ok(msg) => Ok(msg),
-            Err(WebSocketError::NoDataAvailable) => return None,
-            Err(WebSocketError::IoError(e)) => {
-                if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut {
-                    return None;
-                } else {
-                    Err(WebSocketError::IoError(e))
-                }
-            }
-            Err(e) => Err(e),
-        };
-
-        let bin = match msg {
-            Ok(OwnedMessage::Binary(bin)) => bin,
-            Ok(OwnedMessage::Pong(_)) => {
-                self.heartbeat = Instant::now();
-                return None;
-            }
-            Ok(_) => return Some(Err(Error::InvalidServerMessage)),
-            Err(e) => return Some(Err(Error::WebSocketError(e))),
-        };
-
-        let mut bin = Cursor::new(bin);
-        Some(serde_cbor::from_reader(&mut bin).map_err(|_| Error::InvalidServerMessage))
-    }
-
-    fn receive_blocking(&mut self) -> Result<ServerMessage, Error> {
-        // TODO eventual timeout
-        loop {
-            match self.receive() {
-                Some(res) => return res,
-                None => (),
-            };
-        }
-    }
-
-    pub fn create_user(
-        &mut self,
-        username: &str,
-        display_name: &str,
-        password: &str,
-    ) -> Result<UserId, Error> {
-        if !self.logged_in {
-            let request = self.request(ClientMessage::CreateUser {
-                username: username.to_string(),
-                display_name: display_name.to_string(),
-                password: password.to_string(),
-            })?;
-
-            let msg = self.receive_blocking()?;
-            match msg.clone() {
-                ServerMessage::Response {
-                    response,
-                    request: response_id,
-                } => {
-                    match response {
-                        // TODO do this more asynchronously @gegy1000
-                        RequestResponse::Success(Success::User { id })
-                            if response_id == request =>
-                        {
-                            Ok(id)
-                        }
-                        RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                        _ => Err(Error::IncorrectServerMessage(msg)),
-                    }
-                }
-                msg @ _ => Err(Error::IncorrectServerMessage(msg)),
-            }
-        } else {
-            Err(Error::AlreadyLoggedIn)
-        }
-    }
-
-    pub fn change_username(&mut self, new_username: &str) -> Result<(), Error> {
-        if !self.logged_in {
-            return Err(Error::NotLoggedIn);
-        }
-
-        let request = self.request(ClientMessage::ChangeUsername {
-            new_username: new_username.to_string(),
-        })?;
-
-        let msg = self.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request: response_id,
-            } => {
-                match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) if response_id == request => {
-                        self.username = Some(new_username.to_string());
-                        self.change_display_name(new_username)?;
-                        Ok(())
-                    }
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
-                }
-            }
-            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
-        }
-    }
-
-    pub fn change_display_name(&mut self, new_display_name: &str) -> Result<(), Error> {
-        if !self.logged_in {
-            return Err(Error::NotLoggedIn);
-        }
-
-        let request = self.request(ClientMessage::ChangeDisplayName {
-            new_display_name: new_display_name.to_string(),
-        })?;
-
-        let msg = self.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request: response_id,
-            } => {
-                match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) if response_id == request => {
-                        self.display_name = Some(new_display_name.to_string());
-                        Ok(())
-                    }
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
-                }
-            }
-            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
-        }
-    }
-
-    pub fn change_password(&mut self, old_password: &str, new_password: &str) -> Result<(), Error> {
-        if !self.logged_in {
-            return Err(Error::NotLoggedIn);
-        }
-
-        let request = self.request(ClientMessage::ChangePassword {
-            old_password: old_password.to_string(),
-            new_password: new_password.to_string(),
-        })?;
-
-        let msg = self.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request: response_id,
-            } => {
-                match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) if response_id == request => {
-                        // TODO request re-login here later @gegy1000
-                        Ok(())
-                    }
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
-                }
-            }
-            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
-        }
-    }
-
-    // TODO pub just for testing. @gegy1000 if you could integrate this into the login flow...
-    pub fn refresh_token(
-        &mut self,
-        device: DeviceId,
-        username: &str,
-        password: &str,
-    ) -> Result<(), Error> {
-        let request = self.request(ClientMessage::RefreshToken {
-            device,
-            username: username.to_string(),
-            password: password.to_string(),
-        })?;
-
-        let msg = self.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request: response_id,
-            } => {
-                match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) if response_id == request => Ok(()),
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
-                }
-            }
-            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
-        }
-    }
-
-    pub fn login(
-        &mut self,
+    pub async fn login(
+        &self,
         token: Option<(DeviceId, AuthToken)>,
-        username: &str,
-        password: &str,
-    ) -> Result<(DeviceId, AuthToken), Error> {
-        if self.logged_in {
-            return Err(Error::AlreadyLoggedIn);
-        }
-
+        username: String,
+        password: String,
+    ) -> Result<(DeviceId, AuthToken)> {
         let (device, token) = match token {
             Some(token) => token,
-            // TODO allow user to configure these parameters?
-            None => self.create_token(username, password, None, TokenPermissionFlags::ALL)?,
+            None => {
+                // TODO allow user to configure these parameters?
+                let request = ClientRequest::CreateToken {
+                    username: username.clone(),
+                    password,
+                    device_name: None,
+                    expiration_date: None,
+                    permission_flags: TokenPermissionFlags::ALL,
+                };
+                let request = self.net_sender.request(request).await?;
+
+                match request.response().await? {
+                    OkResponse::Token { device, token } => (device, token),
+                    _ => return Err(Error::UnexpectedResponse),
+                }
+            }
         };
 
-        let request = self.request(ClientMessage::Login {
-            device,
-            token: token.clone(),
-        })?;
+        let request = ClientRequest::Login { device, token: token.clone() };
+        let request = self.net_sender.request(request).await?;
 
-        let msg = self.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request: response_id,
-            } => {
-                match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::User { id: _ }) if response_id == request => {
-                        self.username = Some(username.to_string());
-                        self.display_name = Some(username.to_string()); // TODO configure this
-                        self.device = Some(device);
-                        self.logged_in = true;
-                        Ok((device, token))
-                    }
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
-                }
+        match request.response().await? {
+            OkResponse::NoData => {
+                *(self.identity.borrow_mut()) = Some(UserIdentity {
+                    username: username.clone(),
+                    display_name: username,
+                    device_id: device
+                });
+
+                Ok((device, token))
             }
-            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
+            _ => Err(Error::UnexpectedResponse),
         }
     }
 
-    pub fn create_community(&mut self, name: String) -> Result<CommunityId, Error> {
-        if !self.logged_in {
-            return Err(Error::NotLoggedIn);
-        }
+    pub async fn create_user(&self, username: String, display_name: String, password: String) -> Result<UserId> {
+        let request = ClientRequest::CreateUser {
+            username,
+            display_name,
+            password,
+        };
+        let request = self.net_sender.request(request).await?;
 
-        let request = self.request(ClientMessage::CreateCommunity { name })?;
-
-        let msg = self.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request: response_id,
-            } => {
-                match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::Community { id })
-                        if response_id == request =>
-                    {
-                        Ok(id)
-                    }
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
-                }
-            }
-            ServerMessage::Error(e) => Err(Error::ServerError(e)),
-            _ => Err(Error::IncorrectServerMessage(msg)),
+        match request.response().await? {
+            OkResponse::User { id } => Ok(id),
+            _ => Err(Error::UnexpectedResponse),
         }
     }
 
-    pub fn create_room(&mut self, name: String, community: CommunityId) -> Result<RoomId, Error> {
-        if !self.logged_in {
-            return Err(Error::NotLoggedIn);
-        }
+    pub async fn change_username(&self, new_username: String) -> Result<()> {
+        let request = ClientRequest::ChangeUsername { new_username };
+        let request = self.net_sender.request(request).await?;
+        request.response().await?;
 
-        let request = self.request(ClientMessage::CreateRoom { community, name })?;
-
-        let msg = self.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request: response_id,
-            } => {
-                match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::Room { id }) if response_id == request => {
-                        Ok(id)
-                    }
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
-                }
-            }
-            ServerMessage::Error(e) => Err(Error::ServerError(e)),
-            _ => Err(Error::IncorrectServerMessage(msg)),
-        }
+        Ok(())
     }
 
-    pub fn join_community(&mut self, community: CommunityId) -> Result<(), Error> {
-        if !self.logged_in {
-            return Err(Error::NotLoggedIn);
-        }
+    pub async fn change_display_name(&self, new_display_name: String) -> Result<()> {
+        let request = ClientRequest::ChangeDisplayName { new_display_name };
+        let request = self.net_sender.request(request).await?;
+        request.response().await?;
 
-        let request = self.request(ClientMessage::JoinCommunity(community))?;
-
-        let msg = self.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request: response_id,
-            } => {
-                match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) if response_id == request => Ok(()),
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
-                }
-            }
-            ServerMessage::Error(e) => Err(Error::ServerError(e)),
-            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
-        }
+        Ok(())
     }
 
-    /// Sends a message
-    pub fn send_message(
-        &mut self,
-        msg: String,
-        to_room: RoomId,
-        to_community: CommunityId,
-    ) -> Result<(), Error> {
-        if self.logged_in {
-            let request = self.request(ClientMessage::SendMessage(ClientSentMessage {
-                to_room,
-                to_community,
-                content: msg,
-            }))?;
+    pub async fn change_password(&self, old_password: String, new_password: String) -> Result<()> {
+        let request = ClientRequest::ChangePassword { old_password, new_password };
+        let request = self.net_sender.request(request).await?;
+        request.response().await?;
 
-            let msg = self.receive_blocking()?;
-            match msg.clone() {
-                ServerMessage::Response {
-                    response,
-                    request: response_id,
-                } => {
-                    match response {
-                        // TODO do this more asynchronously @gegy1000
-                        RequestResponse::Success(Success::NoData) if response_id == request => {
-                            Ok(())
-                        }
-                        RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                        _ => Err(Error::IncorrectServerMessage(msg)),
-                    }
-                }
-                msg @ _ => Err(Error::IncorrectServerMessage(msg)),
-            }
+        Ok(())
+    }
+
+    pub async fn refresh_token(&self, to_refresh: DeviceId, username: String, password: String) -> Result<()> {
+        let request = ClientRequest::RefreshToken { device: to_refresh, username, password };
+        let request = self.net_sender.request(request).await?;
+        request.response().await?;
+
+        Ok(())
+    }
+
+    pub async fn revoke_token(&self, to_revoke: DeviceId, password: String) -> Result<()> {
+        let request = ClientRequest::RevokeToken { device: to_revoke, password: Some(password) };
+        let request = self.net_sender.request(request).await?;
+        request.response().await?;
+
+        Ok(())
+    }
+
+    pub async fn revoke_current_token(&self) -> Result<()> {
+        if let Some(identity) = self.identity.borrow().as_ref() {
+            let request = ClientRequest::RevokeToken { device: identity.device_id, password: None };
+            let request = self.net_sender.request(request).await?;
+            request.response().await?;
+            Ok(())
         } else {
             Err(Error::NotLoggedIn)
         }
     }
 
+    pub async fn create_room(&self, name: String, community: CommunityId) -> Result<RoomId> {
+        let request = self.net_sender.request(ClientRequest::CreateRoom {
+            name,
+            community
+        }).await?;
+        let response = request.response().await?;
+
+        match response {
+            OkResponse::Room { id } => Ok(id),
+            _ => Err(Error::UnexpectedResponse),
+        }
+    }
+
+    /// Sends a message, returning the request id if it was sent successfully
+    pub async fn send_message(&self, content: String, to_community: CommunityId, to_room: RoomId) -> Result<()> {
+        let request = ClientRequest::SendMessage(ClientSentMessage {
+            to_community,
+            to_room,
+            content,
+        });
+        let request = self.net_sender.request(request).await?;
+        request.response().await?;
+
+        Ok(())
+    }
+
+    pub async fn join_community(&self, community: CommunityId) -> Result<()> {
+        let request = self.net_sender.request(ClientRequest::JoinCommunity(community)).await?;
+        request.response().await?;
+
+        Ok(())
+    }
+
     /// Should be called once every `HEARTBEAT_INTERVAL`
-    pub fn heartbeat(&mut self) -> Result<(), Error> {
-        self.socket
-            .send_message(&OwnedMessage::Ping(vec![]))
-            .map_err(Error::WebSocketError)
-    }
-
-    fn create_token(
-        &mut self,
-        username: &str,
-        password: &str,
-        expiration_date: Option<DateTime<Utc>>,
-        permission_flags: TokenPermissionFlags,
-    ) -> Result<(DeviceId, AuthToken), Error> {
-        let request = self.request(ClientMessage::CreateToken {
-            username: username.to_string(),
-            password: password.to_string(),
-            device_name: None, // TODO
-            expiration_date,
-            permission_flags,
-        })?;
-
-        let msg = self.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request: response_id,
-            } => {
-                match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::Token { device, token }) => {
-                        if response_id == request {
-                            Ok((device, token))
-                        } else {
-                            Err(Error::IncorrectServerMessage(msg))
-                        }
-                    }
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
-                }
-            }
-            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
-        }
-    }
-
-    pub fn revoke_token(&mut self, password: &str, to_revoke: DeviceId) -> Result<(), Error> {
-        self.revoke_token_inner(Some(password), to_revoke)?;
-
-        if let Some(current_device) = self.device {
-            if current_device == to_revoke {
-                self.logged_in = false;
-                self.device = None;
-                self.username = None;
-                self.display_name = None;
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn revoke_current_token(&mut self) -> Result<(), Error> {
-        self.revoke_token_inner(None, self.device.ok_or(Error::NotLoggedIn)?)?;
-        self.logged_in = false;
-        self.device = None;
-        self.username = None;
-        self.display_name = None;
-
-        Ok(())
-    }
-
-    fn revoke_token_inner(
-        &mut self,
-        password: Option<&str>,
-        to_revoke: DeviceId,
-    ) -> Result<(), Error> {
-        if !self.logged_in {
-            return Err(Error::NotLoggedIn);
-        }
-
-        let request = self.request(ClientMessage::RevokeToken {
-            device: to_revoke,
-            password: password.map(|s| s.to_string()),
-        })?;
-
-        let msg = self.receive_blocking()?;
-        match msg.clone() {
-            ServerMessage::Response {
-                response,
-                request: response_id,
-            } => {
-                match response {
-                    // TODO do this more asynchronously @gegy1000
-                    RequestResponse::Success(Success::NoData) => {
-                        if response_id == request {
-                            Ok(())
-                        } else {
-                            Err(Error::IncorrectServerMessage(msg))
-                        }
-                    }
-                    RequestResponse::Error(e) => Err(Error::ServerError(e)),
-                    _ => Err(Error::IncorrectServerMessage(msg)),
-                }
-            }
-            msg @ _ => Err(Error::IncorrectServerMessage(msg)),
-        }
+    #[inline]
+    pub async fn dispatch_heartbeat(&self) -> Result<()> {
+        self.net_sender.dispatch_heartbeat().await
     }
 }
 
@@ -592,15 +224,31 @@ pub enum Action {
     Error(Error),
 }
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[derive(Debug)]
 pub enum Error {
     NotLoggedIn,
     AlreadyLoggedIn,
-    WebSocketError(WebSocketError),
+    WebSocketError(tungstenite::Error),
     /// A message from the server that doesn't deserialize correctly
-    InvalidServerMessage,
-    /// A message from the server that doesn't make sense in a specific context
-    IncorrectServerMessage(ServerMessage),
-    ServerError(ServerError),
+    UnexpectedResponse,
+    ServerError(ErrResponse),
     ServerTimedOut,
+    ServerClosed,
+    MalformedRequest,
+    MalformedResponse,
+    ChannelClosed,
+}
+
+impl From<ErrResponse> for Error {
+    fn from(err: ErrResponse) -> Self {
+        Error::ServerError(err)
+    }
+}
+
+impl From<tungstenite::Error> for Error {
+    fn from(err: tungstenite::Error) -> Self {
+        Error::WebSocketError(err)
+    }
 }

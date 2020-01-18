@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
 use tokio_postgres::Row;
-use vertex_common::{CommunityId, RoomId, ServerError, UserId};
+use vertex_common::{CommunityId, RoomId, ErrResponse, UserId};
 
 pub(super) const CREATE_COMMUNITY_MEMBERSHIP_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS community_membership (
@@ -61,7 +61,7 @@ impl TryFrom<&Row> for RoomMember {
 }
 
 #[derive(Message)]
-#[rtype(result = "Result<(), ServerError>")]
+#[rtype(result = "Result<(), ErrResponse>")]
 pub struct AddToCommunity {
     pub community: CommunityId,
     pub user: UserId,
@@ -105,7 +105,7 @@ impl TryFrom<&Row> for AddToRoomResult {
 }
 
 impl Handler<AddToCommunity> for DatabaseServer {
-    type Result = ResponseFuture<Result<(), ServerError>>;
+    type Result = ResponseFuture<Result<(), ErrResponse>>;
 
     fn handle(&mut self, add: AddToCommunity, _: &mut Context<Self>) -> Self::Result {
         use AddToRoomSource::*;
@@ -133,7 +133,7 @@ impl Handler<AddToCommunity> for DatabaseServer {
 
                         // Row already existed - conflict of some sort
                         Select | Update => {
-                            Err(ServerError::AlreadyInCommunity) // TODO(room_persistence): banning
+                            Err(ErrResponse::AlreadyInCommunity) // TODO(room_persistence): banning
                         }
                     }
                 }
@@ -147,9 +147,9 @@ impl Handler<AddToCommunity> for DatabaseServer {
 
                         match constraint {
                             Some("community_membership_community_fkey") => {
-                                ServerError::InvalidCommunity
+                                ErrResponse::InvalidCommunity
                             }
-                            Some("community_membership_user_fkey") => ServerError::InvalidUser,
+                            Some("community_membership_user_fkey") => ErrResponse::InvalidUser,
                             Some(_) | None => handle_error(l337::Error::External(err)),
                         }
                     } else {

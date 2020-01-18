@@ -22,7 +22,7 @@ pub struct Connect {
 }
 
 #[derive(Message)]
-#[rtype(result = "Result<bool, ServerError>")]
+#[rtype(result = "Result<bool, ErrResponse>")]
 pub struct Join {
     pub user: UserId,
 }
@@ -80,7 +80,7 @@ impl Handler<Connect> for CommunityActor {
 }
 
 impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
-    type Result = Result<MessageId, ServerError>;
+    type Result = Result<MessageId, ErrResponse>;
 
     fn handle(
         &mut self,
@@ -89,7 +89,7 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
     ) -> Self::Result {
         let from_device = m.device;
         let fwd = ForwardedMessage::from_message_author_device(m.message, m.user, m.device);
-        let send = SendMessage(ServerMessage::Message(fwd));
+        let send = SendMessage(ServerMessage::Action(ServerAction::Message(fwd)));
 
         self.online_members.values()
             .flat_map(|member| member.devices.iter())
@@ -101,7 +101,7 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
 }
 
 impl Handler<IdentifiedMessage<Edit>> for CommunityActor {
-    type Result = Result<(), ServerError>; // TODO(room_persistence): just make ()
+    type Result = Result<(), ErrResponse>; // TODO(room_persistence): just make ()
 
     fn handle(
         &mut self,
@@ -109,7 +109,7 @@ impl Handler<IdentifiedMessage<Edit>> for CommunityActor {
         _: &mut Context<Self>,
     ) -> Self::Result {
         let from_device = m.device;
-        let send = SendMessage(ServerMessage::Edit(m.message));
+        let send = SendMessage(ServerMessage::Action(ServerAction::Edit(m.message)));
 
         self.online_members.values()
             .flat_map(|member| member.devices.iter())
@@ -122,7 +122,7 @@ impl Handler<IdentifiedMessage<Edit>> for CommunityActor {
 
 
 impl Handler<Join> for CommunityActor {
-    type Result = ResponseFuture<Result<bool, ServerError>>;
+    type Result = ResponseFuture<Result<bool, ErrResponse>>;
 
     fn handle(&mut self, join: Join, _: &mut Context<Self>) -> Self::Result {
         // TODO(implement)

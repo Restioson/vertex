@@ -4,7 +4,7 @@ use futures::Future;
 use futures::FutureExt;
 use rand::RngCore;
 use unicode_normalization::UnicodeNormalization;
-use vertex_common::{ServerError, UserId};
+use vertex_common::{ErrResponse, UserId};
 
 pub const MAX_TOKEN_LENGTH: usize = 45;
 
@@ -88,7 +88,7 @@ pub fn verify(
 pub async fn verify_user_password(
     user: UserRecord,
     password: String,
-) -> Result<UserId, ServerError> {
+) -> Result<UserId, ErrResponse> {
     let UserRecord {
         id: user,
         password_hash,
@@ -99,6 +99,6 @@ pub async fn verify_user_password(
     if matches {
         Ok(user)
     } else {
-        Err(ServerError::IncorrectUsernameOrPassword)
+        Err(ErrResponse::IncorrectUsernameOrPassword)
     }
 }
