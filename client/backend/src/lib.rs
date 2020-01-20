@@ -29,13 +29,13 @@ pub struct Config {
     pub url: Url,
 }
 
-pub struct Client {
+pub struct AuthClient {
     net: Rc<net::Sender>,
 }
 
-impl Client {
-    pub fn new(net: Rc<net::Sender>) -> Client {
-        Client { net }
+impl AuthClient {
+    pub fn new(net: Rc<net::Sender>) -> AuthClient {
+        AuthClient { net }
     }
 
     pub async fn register(&self, username: String, display_name: String, password: String) -> Result<UserId> {
@@ -65,13 +65,13 @@ impl Client {
         }
     }
 
-    pub async fn login(self, device: DeviceId, token: AuthToken) -> Result<AuthenticatedClient> {
+    pub async fn login(self, device: DeviceId, token: AuthToken) -> Result<Client> {
         let request = ClientRequest::Login { device, token: token.clone() };
         let request = self.net.request(request).await?;
 
         match request.response().await? {
             OkResponse::User { id: user_id } => {
-                Ok(AuthenticatedClient {
+                Ok(Client {
                     net: self.net,
                     user: user_id,
                     device,
@@ -83,14 +83,14 @@ impl Client {
     }
 }
 
-pub struct AuthenticatedClient {
+pub struct Client {
     net: Rc<net::Sender>,
     user: UserId,
     device: DeviceId,
     token: AuthToken,
 }
 
-impl AuthenticatedClient {
+impl Client {
     pub async fn change_username(&self, new_username: String) -> Result<()> {
         let request = ClientRequest::ChangeUsername { new_username };
         let request = self.net.request(request).await?;

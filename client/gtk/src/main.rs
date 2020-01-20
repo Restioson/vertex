@@ -73,7 +73,7 @@ impl App {
         match app.token_store.get_stored_token() {
             Some((device, token)) => {
                 // TODO: Some code duplication with auth in login and register ui
-                let client = vertex::Client::new(app.net());
+                let client = vertex::AuthClient::new(app.net());
                 let client = client.login(device, token).await.expect("failed to login");
                 let client = Rc::new(client);
 

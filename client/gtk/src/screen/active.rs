@@ -18,7 +18,7 @@ pub struct Widgets {
 
 pub struct Model {
     app: Rc<crate::App>,
-    client: Rc<vertex::AuthenticatedClient>,
+    client: Rc<vertex::Client>,
     community: Option<vertex::CommunityId>,
     room: Option<vertex::RoomId>,
     widgets: Widgets,
@@ -49,7 +49,7 @@ fn push_message(messages: &gtk::ListBox, author: &str, content: &str) {
     messages.insert(&grid, -1);
 }
 
-pub fn build(app: Rc<crate::App>, client: Rc<vertex::AuthenticatedClient>) -> Screen<Model> {
+pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
     let builder = gtk::Builder::new_from_string(GLADE_SRC);
 
     let viewport = builder.get_object("viewport").unwrap();

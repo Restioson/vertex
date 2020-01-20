@@ -1,8 +1,10 @@
 use gtk::prelude::*;
 
 use std::rc::Rc;
+use std::fmt;
 
 use vertex_client_backend as vertex;
+use vertex_common::*;
 
 use crate::screen::{self, Screen, DynamicScreen, TryGetText};
 
@@ -35,7 +37,7 @@ pub fn build(app: Rc<crate::App>) -> Screen<Model> {
             password_entry_2: builder.get_object("password_entry_2").unwrap(),
             register_button: builder.get_object("register_button").unwrap(),
             login_button: builder.get_object("login_button").unwrap(),
-            error_label: builder.get_object("error_label").unwrap()
+            error_label: builder.get_object("error_label").unwrap(),
         },
     };
 
@@ -69,31 +71,81 @@ fn bind_events(screen: &Screen<Model>) {
 
                 model.widgets.error_label.set_text("");
 
-                if password_1 == password_2 {
-                    let password = password_1;
+                match register(&screen.model().app, username, password_1, password_2).await {
+                    Ok(client) => {
+                        let (device, token) = client.token();
+                        model.app.token_store.store_token(device, token);
 
-                    let client = vertex::Client::new(model.app.net());
+                        let client = Rc::new(client);
 
-                    // TODO: error handling
-                    let user = client.register(username.clone(), username.clone(), password.clone()).await
-                        .expect("failed to register");
-
-                    let (device, token) = client.authenticate(username, password).await
-                        .expect("failed to authenticate");
-
-                    let client = client.login(device, token).await
-                        .expect("failed to login");
-                    let client = Rc::new(client);
-
-                    let (device, token) = client.token();
-                    model.app.token_store.store_token(device, token);
-
-                    let active = screen::active::build(model.app.clone(), client);
-                    model.app.set_screen(DynamicScreen::Active(active));
-                } else {
-                    model.widgets.error_label.set_text("Passwords do not match");
+                        let active = screen::active::build(screen.model().app.clone(), client);
+                        screen.model().app.set_screen(DynamicScreen::Active(active));
+                    }
+                    Err(err) => model.widgets.error_label.set_text(&format!("{}", err)),
                 }
             })
             .build_widget_event()
     );
+}
+
+async fn register(app: &crate::App, username: String, password_1: String, password_2: String) -> Result<vertex::Client, RegisterError> {
+    if password_1 != password_2 {
+        return Err(RegisterError::PasswordsDoNotMatch);
+    }
+
+    let password = password_1;
+
+    let client = vertex::AuthClient::new(app.net());
+
+    let user = client.register(username.clone(), username.clone(), password.clone()).await?;
+    let (device, token) = client.authenticate(username, password).await?;
+
+    Ok(client.login(device, token).await?)
+}
+
+#[derive(Copy, Clone, Debug)]
+enum RegisterError {
+    UsernameAlreadyExists,
+    InvalidUsername,
+    InvalidPassword,
+    PasswordsDoNotMatch,
+    InternalServerError,
+    NetworkError,
+    UnknownError,
+}
+
+impl fmt::Display for RegisterError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RegisterError::UsernameAlreadyExists => write!(f, "Username already exists"),
+            RegisterError::InvalidUsername => write!(f, "Invalid username"),
+            RegisterError::InvalidPassword => write!(f, "Invalid password"),
+            RegisterError::PasswordsDoNotMatch => write!(f, "Passwords do not match"),
+            RegisterError::InternalServerError => write!(f, "Internal server error"),
+            RegisterError::NetworkError => write!(f, "Network error"),
+            RegisterError::UnknownError => write!(f, "Unknown error"),
+        }
+    }
+}
+
+impl From<vertex::Error> for RegisterError {
+    fn from(err: vertex::Error) -> Self {
+        match err {
+            vertex::Error::ErrResponse(err) => err.into(),
+            vertex::Error::WebSocketError(_) => RegisterError::NetworkError,
+            _ => RegisterError::UnknownError,
+        }
+    }
+}
+
+impl From<ErrResponse> for RegisterError {
+    fn from(err: ErrResponse) -> Self {
+        match err {
+            ErrResponse::Internal => RegisterError::InternalServerError,
+            ErrResponse::InvalidUsername => RegisterError::InvalidUsername,
+            ErrResponse::InvalidPassword => RegisterError::InvalidPassword,
+            ErrResponse::UsernameAlreadyExists => RegisterError::UsernameAlreadyExists,
+            _ => RegisterError::UnknownError,
+        }
+    }
 }

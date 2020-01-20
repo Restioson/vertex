@@ -2,10 +2,12 @@ use gtk::prelude::*;
 
 use std::rc::Rc;
 
+use vertex_common::*;
 use vertex_client_backend as vertex;
 
 use crate::screen::{self, Screen, DynamicScreen, TryGetText};
-use vertex_common::{DeviceId, AuthToken};
+
+use std::fmt;
 
 const GLADE_SRC: &str = include_str!("glade/login.glade");
 
@@ -56,22 +58,20 @@ fn bind_events(screen: &Screen<Model>) {
                 let username = model.widgets.username_entry.try_get_text().unwrap_or_default();
                 let password = model.widgets.password_entry.try_get_text().unwrap_or_default();
 
-                let client = vertex::Client::new(model.app.net());
+                model.widgets.error_label.set_text("");
 
-                // TODO: error handling
-                let (device, token) = match model.app.token_store.get_stored_token() {
-                    Some(token) => token,
-                    None => client.authenticate(username, password).await.expect("failed to authenticate"),
-                };
+                match login(&screen.model().app, username, password).await {
+                    Ok(client) => {
+                        let (device, token) = client.token();
+                        model.app.token_store.store_token(device, token);
 
-                let client = client.login(device, token).await.expect("failed to login");
-                let client = Rc::new(client);
+                        let client = Rc::new(client);
 
-                let (device, token) = client.token();
-                model.app.token_store.store_token(device, token);
-
-                let active = screen::active::build(screen.model().app.clone(), client);
-                screen.model().app.set_screen(DynamicScreen::Active(active));
+                        let active = screen::active::build(screen.model().app.clone(), client);
+                        screen.model().app.set_screen(DynamicScreen::Active(active));
+                    }
+                    Err(err) => model.widgets.error_label.set_text(&format!("{}", err)),
+                }
             })
             .build_widget_event()
     );
@@ -84,4 +84,54 @@ fn bind_events(screen: &Screen<Model>) {
             })
             .build_widget_event()
     );
+}
+
+async fn login(app: &crate::App, username: String, password: String) -> Result<vertex::Client, LoginError> {
+    let client = vertex::AuthClient::new(app.net());
+
+    let (device, token) = match app.token_store.get_stored_token() {
+        Some(token) => token,
+        None => client.authenticate(username, password).await?,
+    };
+
+    Ok(client.login(device, token).await?)
+}
+
+#[derive(Copy, Clone, Debug)]
+enum LoginError {
+    InvalidUsernameOrPassword,
+    InternalServerError,
+    NetworkError,
+    UnknownError,
+}
+
+impl fmt::Display for LoginError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            LoginError::InvalidUsernameOrPassword => write!(f, "Invalid username or password"),
+            LoginError::InternalServerError => write!(f, "Internal server error"),
+            LoginError::NetworkError => write!(f, "Network error"),
+            LoginError::UnknownError => write!(f, "Unknown error"),
+        }
+    }
+}
+
+impl From<vertex::Error> for LoginError {
+    fn from(err: vertex::Error) -> Self {
+        match err {
+            vertex::Error::ErrResponse(err) => err.into(),
+            vertex::Error::WebSocketError(_) => LoginError::NetworkError,
+            _ => LoginError::UnknownError,
+        }
+    }
+}
+
+impl From<ErrResponse> for LoginError {
+    fn from(err: ErrResponse) -> Self {
+        match err {
+            ErrResponse::Internal => LoginError::InternalServerError,
+            ErrResponse::IncorrectUsernameOrPassword => LoginError::InvalidUsernameOrPassword,
+            _ => LoginError::UnknownError,
+        }
+    }
 }
