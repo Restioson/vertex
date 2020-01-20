@@ -13,6 +13,7 @@ pub struct Widgets {
     rooms: gtk::ListBox,
     messages: gtk::ListBox,
     message_entry: gtk::Entry,
+    sign_out_button: gtk::Button,
 }
 
 pub struct Model {
@@ -63,6 +64,7 @@ pub fn build(app: Rc<crate::App>, client: Rc<vertex::AuthenticatedClient>) -> Sc
             rooms: builder.get_object("rooms").unwrap(),
             messages: builder.get_object("messages").unwrap(),
             message_entry: builder.get_object("message_entry").unwrap(),
+            sign_out_button: builder.get_object("sign_out_button").unwrap(),
         },
     };
 
@@ -97,5 +99,18 @@ fn bind_events(screen: &Screen<Model>) {
                 println!("send message {}", message);
             })
             .build_cloned_consumer()
+    );
+
+    widgets.sign_out_button.connect_button_press_event(
+        screen.connector()
+            .do_async(|screen, (button, event)| async move {
+                let model = screen.model();
+                model.client.revoke_current_token().await.expect("failed to revoke token");
+                model.app.token_store.forget_token();
+
+                let login = screen::login::build(model.app.clone());
+                model.app.set_screen(DynamicScreen::Login(login));
+            })
+            .build_widget_event()
     );
 }
