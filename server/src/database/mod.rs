@@ -92,7 +92,7 @@ impl DatabaseServer {
                     "DELETE FROM login_tokens
                         WHERE expiration_date < NOW()::timestamp OR
                         DATE_PART('days', NOW()::timestamp - last_used) > $1
-                    RETURNING device, user",
+                    RETURNING device, user_id",
                 )
                 .map_err(l337::Error::External)
                 .await?;
@@ -104,7 +104,7 @@ impl DatabaseServer {
                 .iter()
                 .map(|row| {
                     Ok((
-                        UserId(row.try_get("user").map_err(l337::Error::External)?),
+                        UserId(row.try_get("user_id").map_err(l337::Error::External)?),
                         DeviceId(row.try_get("device").map_err(l337::Error::External)?),
                     ))
                 })

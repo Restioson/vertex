@@ -7,9 +7,8 @@ edition = "2018"
 [dependencies]
 gio = "0.8"
 glib = "0.9"
-gtk = { version = "^0.7", features = ["v3_20"] }
-relm = "0.18"
-relm-derive = "0.18"
+gdk = "0.12"
+gtk = { version = "0.8", features = ["v3_20"] }
 clap = "2.33"
 
 url = "2.1"
