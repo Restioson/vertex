@@ -33,13 +33,13 @@ impl From<vertex::Error> for Error {
 
 pub struct App {
     window: gtk::ApplicationWindow,
-    net: Rc<vertex::net::Sender>,
+    net: Option<Rc<vertex::net::Sender>>,
     token_store: TokenStore,
     screen: RefCell<Option<DynamicScreen>>,
 }
 
 impl App {
-    pub fn build(application: &gtk::Application, net: vertex::Net) -> App {
+    pub fn build(application: &gtk::Application) -> App {
         let window = gtk::ApplicationWindowBuilder::new()
             .application(application)
             .title(&format!("Vertex {}", crate::VERSION))
@@ -50,35 +50,59 @@ impl App {
 
         window.show_all();
 
-        let context = glib::MainContext::ref_thread_default();
-
-        let (net_send, net_recv) = net.split();
-
-        // TODO: clean these up
-        let mut stream = vertex::action_stream(net_recv);
-        context.spawn_local(async move {
-            while let Some(action) = stream.next().await {}
-        });
-
-        let net_send = Rc::new(net_send);
-
-        context.spawn_local({
-            let net_send = net_send.clone();
-            async move {
-                let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(2));
-                loop {
-                    ticker.tick().await;
-                    net_send.dispatch_heartbeat().await.expect("failed to dispatch heartbeat");
-                }
-            }
-        });
-
         App {
             window,
-            net: net_send,
+            net: None,
             token_store: TokenStore::new(),
             screen: RefCell::new(None),
         }
+    }
+
+    pub async fn start(mut self, net: vertex::Net) {
+        let (net_send, net_recv) = net.split();
+        self.net = Some(Rc::new(net_send));
+
+        let app = Rc::new(self);
+
+        let context = glib::MainContext::ref_thread_default();
+        context.spawn_local({
+            let app = app.clone();
+            async move { app.run(net_recv).await }
+        });
+
+        match app.token_store.get_stored_token() {
+            Some((device, token)) => {
+                // TODO: Some code duplication with auth in login and register ui
+                let client = vertex::Client::new(app.net());
+                let client = client.login(device, token).await.expect("failed to login");
+                let client = Rc::new(client);
+
+                let screen = screen::active::build(app.clone(), client);
+                app.set_screen(DynamicScreen::Active(screen));
+            }
+            None => {
+                let screen = screen::login::build(app.clone());
+                app.set_screen(DynamicScreen::Login(screen));
+            }
+        }
+    }
+
+    async fn run(&self, receiver: vertex::net::Receiver) {
+        futures::future::join(
+            async move {
+                let mut stream = vertex::action_stream(receiver);
+                while let Some(action) = stream.next().await {
+                    println!("{:?}", action);
+                }
+            },
+            async {
+                let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(2));
+                loop {
+                    ticker.tick().await;
+                    self.net().dispatch_heartbeat().await.expect("failed to dispatch heartbeat");
+                }
+            },
+        ).await;
     }
 
     pub fn set_screen(&self, screen: DynamicScreen) {
@@ -92,25 +116,11 @@ impl App {
         *(self.screen.borrow_mut()) = Some(screen);
     }
 
-    pub async fn start(self) {
-        let app = Rc::new(self);
-
-        match app.token_store.get_stored_token() {
-            Some((device, token)) => {
-                // TODO: Some code duplication with auth in login and register ui
-                let client = vertex::Client::new(app.net.clone());
-                let client = client.login(device, token).await.expect("failed to login");
-                let client = Rc::new(client);
-
-                let screen = screen::active::build(app.clone(), client);
-                app.set_screen(DynamicScreen::Active(screen));
-            },
-            None => {
-                let screen = screen::login::build(app.clone());
-                app.set_screen(DynamicScreen::Login(screen));
-            },
-        }
+    pub fn net(&self) -> Rc<vertex::net::Sender> {
+        self.net.as_ref().unwrap().clone()
     }
+
+    pub fn token_store(&self) -> &TokenStore { &self.token_store }
 }
 
 // TODO: can we get rid of need for this? (do we need to use tokio-tungstenite or can we just use tungstenite?)
@@ -141,12 +151,11 @@ async fn main() {
 
     application.connect_activate(move |app| {
         let url = url.clone();
+        let app = App::build(app);
 
         glib::MainContext::ref_thread_default().block_on(async move {
             let net = vertex::net::connect((*url).clone()).await.expect("failed to connect");
-
-            let app = App::build(app, net);
-            app.start().await;
+            app.start(net).await;
         });
     });
 

@@ -6,6 +6,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use vertex_client_backend as vertex;
+use std::convert::TryInto;
 
 pub mod active;
 pub mod login;
@@ -66,4 +67,14 @@ impl<M> Screen<M> {
 
     #[inline]
     pub fn viewport(&self) -> &gtk::Viewport { &self.viewport }
+}
+
+pub trait TryGetText {
+    fn try_get_text(&self) -> Result<String, ()>;
+}
+
+impl<E: gtk::EntryExt> TryGetText for E {
+    fn try_get_text(&self) -> Result<String, ()> {
+        self.get_text().map(|s| s.as_str().to_owned()).ok_or(())
+    }
 }

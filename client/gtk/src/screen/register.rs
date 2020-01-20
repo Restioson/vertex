@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use vertex_client_backend as vertex;
 
-use crate::screen::{self, Screen, DynamicScreen};
+use crate::screen::{self, Screen, DynamicScreen, TryGetText};
 
 const GLADE_SRC: &str = include_str!("glade/register.glade");
 
@@ -61,24 +61,18 @@ fn bind_events(screen: &Screen<Model>) {
     widgets.register_button.connect_button_press_event(
         screen.connector()
             .do_async(|screen, (button, event)| async move {
-                fn try_get_text(entry: &gtk::Entry) -> String {
-                    entry.get_text()
-                        .map(|s| s.as_str().to_owned())
-                        .unwrap_or_default()
-                }
-
                 let model = screen.model();
 
-                let username = try_get_text(&model.widgets.username_entry);
-                let password_1 = try_get_text(&model.widgets.password_entry_1);
-                let password_2 = try_get_text(&model.widgets.password_entry_2);
+                let username = model.widgets.username_entry.try_get_text().unwrap_or_default();
+                let password_1 = model.widgets.password_entry_1.try_get_text().unwrap_or_default();
+                let password_2 = model.widgets.password_entry_2.try_get_text().unwrap_or_default();
 
                 model.widgets.error_label.set_text("");
 
                 if password_1 == password_2 {
                     let password = password_1;
 
-                    let client = vertex::Client::new(model.app.net.clone());
+                    let client = vertex::Client::new(model.app.net());
 
                     // TODO: error handling
                     let user = client.register(username.clone(), username.clone(), password.clone()).await

@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use vertex_client_backend as vertex;
 
-use crate::screen::{self, Screen, DynamicScreen};
+use crate::screen::{self, Screen, DynamicScreen, TryGetText};
 use vertex_common::{DeviceId, AuthToken};
 
 const GLADE_SRC: &str = include_str!("glade/login.glade");
@@ -51,19 +51,12 @@ fn bind_events(screen: &Screen<Model>) {
     widgets.login_button.connect_button_press_event(
         screen.connector()
             .do_async(|screen, (button, event)| async move {
-                // TODO: duplication
-                fn try_get_text(entry: &gtk::Entry) -> String {
-                    entry.get_text()
-                        .map(|s| s.as_str().to_owned())
-                        .unwrap_or_default()
-                }
-
                 let model = screen.model();
 
-                let username = try_get_text(&model.widgets.username_entry);
-                let password = try_get_text(&model.widgets.password_entry);
+                let username = model.widgets.username_entry.try_get_text().unwrap_or_default();
+                let password = model.widgets.password_entry.try_get_text().unwrap_or_default();
 
-                let client = vertex::Client::new(model.app.net.clone());
+                let client = vertex::Client::new(model.app.net());
 
                 // TODO: error handling
                 let (device, token) = match model.app.token_store.get_stored_token() {
