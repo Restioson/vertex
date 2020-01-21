@@ -43,7 +43,7 @@ impl App {
         let window = gtk::ApplicationWindowBuilder::new()
             .application(application)
             .title(&format!("Vertex {}", crate::VERSION))
-            .icon_name("icon.png")
+            .icon_name("res/icon.png")
             .default_width(1280)
             .default_height(720)
             .build();
@@ -123,6 +123,14 @@ impl App {
     pub fn token_store(&self) -> &TokenStore { &self.token_store }
 }
 
+fn setup_gtk_style() {
+    let screen = gdk::Screen::get_default().expect("unable to get screen");
+    let css_provider = gtk::CssProvider::new();
+    css_provider.load_from_path("res/style.css").expect("unable to load css");
+
+    gtk::StyleContext::add_provider_for_screen(&screen, &css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+
 // TODO: can we get rid of need for this? (do we need to use tokio-tungstenite or can we just use tungstenite?)
 #[tokio::main]
 async fn main() {
@@ -148,6 +156,8 @@ async fn main() {
 
     let application = gtk::Application::new(None, Default::default())
         .expect("failed to create application");
+
+    setup_gtk_style();
 
     application.connect_activate(move |app| {
         let url = url.clone();

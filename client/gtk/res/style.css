@@ -1,0 +1,54 @@
+.no_hover *:hover {
+  background: inherit;
+}
+
+#room_list {
+    background: #393939;
+    padding: 5px 0px;
+}
+
+#room_list row {
+  margin-left: 35px;
+  margin-right: 10px;
+  border-radius: 6px;
+}
+
+#room_list row:hover {
+  background: #454545;
+}
+
+#room_list row:selected {
+  background: #4D4D4D;
+}
+
+#community_expander {
+  margin: 4px 0px;
+}
+
+#community_header {
+  margin: 4px;
+}
+
+#community_icon {
+  min-width: 40px;
+  min-height: 40px;
+
+  background-image: url('icon.png');
+  background-size: 40px;
+
+  border-radius: 20px;
+}
+
+#community_icon border {
+  border-style: none;
+}
+
+#community_label {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#room_label {
+  font-size: 14px;
+  font-weight: 500;
+}

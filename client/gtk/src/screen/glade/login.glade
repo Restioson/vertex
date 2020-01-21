@@ -69,12 +69,22 @@
                 </child>
                 <child>
                   <object class="GtkButton" id="register_button">
-                    <property name="label" translatable="yes">Register</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
                     <property name="halign">end</property>
                     <property name="relief">none</property>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="label" translatable="yes">Register</property>
+                        <attributes>
+                          <attribute name="underline" value="True"/>
+                          <attribute name="foreground" value="#4bb9ca05deb7"/>
+                        </attributes>
+                      </object>
+                    </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>
