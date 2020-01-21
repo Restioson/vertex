@@ -12,6 +12,7 @@ use futures::stream::StreamExt;
 use crate::screen::{Screen, DynamicScreen};
 use std::cell::RefCell;
 use crate::token_store::TokenStore;
+use vertex_client_backend::Action;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -92,6 +93,12 @@ impl App {
             async move {
                 let mut stream = vertex::action_stream(receiver);
                 while let Some(action) = stream.next().await {
+                    let action: vertex::Action = action;
+                    match action {
+                        Action::AddMessage(_) => {},
+                        Action::LoggedOut => {},
+                        Action::Error(_) => {},
+                    }
                     println!("{:?}", action);
                 }
             },
