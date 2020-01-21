@@ -21,7 +21,6 @@ pub struct Model {
     client: Rc<vertex::Client>,
     widgets: Widgets,
     selected_community_widget: Option<gtk::Expander>,
-    selected_room_widget: Option<gtk::ListBoxRow>,
 }
 
 fn push_message(messages: &gtk::ListBox, author: &str, content: &str) {
@@ -86,22 +85,7 @@ fn push_community(screen: Screen<Model>, communities: &gtk::ListBox, name: &str,
         rooms_list.add(&room_label);
     }
 
-    rooms_list.connect_row_selected(
-        screen.connector()
-            .do_sync(|screen, (list, row): (gtk::ListBox, Option<gtk::ListBoxRow>)| {
-                if row.is_none() { return; }
-
-                let last_selected = screen.model_mut().selected_room_widget.take();
-                screen.model_mut().selected_room_widget = row;
-
-                if let Some(last_selected) = last_selected {
-                    last_selected.get_parent()
-                        .and_then(|parent| parent.downcast::<gtk::ListBox>().ok())
-                        .map(|parent| parent.unselect_row(&last_selected));
-                }
-            })
-            .build_widget_and_option_consumer()
-    );
+    rooms_list.select_row(rooms_list.get_row_at_index(0).as_ref());
 
     expander.add(&rooms_list);
 
@@ -141,7 +125,6 @@ pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
             sign_out_button: builder.get_object("sign_out_button").unwrap(),
         },
         selected_community_widget: None,
-        selected_room_widget: None,
     };
 
     let screen = Screen::new(viewport, model);
