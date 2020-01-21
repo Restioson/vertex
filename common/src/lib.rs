@@ -4,9 +4,7 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use std::time::Duration;
 use uuid::Uuid;
-
-#[macro_use]
-extern crate serde_derive;
+use serde::{Serialize, Deserialize};
 
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 
