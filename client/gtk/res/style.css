@@ -1,10 +1,48 @@
+@define-color content_bg_color #343434;
+@define-color sidebar_bg_color #303030;
+@define-color lower_bar_bg_color #2D2D2D;
+
+@define-color room_list_bg_color #2D2D2D;
+@define-color room_hover_color #323232;
+@define-color room_selected_color #383838;
+
+@define-color message_entry_color #343434;
+
+* {
+  border-style: none;
+}
+
+#communities {
+  background: @sidebar_bg_color;
+}
+
+#sidebar_lower_bar {
+  background: @lower_bar_bg_color;
+}
+
+#content_lower_bar {
+  background: @lower_bar_bg_color;
+}
+
+#messages {
+  background: @content_bg_color;
+}
+
+#message_entry {
+  background: @message_entry_color;
+  margin: 7px 4px;
+  border-radius: 10px;
+}
+
 .no_hover *:hover {
   background: inherit;
+  transition: none;
 }
 
 #room_list {
-    background: #393939;
-    padding: 5px 0px;
+  background: @room_list_bg_color;
+  padding: 5px 0px;
+  border-radius: 4px;
 }
 
 #room_list row {
@@ -14,11 +52,11 @@
 }
 
 #room_list row:hover {
-  background: #454545;
+  background: @room_hover_color;
 }
 
 #room_list row:selected {
-  background: #4D4D4D;
+  background: @room_selected_color;
 }
 
 #community_expander {
@@ -51,4 +89,5 @@
 #room_label {
   font-size: 14px;
   font-weight: 500;
+  padding-left: 4px;
 }
