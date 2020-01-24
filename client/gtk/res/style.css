@@ -1,5 +1,5 @@
 @define-color content_bg_color #343434;
-@define-color sidebar_bg_color #303030;
+@define-color sidebar_bg_color #313131;
 @define-color lower_bar_bg_color #2D2D2D;
 
 @define-color room_list_bg_color #2D2D2D;
@@ -8,9 +8,7 @@
 
 @define-color message_entry_color #343434;
 
-* {
-  border-style: none;
-}
+@define-color widget_color #404040;
 
 #communities {
   background: @sidebar_bg_color;
@@ -90,4 +88,71 @@
   font-size: 14px;
   font-weight: 500;
   padding-left: 4px;
+}
+
+#login, #register {
+  background: shade(@content_bg_color, 0.85);
+}
+
+#login frame frame, #register frame frame {
+  background: @content_bg_color;
+  padding: 80px 40px;
+  border-radius: 20px;
+}
+
+#login #title, #register #title {
+  font-size: 16px;
+}
+
+#login #error, #register #error {
+  font-weight: 500;
+}
+
+#login .link, #register .link {
+  color: #45a0d9;
+  text-decoration-line: underline;
+}
+
+#login entry, #register entry {
+  min-height: 26px;
+}
+
+#login button, #register button {
+  min-height: 26px;
+}
+
+* {
+  border-style: none;
+  color: white;
+}
+
+viewport {
+  background: @content_bg_color;
+}
+
+entry {
+  background: @widget_color;
+  border-radius: 10px;
+}
+
+entry:focus {
+  background: shade(@widget_color, 1.2);
+  box-shadow: none;
+}
+
+button {
+  background: @widget_color;
+  border-radius: 10px;
+}
+
+button:hover {
+  background: shade(@widget_color, 1.2);
+}
+
+button.flat {
+  background: transparent;
+}
+
+button.flat:hover {
+  background: @widget_color;
 }
