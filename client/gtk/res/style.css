@@ -90,6 +90,31 @@
   padding-left: 4px;
 }
 
+#message {
+  padding: 4px;
+}
+
+#message #author_name {
+  font-size: 14px;
+  font-weight: 500;
+  padding-left: 2px;
+}
+
+#message #author_icon {
+  min-width: 40px;
+  min-height: 40px;
+
+  background-image: url('icon.png');
+  background-size: 40px;
+
+  border-radius: 20px;
+}
+
+#message #message_content {
+  color: #e0e0e0;
+  padding-left: 2px;
+}
+
 #login, #register {
   background: shade(@content_bg_color, 0.85);
 }

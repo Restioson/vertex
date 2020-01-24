@@ -24,28 +24,41 @@ pub struct Model {
 }
 
 fn push_message(messages: &gtk::ListBox, author: &str, content: &str) {
-    let grid = gtk::Grid::new();
-    grid.insert_column(0);
-    grid.insert_column(1);
-    grid.insert_column(2);
+    let outer_box = gtk::BoxBuilder::new()
+        .name("message")
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(8)
+        .build();
 
-    grid.set_column_spacing(10);
+    outer_box.add(&gtk::FrameBuilder::new()
+        .name("author_icon")
+        .build()
+    );
 
-    let author = gtk::Label::new(Some(author));
-    author.set_xalign(0.0);
-    grid.attach(&author, 0, 0, 1, 1);
+    let message_inner = gtk::BoxBuilder::new()
+        .name("message_inner")
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(4)
+        .build();
 
-    let content = gtk::Label::new(Some(content));
-    content.set_xalign(0.0);
-    grid.attach(&content, 1, 0, 1, 1);
+    message_inner.add(&gtk::LabelBuilder::new()
+        .name("author_name")
+        .label(author)
+        .halign(gtk::Align::Start)
+        .build()
+    );
 
-    let separator = gtk::Separator::new(gtk::Orientation::Horizontal);
+    message_inner.add(&gtk::LabelBuilder::new()
+        .name("message_content")
+        .label(content)
+        .halign(gtk::Align::Start)
+        .build()
+    );
 
-    separator.show_all();
-    grid.show_all();
+    outer_box.add(&message_inner);
 
-    messages.insert(&separator, -1);
-    messages.insert(&grid, -1);
+    outer_box.show_all();
+    messages.insert(&outer_box, -1);
 }
 
 fn push_community(screen: Screen<Model>, communities: &gtk::ListBox, name: &str, rooms: &[&str]) {
