@@ -1,4 +1,3 @@
-use actix::prelude::*;
 use l337_postgres::PostgresConnectionManager;
 use log::{error, warn};
 use std::fs;
@@ -18,8 +17,16 @@ pub use communities::*;
 pub use community_membership::*;
 use futures::{Future, FutureExt, TryFutureExt};
 use std::sync::Arc;
+use xtra::prelude::*;
+
 pub use token::*;
 pub use user::*;
+
+struct Sweep;
+
+impl Message for Sweep {
+    type Result = ();
+}
 
 pub struct DatabaseServer {
     pool: Arc<l337::Pool<PostgresConnectionManager<NoTls>>>,
@@ -28,7 +35,7 @@ pub struct DatabaseServer {
 }
 
 impl DatabaseServer {
-    pub fn new(sys: &mut SystemRunner, config: &Config) -> Self {
+    pub async fn new(config: &Config) -> Self {
         let mgr = PostgresConnectionManager::new(
             fs::read_to_string("db.conf")
                 .expect("db.conf not found")
@@ -38,7 +45,7 @@ impl DatabaseServer {
         );
 
         let pool = Arc::new(
-            sys.block_on(l337::Pool::new(mgr, Default::default()))
+            l337::Pool::new(mgr, Default::default()).await
                 .expect("db error"),
         );
 
@@ -111,15 +118,26 @@ impl DatabaseServer {
                 .collect()
         }
     }
+}
 
-    fn sweep_tokens(&self) -> impl Future<Output = ()> {
+impl Actor for DatabaseServer {
+    fn started(&mut self, ctx: &mut Context<Self>) {
+        let f = self
+            .create_tables()
+            .map(|r| r.expect("Error creating SQL tables!"));
+        tokio::spawn(f);
+
+        ctx.notify_interval(self.sweep_interval, || Sweep);
+    }
+}
+
+impl Handler<Sweep> for DatabaseServer {
+    type Responder<'a> = impl Future<Output = ()> + 'a;
+
+    fn handle(&mut self, _: Sweep, ctx: &mut Context<Self>) -> Self::Responder<'_> {
         let begin = Instant::now();
-
-        let f = self.expired_tokens(self.token_expiry_days);
-        let sweep_interval = self.sweep_interval;
-
         async move {
-            f.await
+            self.expired_tokens(self.token_expiry_days).await
                 .map_err(|e| panic!("db error: {:#?}", e))
                 .unwrap()
                 .iter()
@@ -129,29 +147,14 @@ impl DatabaseServer {
                 });
 
             let time_taken = Instant::now().duration_since(begin);
-            if time_taken > sweep_interval {
+            if time_taken >  self.sweep_interval {
                 warn!(
                     "Took {}s to sweep the database for expired tokens, but the interval is {}s!",
                     time_taken.as_secs(),
-                    sweep_interval.as_secs(),
+                    self.sweep_interval.as_secs(),
                 );
             }
         }
-    }
-}
-
-impl Actor for DatabaseServer {
-    type Context = Context<Self>;
-
-    fn started(&mut self, ctx: &mut Context<Self>) {
-        let f = self
-            .create_tables()
-            .map(|r| r.expect("Error creating SQL tables!"));
-        Arbiter::spawn(f);
-
-        ctx.run_interval(self.sweep_interval, |db, ctx| {
-            ctx.spawn(db.sweep_tokens().into_actor(db));
-        });
     }
 }
 

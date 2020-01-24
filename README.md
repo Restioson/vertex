@@ -51,10 +51,9 @@ It is written in TOML.
 
 The server must also be provided with a certificate and private key pair. They should be named `cert.pem` and `key.pem`
 respectively, and be contained in the standard configuration directories, as is the config file. The private key must be
-encrypted, and its passphrase must be passed to the server through the `VERTEX_SERVER_KEY_PASS` environment variable.
+encrypted, and it must not have a passphrase.
 When using Docker, put the `cert.pem` and `key.pem` in the `server/docker/` folder. Upon changing these, please make
-sure to rebuild the docker image with `docker-compose up --build`. The passphrase is passed through the same variable 
-when using Docker too, e.g `VERTEX_SERVER_KEY_PASS=<pass> docker-compose up --build`.
+sure to rebuild the docker image with `docker-compose up --build`. 
 
 The server's log files can be found in the log folder, under the standard data directories:
 

@@ -1,11 +1,11 @@
 use crate::auth::HashSchemeVersion;
 use crate::database::{handle_error, handle_error_psql, DatabaseServer};
-use actix::{Context, Handler, Message, ResponseFuture};
 use chrono::{DateTime, Utc};
-use futures::TryFutureExt;
+use futures::{TryFutureExt, Future};
 use std::convert::TryFrom;
 use tokio_postgres::Row;
 use vertex_common::{DeviceId, ErrResponse, TokenPermissionFlags, UserId};
+use xtra::prelude::*;
 
 pub(super) const CREATE_TOKENS_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS login_tokens (
@@ -52,28 +52,36 @@ impl TryFrom<Row> for Token {
     }
 }
 
-#[derive(Message)]
-#[rtype(result = "Result<Option<Token>, ErrResponse>")]
 pub struct GetToken {
     pub device: DeviceId,
 }
 
-#[derive(Message)]
-#[rtype(result = "Result<(), ErrResponse>")]
+impl Message for GetToken {
+    type Result = Result<Option<Token>, ErrResponse>;
+}
+
 pub struct CreateToken(pub Token);
 
-#[derive(Message)]
-#[rtype(result = "Result<bool, ErrResponse>")]
+impl Message for CreateToken {
+    type Result = Result<(), ErrResponse>;
+}
+
 pub struct RevokeToken(pub DeviceId);
 
-#[derive(Message)]
-#[rtype(result = "Result<bool, ErrResponse>")]
+impl Message for RevokeToken {
+    type Result = Result<bool, ErrResponse>;
+}
+
 pub struct RefreshToken(pub DeviceId);
 
-impl Handler<GetToken> for DatabaseServer {
-    type Result = ResponseFuture<Result<Option<Token>, ErrResponse>>;
+impl Message for RefreshToken {
+    type Result = Result<bool, ErrResponse>;
+}
 
-    fn handle(&mut self, get: GetToken, _: &mut Context<Self>) -> Self::Result {
+impl Handler<GetToken> for DatabaseServer {
+    type Responder<'a> = impl Future<Output = Result<Option<Token>, ErrResponse>> + 'a;
+
+    fn handle(&mut self, get: GetToken, _: &mut Context<Self>) -> Self::Responder<'_> {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
@@ -98,9 +106,9 @@ impl Handler<GetToken> for DatabaseServer {
 }
 
 impl Handler<CreateToken> for DatabaseServer {
-    type Result = ResponseFuture<Result<(), ErrResponse>>;
+    type Responder<'a> = impl Future<Output = Result<(), ErrResponse>> + 'a;
 
-    fn handle(&mut self, create: CreateToken, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, create: CreateToken, _: &mut Context<Self>) -> Self::Responder<'_> {
         let token = create.0;
         let pool = self.pool.clone();
         Box::pin(async move {
@@ -146,9 +154,9 @@ impl Handler<CreateToken> for DatabaseServer {
 }
 
 impl Handler<RevokeToken> for DatabaseServer {
-    type Result = ResponseFuture<Result<bool, ErrResponse>>;
+    type Responder<'a> = impl Future<Output = Result<bool, ErrResponse>> + 'a;
 
-    fn handle(&mut self, revoke: RevokeToken, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, revoke: RevokeToken, _: &mut Context<Self>) -> Self::Responder<'_> {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
@@ -167,9 +175,9 @@ impl Handler<RevokeToken> for DatabaseServer {
 }
 
 impl Handler<RefreshToken> for DatabaseServer {
-    type Result = ResponseFuture<Result<bool, ErrResponse>>;
+    type Responder<'a> = impl Future<Output = Result<bool, ErrResponse>> + 'a;
 
-    fn handle(&mut self, revoke: RefreshToken, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, revoke: RefreshToken, _: &mut Context<Self>) -> Self::Responder<'_> {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;

@@ -1,30 +1,34 @@
 use crate::client::ClientWsSession;
 use crate::{IdentifiedMessage, SendMessage};
-use actix::{Actor, Addr, Context, Handler, Message, ResponseFuture};
 use dashmap::DashMap;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use uuid::Uuid;
 use vertex_common::*;
+use xtra::prelude::*;
 
 lazy_static! {
-    pub static ref COMMUNITIES: DashMap<CommunityId, Addr<CommunityActor>> = DashMap::new();
+    pub static ref COMMUNITIES: DashMap<CommunityId, Address<CommunityActor>> = DashMap::new();
 }
 
 pub struct UserInCommunity(CommunityId);
 
-#[derive(Message)]
-#[rtype(result = "()")]
 pub struct Connect {
     pub user: UserId,
     pub device: DeviceId,
-    pub session: Addr<ClientWsSession>,
+    pub session: Address<ClientWsSession>,
 }
 
-#[derive(Message)]
-#[rtype(result = "Result<bool, ErrResponse>")]
+impl Message for Connect {
+    type Result = ();
+}
+
 pub struct Join {
     pub user: UserId,
+}
+
+impl Message for Join {
+    type Result = Result<bool, ErrResponse>;
 }
 
 /// A community is a collection (or "house", if you will) of rooms, as well as some metadata.
@@ -34,12 +38,13 @@ pub struct CommunityActor {
     online_members: HashMap<UserId, OnlineMember>,
 }
 
-impl Actor for CommunityActor {
-    type Context = Context<Self>;
-}
+impl Actor for CommunityActor {}
 
 impl CommunityActor {
-    fn new(creator: UserId, online_devices: Vec<(DeviceId, Addr<ClientWsSession>)>) -> CommunityActor {
+    fn new(
+        creator: UserId,
+        online_devices: Vec<(DeviceId, Address<ClientWsSession>)>,
+    ) -> CommunityActor {
         let mut rooms = HashMap::new();
         rooms.insert(
             RoomId(Uuid::new_v4()),
@@ -63,10 +68,8 @@ impl CommunityActor {
     }
 }
 
-impl Handler<Connect> for CommunityActor {
-    type Result = ();
-
-    fn handle(&mut self, connect: Connect, _: &mut Context<Self>) -> Self::Result {
+impl SyncHandler<Connect> for CommunityActor {
+    fn handle(&mut self, connect: Connect, _: &mut Context<Self>) {
         let user = connect.user;
         let device = connect.device;
         let session = connect.session;
@@ -79,52 +82,43 @@ impl Handler<Connect> for CommunityActor {
     }
 }
 
-impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
-    type Result = Result<MessageId, ErrResponse>;
-
+impl SyncHandler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
     fn handle(
         &mut self,
         m: IdentifiedMessage<ClientSentMessage>,
         _: &mut Context<Self>,
-    ) -> Self::Result {
+    ) -> Result<MessageId, ErrResponse> {
         let from_device = m.device;
         let fwd = ForwardedMessage::from_message_author_device(m.message, m.user, m.device);
         let send = SendMessage(ServerMessage::Action(ServerAction::Message(fwd)));
 
-        self.online_members.values()
+        self.online_members
+            .values()
             .flat_map(|member| member.devices.iter())
             .filter(|(device, _)| *device != from_device)
-            .for_each(|(_, addr)| addr.do_send(send.clone()));
+            .for_each(|(_, addr)| addr.do_send(send.clone()).unwrap());
 
         Ok(MessageId(Uuid::new_v4()))
     }
 }
 
-impl Handler<IdentifiedMessage<Edit>> for CommunityActor {
-    type Result = Result<(), ErrResponse>; // TODO(room_persistence): just make ()
-
-    fn handle(
-        &mut self,
-        m: IdentifiedMessage<Edit>,
-        _: &mut Context<Self>,
-    ) -> Self::Result {
+impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
+    fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) -> Result<(), ErrResponse> {
         let from_device = m.device;
         let send = SendMessage(ServerMessage::Action(ServerAction::Edit(m.message)));
 
-        self.online_members.values()
+        self.online_members
+            .values()
             .flat_map(|member| member.devices.iter())
             .filter(|(device, _)| *device != from_device)
-            .for_each(|(_, addr)| addr.do_send(send.clone()));
+            .for_each(|(_, addr)| addr.do_send(send.clone()).unwrap());
 
         Ok(())
     }
 }
 
-
-impl Handler<Join> for CommunityActor {
-    type Result = ResponseFuture<Result<bool, ErrResponse>>;
-
-    fn handle(&mut self, join: Join, _: &mut Context<Self>) -> Self::Result {
+impl SyncHandler<Join> for CommunityActor {
+    fn handle(&mut self, join: Join, _: &mut Context<Self>) -> Result<bool, ErrResponse> {
         // TODO(implement)
         unimplemented!()
     }
@@ -132,11 +126,11 @@ impl Handler<Join> for CommunityActor {
 
 /// A member and all their online devices
 struct OnlineMember {
-    pub devices: Vec<(DeviceId, Addr<ClientWsSession>)>,
+    pub devices: Vec<(DeviceId, Address<ClientWsSession>)>,
 }
 
 impl OnlineMember {
-    fn new(session: Addr<ClientWsSession>, device: DeviceId) -> OnlineMember {
+    fn new(session: Address<ClientWsSession>, device: DeviceId) -> OnlineMember {
         OnlineMember {
             devices: vec![(device, session)],
         }
