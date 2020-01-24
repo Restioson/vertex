@@ -30,7 +30,7 @@ impl<T: Debug + Send + 'static> Message for SendMessage<T> {
     type Result = ();
 }
 
-/// Marker trait for `vertex_common` structs that are Actix messages too
+/// Marker trait for `vertex_common` structs that are actor messages too
 trait VertexActorMessage: Send + 'static {
     type Result: Send;
 }

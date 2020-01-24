@@ -805,8 +805,8 @@ impl ClientWsSession {
         async {
             let res = match user.await {
                 Ok(res) => res,
-                Err(mailbox_error) => {
-                    error!("Actix mailbox error: {:#?}", mailbox_error);
+                Err(e) => {
+                    error!("Xtra send error: {:#?}", e);
                     return Err(ErrResponse::Internal);
                 }
             };
@@ -832,8 +832,8 @@ impl ClientWsSession {
         async {
             let res = match user.await {
                 Ok(res) => res,
-                Err(mailbox_error) => {
-                    error!("Actix mailbox error: {:#?}", mailbox_error);
+                Err(e) => {
+                    error!("Xtra send error: {:#?}", e);
                     return Err(ErrResponse::Internal);
                 }
             };
