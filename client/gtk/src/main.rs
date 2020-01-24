@@ -104,7 +104,7 @@ impl Update for Win {
     type Msg = VertexMsg;
 
     fn model(_relm: &Relm<Win>, args: VertexArgs) -> VertexModel {
-        let ip = args.ip.clone().unwrap_or("127.0.0.1:8080".to_string());
+        let ip = args.ip.clone().unwrap_or("localhost:8080".to_string());
         println!("Connecting to {}", ip);
 
         let executor = LocalPool::new();
@@ -112,7 +112,7 @@ impl Update for Win {
         let (action_send, action_recv) = mpsc::unbounded_channel();
 
         let vertex = futures::executor::block_on(async {
-            let url = Url::parse(&format!("wss://{}/client/", ip)).unwrap();
+            let url = Url::parse(&format!("https://{}/client/", ip)).unwrap();
             Vertex::connect(url).await.expect("failed to connect")
         });
         let vertex = Rc::new(vertex);
