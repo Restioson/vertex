@@ -1,22 +1,26 @@
 [package]
 name = "vertex_client_gtk"
 version = "0.1.0"
-authors = ["Restioson <restiosondev@gmail.com>"]
+authors = ["Restioson <restiosondev@gmail.com>", "gegy1000 <gegy1000@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-gio = "^0.6"
-glib = "^0.7"
-url = "^1.7"
-uuid = { version = "^0.7", features = ["serde", "v4"] }
-gtk = { version = "^0.6", features = ["v3_20"] }
-relm = "^0.16"
-relm-derive = "^0.16"
-clap = "^2.33"
+gio = "0.8"
+glib = "0.9"
+gtk = { version = "^0.7", features = ["v3_20"] }
+relm = "0.18"
+relm-derive = "0.18"
+clap = "2.33"
+
+url = "2.1"
+uuid = { version = "^0.8", features = ["serde", "v4"] }
 keyring = "^0.7"
 serde = "^1"
 serde_derive = "^1"
 serde_json = "^1"
+
+futures = "0.3"
+tokio = "0.2"
 
 vertex_client_backend = { path = "../backend/" }
 vertex_common = { path = "../../common" }

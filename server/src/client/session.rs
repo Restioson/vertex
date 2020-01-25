@@ -1,20 +1,35 @@
 use super::*;
-use crate::auth;
+use crate::community::COMMUNITIES;
 use crate::config::Config;
 use crate::database::*;
-use crate::federation::FederationServer;
-use crate::SendMessage;
-use actix::fut;
-use actix_web::web::Data;
-use actix_web_actors::ws::{self, WebsocketContext};
+use crate::{auth, IdentifiedMessage, SendMessage};
 use chrono::DateTime;
 use chrono::Utc;
-use futures::future::{self, Either};
+use futures::stream::SplitSink;
+use futures::{TryFutureExt, Future, SinkExt};
+use log::error;
 use rand::RngCore;
 use std::io::Cursor;
 use std::time::Instant;
 use uuid::Uuid;
 use vertex_common::*;
+use xtra::prelude::*;
+use warp::filters::ws;
+use warp::filters::ws::WebSocket;
+use std::sync::Arc;
+use xtra::Disconnected;
+
+pub struct WebSocketMessage(pub(crate) Result<ws::Message, warp::Error>);
+
+impl Message for WebSocketMessage {
+    type Result = ();
+}
+
+struct CheckHeartbeat;
+
+impl Message for CheckHeartbeat {
+    type Result = ();
+}
 
 #[derive(Eq, PartialEq)]
 enum SessionState {
@@ -23,170 +38,185 @@ enum SessionState {
 }
 
 impl SessionState {
-    fn user_and_device_ids(&self) -> Option<(UserId, DeviceId)> {
+    fn user_and_devices(&self) -> Option<(UserId, DeviceId)> {
         match self {
             SessionState::WaitingForLogin => None,
-            SessionState::Ready(user_id, device_id, _) => Some((*user_id, *device_id)),
+            SessionState::Ready(user, device, _) => Some((*user, *device)),
         }
     }
 }
 
 pub struct ClientWsSession {
-    client_server: Addr<ClientServer>,
-    database_server: Addr<DatabaseServer>,
-    federation_server: Addr<FederationServer>,
+    sender: SplitSink<WebSocket, ws::Message>,
+    database_server: Address<DatabaseServer>,
+    communities: Vec<CommunityId>,
     state: SessionState,
     heartbeat: Instant,
-    config: Data<Config>,
+    config: Arc<Config>,
 }
 
 impl Actor for ClientWsSession {
-    type Context = WebsocketContext<Self>;
-
-    fn started(&mut self, ctx: &mut WebsocketContext<Self>) {
-        self.start_heartbeat(ctx);
+    fn started(&mut self, ctx: &mut Context<Self>) {
+        ctx.notify_interval(HEARTBEAT_TIMEOUT, || CheckHeartbeat);
     }
 
-    fn stopped(&mut self, _ctx: &mut WebsocketContext<Self>) {
-        if let Some((user_id, device_id)) = self.state.user_and_device_ids() {
-            self.client_server
-                .do_send(Disconnect { user_id, device_id });
+    fn stopped(&mut self, _ctx: &mut Context<Self>) {
+        if let Some(_) = self.state.user_and_devices() {
+            self.delete();
         }
     }
 }
 
-impl StreamHandler<ws::Message, ws::ProtocolError> for ClientWsSession {
-    fn handle(&mut self, msg: ws::Message, ctx: &mut WebsocketContext<Self>) {
-        match msg {
-            ws::Message::Ping(msg) => {
+impl Handler<CheckHeartbeat> for ClientWsSession {
+    type Responder<'a> = impl Future<Output = ()> + 'a;
+
+    fn handle(&mut self, _: CheckHeartbeat, ctx: &mut Context<Self>) -> Self::Responder<'_> {
+        if Instant::now().duration_since(self.heartbeat) > HEARTBEAT_TIMEOUT {
+            ctx.stop();
+        }
+
+        async {}
+    }
+}
+
+impl Handler<WebSocketMessage> for ClientWsSession {
+    type Responder<'a> = impl Future<Output = ()> + 'a;
+
+    fn handle<'a>(
+        &'a mut self,
+        msg: WebSocketMessage,
+        ctx: &'a mut Context<Self>,
+    ) -> Self::Responder<'a> {
+        async move {
+            let msg = if let Ok(msg) = msg.0 {
+                msg
+            } else {
+                self.delete();
+                return;
+            };
+
+            if msg.is_ping() {
                 self.heartbeat = Instant::now();
-                ctx.pong(&msg);
-            }
-            ws::Message::Pong(_) => {
-                self.heartbeat = Instant::now();
-            }
-            ws::Message::Text(_) => {
-                let error =
-                    serde_cbor::to_vec(&ServerMessage::Error(ServerError::UnexpectedTextFrame))
-                        .unwrap();
-                ctx.binary(error);
-            }
-            ws::Message::Binary(bin) => {
-                let mut bin = Cursor::new(bin);
-                let msg = match serde_cbor::from_reader(&mut bin) {
+                if let Err(_) = self.sender.send(ws::Message::ping(vec![])).await {
+                    ctx.stop();
+                }
+            } else if msg.is_close() {
+                ctx.stop()
+            } else if msg.is_binary() {
+                let mut bin = Cursor::new(msg.as_bytes());
+                let msg: ClientMessage = match serde_cbor::from_reader(&mut bin) {
                     Ok(m) => m,
                     Err(_) => {
-                        let error =
-                            serde_cbor::to_vec(&ServerMessage::Error(ServerError::InvalidMessage))
-                                .unwrap();
-                        return ctx.binary(error);
+                        let msg = serde_cbor::to_vec(&ServerMessage::MalformedMessage).unwrap();
+                        if let Err(_) = self.send(msg).await {
+                            ctx.stop();
+                        }
+                        return;
                     }
                 };
 
-                self.handle_message(msg, ctx);
-            }
-            ws::Message::Close(_) => {
-                if let Some((user_id, device_id)) = self.state.user_and_device_ids() {
-                    self.client_server
-                        .do_send(Disconnect { user_id, device_id });
+                self.handle_message(msg, ctx).await;
+            } else {
+                let msg = serde_cbor::to_vec(&ServerMessage::MalformedMessage).unwrap();
+                if let Err(_) = self.send(msg).await {
+                    ctx.stop()
                 }
-                ctx.stop();
             }
-            ws::Message::Nop => (),
         }
     }
 }
 
 impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
-    type Result = ();
+    type Responder<'a> = impl Future<Output = ()> + 'a;
 
-    fn handle(&mut self, msg: SendMessage<ServerMessage>, ctx: &mut WebsocketContext<Self>) {
-        ctx.binary(msg);
+    fn handle<'a>(&'a mut self, msg: SendMessage<ServerMessage>, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
+        async move {
+            if let Err(_) = self.send(msg.0).await {
+                ctx.stop()
+            }
+        }
     }
 }
 
 impl Handler<LogoutThisSession> for ClientWsSession {
-    type Result = ();
+    type Responder<'a> = impl Future<Output = ()> + 'a;
 
-    fn handle(&mut self, _: LogoutThisSession, ctx: &mut WebsocketContext<Self>) {
-        ctx.binary(ServerMessage::SessionLoggedOut);
-        self.state = SessionState::WaitingForLogin;
+    fn handle(&mut self, _: LogoutThisSession, _: &mut Context<Self>) -> Self::Responder<'_>  {
+        async move {
+            let _ = self.send(ServerMessage::Action(ServerAction::SessionLoggedOut)).await;
+            self.delete();
+        }
     }
 }
 
 impl ClientWsSession {
-    pub fn new(
-        client_server: Addr<ClientServer>,
-        federation_server: Addr<FederationServer>,
-        database_server: Addr<DatabaseServer>,
-        config: Data<Config>,
-    ) -> Self {
+    pub fn new(sender: SplitSink<WebSocket, ws::Message>, database_server: Address<DatabaseServer>, config: Arc<Config>) -> Self {
         ClientWsSession {
-            client_server,
+            sender,
             database_server,
-            federation_server,
+            communities: Vec::new(),
             state: SessionState::WaitingForLogin,
             heartbeat: Instant::now(),
             config,
         }
     }
 
+    async fn send<M: Into<Vec<u8>>>(&mut self, msg: M) -> Result<(), warp::Error> {
+        self.sender.send(ws::Message::binary(msg)).await
+    }
+
     fn logged_in(&self) -> bool {
-        self.state.user_and_device_ids().is_some()
+        self.state.user_and_devices().is_some()
     }
 
-    fn start_heartbeat(&mut self, ctx: &mut WebsocketContext<Self>) {
-        ctx.run_interval(HEARTBEAT_TIMEOUT, |session, ctx| {
-            if Instant::now().duration_since(session.heartbeat) > HEARTBEAT_TIMEOUT {
-                if let Some((user_id, device_id)) = session.state.user_and_device_ids() {
-                    session
-                        .client_server
-                        .do_send(Disconnect { user_id, device_id });
+    /// Remove the device from wherever it is referenced
+    fn delete(&mut self) {
+        if let Some((user_id, device)) = self.state.user_and_devices() {
+            if let Some(mut user) = USERS.get_mut(&user_id) {
+                // Remove the device
+                let devices = &mut user.sessions;
+                if let Some(idx) = devices.iter().position(|(id, _)| *id == device) {
+                    devices.remove(idx);
+
+                    // Remove the entire user entry if they are no longer online
+                    if devices.len() == 0 {
+                        drop(user); // Prevent double lock on USERS
+                        USERS.remove(&user_id);
+                    }
                 }
-                ctx.stop();
             }
-        });
+        }
     }
 
-    /// Responds to a request with a future which will eventually resolve to the request response
-    fn respond<F>(&mut self, fut: F, request_id: RequestId, ctx: &mut WebsocketContext<Self>)
-    where
-        F: ActorFuture<Item = RequestResponse, Error = MailboxError, Actor = Self> + 'static,
-    {
-        fut.then(move |response, _act, ctx| {
-            let response = ServerMessage::Response {
-                response: if let Ok(r) = response {
-                    r
-                } else {
-                    RequestResponse::Error(ServerError::Internal)
-                },
-                request_id,
-            };
-
-            ctx.binary(response);
-            fut::ok(())
-        })
-        .wait(ctx);
-    }
-
-    fn respond_error(
+    async fn respond(
         &mut self,
-        error: ServerError,
-        id: RequestId,
-        ctx: &mut WebsocketContext<Self>,
+        response: Result<OkResponse, ErrResponse>,
+        request: RequestId,
+        ctx: &mut Context<Self>,
     ) {
-        ctx.binary(ServerMessage::Response {
-            response: RequestResponse::Error(error),
-            request_id: id,
-        });
+        let response = ServerMessage::Response {
+            result: response,
+            id: request,
+        };
+
+        if let Err(_) = self.send(response).await {
+            ctx.stop()
+        }
     }
 
-    fn handle_message(&mut self, req: ClientRequest, ctx: &mut WebsocketContext<Self>) {
-        match req.message {
-            ClientMessage::Login { device_id, token } => {
-                self.login(device_id, token, req.request_id, ctx)
-            }
-            ClientMessage::CreateToken {
+    async fn respond_error(
+        &mut self,
+        error: ErrResponse,
+        request: RequestId,
+        ctx: &mut Context<Self>,
+    ) {
+        self.respond(Err(error), request, ctx).await
+    }
+
+    async fn handle_message(&mut self, req: ClientMessage, ctx: &mut Context<Self>) {
+        let res = match req.request {
+            ClientRequest::Login { device, token } => self.login(device, token, req.id, ctx).await,
+            ClientRequest::CreateToken {
                 username,
                 password,
                 device_name,
@@ -198,614 +228,623 @@ impl ClientWsSession {
                 device_name,
                 expiration_date,
                 permission_flags,
-                req.request_id,
+                req.id,
                 ctx,
-            ),
-            ClientMessage::CreateUser {
+            ).await,
+            ClientRequest::CreateUser {
                 username,
                 display_name,
                 password,
-            } => self.create_user(username, display_name, password, req.request_id, ctx),
-            ClientMessage::RefreshToken {
-                device_id,
+            } => self.create_user(username, display_name, password, req.id, ctx).await,
+            ClientRequest::RefreshToken {
+                device,
                 username,
                 password,
-            } => self.refresh_token(device_id, username, password, req.request_id, ctx),
-            m => self.handle_authenticated_message(m, req.request_id, ctx),
+            } => self.refresh_token(device, username, password, req.id, ctx).await,
+            m => self.handle_authenticated_message(m, req.id, ctx).await,
         };
+
+        if let Err(e) = res {
+            error!("Xtra send error: {:?}", e);
+            self.respond_error(ErrResponse::Internal, req.id, ctx).await;
+        }
     }
 
-    fn handle_authenticated_message(
+    async fn handle_authenticated_message(
         &mut self,
-        msg: ClientMessage,
-        request_id: RequestId,
-        ctx: &mut WebsocketContext<Self>,
-    ) {
+        msg: ClientRequest,
+        request: RequestId,
+        ctx: &mut Context<Self>,
+    ) -> Result<(), Disconnected> {
         match self.state {
-            SessionState::WaitingForLogin => self.respond(
-                futures::future::ok(RequestResponse::Error(ServerError::NotLoggedIn))
-                    .into_actor(self),
-                request_id,
-                ctx,
-            ),
-            SessionState::Ready(user_id, device_id, perms) => match msg {
-                ClientMessage::SendMessage(msg) => {
-                    if !perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
-                        return;
-                    }
-
-                    self.respond(
-                        self.client_server
-                            .send(IdentifiedMessage {
-                                user_id,
-                                device_id,
-                                request_id,
-                                msg,
-                            })
-                            .into_actor(self),
-                        request_id,
-                        ctx,
-                    )
+            SessionState::WaitingForLogin => {
+                self.respond(Err(ErrResponse::NotLoggedIn), request, ctx).await;
+                Ok(())
+            }
+            SessionState::Ready(user, device, perms) => match msg {
+                ClientRequest::SendMessage(msg) => {
+                    self.send_message(msg, user, device, perms, request, ctx).await
                 }
-                ClientMessage::EditMessage(edit) => {
-                    // TODO when history is implemented, narrow this down according to sender too
-                    if !perms.has_perms(TokenPermissionFlags::EDIT_ANY_MESSAGES) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
-                        return;
-                    }
-
-                    self.respond(
-                        self.client_server
-                            .send(IdentifiedMessage {
-                                user_id,
-                                device_id,
-                                request_id,
-                                msg: edit,
-                            })
-                            .into_actor(self),
-                        request_id,
-                        ctx,
-                    )
+                ClientRequest::EditMessage(edit) => {
+                    self.edit_message(edit, user, device, perms, request, ctx).await
                 }
-                ClientMessage::JoinRoom(room) => {
-                    if !perms.has_perms(TokenPermissionFlags::JOIN_ROOMS) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
-                        return;
-                    }
-
-                    self.respond(
-                        self.client_server
-                            .send(IdentifiedMessage {
-                                user_id,
-                                device_id,
-                                request_id,
-                                msg: Join { room },
-                            })
-                            .into_actor(self),
-                        request_id,
-                        ctx,
-                    )
+                ClientRequest::JoinCommunity(community) => {
+                    unimplemented!() // TODO(implement)
                 }
-                ClientMessage::CreateRoom => {
-                    if !perms.has_perms(TokenPermissionFlags::CREATE_ROOMS) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
-                        return;
-                    }
-
-                    self.respond(
-                        self.client_server
-                            .send(IdentifiedMessage {
-                                user_id,
-                                device_id,
-                                request_id,
-                                msg: CreateRoom,
-                            })
-                            .into_actor(self),
-                        request_id,
-                        ctx,
-                    )
+                ClientRequest::CreateCommunity { name } => {
+                    unimplemented!() // TODO(implement)
                 }
-                ClientMessage::RevokeToken {
-                    device_id: to_revoke,
+                ClientRequest::RevokeToken {
+                    device: to_revoke,
                     password,
-                } => self.revoke_token(to_revoke, password, user_id, device_id, request_id, ctx),
-                ClientMessage::ChangeUsername { new_username } => {
-                    if !perms.has_perms(TokenPermissionFlags::CHANGE_USERNAME) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
-                        return;
-                    }
-
-                    self.change_username(new_username, user_id, request_id, ctx)
+                } => self.revoke_token(to_revoke, password, user, device, request, ctx).await,
+                ClientRequest::ChangeUsername { new_username } => {
+                    self.change_username(new_username, user, perms, request, ctx).await
                 }
-                ClientMessage::ChangeDisplayName { new_display_name } => {
-                    if !perms.has_perms(TokenPermissionFlags::CHANGE_DISPLAY_NAME) {
-                        self.respond_error(ServerError::AccessDenied, request_id, ctx);
-                        return;
-                    }
-
-                    self.change_display_name(new_display_name, user_id, request_id, ctx)
+                ClientRequest::ChangeDisplayName { new_display_name } => {
+                    self.change_display_name(new_display_name, user, request, perms, ctx).await
                 }
-                ClientMessage::ChangePassword {
+                ClientRequest::ChangePassword {
                     old_password,
                     new_password,
-                } => self.change_password(old_password, new_password, user_id, request_id, ctx),
+                } => self.change_password(old_password, new_password, user, request, ctx).await,
                 _ => unreachable!(),
             },
         }
     }
 
-    fn login(
+    async fn send_message(
         &mut self,
-        device_id: DeviceId,
-        login_token: AuthToken,
-        request_id: RequestId,
-        ctx: &mut WebsocketContext<Self>,
-    ) {
-        if self.logged_in() {
-            ctx.binary(ServerMessage::Response {
-                response: RequestResponse::Error(ServerError::AlreadyLoggedIn),
-                request_id,
-            })
+        message: ClientSentMessage,
+        user: UserId,
+        device: DeviceId,
+        perms: TokenPermissionFlags,
+        request: RequestId,
+        ctx: &mut Context<Self>,
+    ) -> Result<(), Disconnected> {
+        if !perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
+            self.respond_error(ErrResponse::AccessDenied, request, ctx).await;
+            return Ok(());
         }
 
-        let fut = self
-            .database_server
-            .send(GetToken { device_id })
-            .into_actor(self)
-            .and_then(move |token_opt, act, _ctx| match token_opt {
-                Ok(Some(token)) => fut::Either::A(
-                    act.database_server
-                        .send(GetUserById(token.user_id))
-                        .and_then(move |user_opt| match user_opt {
-                            Ok(Some(user)) => future::ok(Ok((token, user))),
-                            Ok(None) => future::ok(Err(ServerError::InvalidToken)),
-                            Err(e) => future::ok(Err(e)),
-                        })
-                        .into_actor(act),
-                ),
-                Ok(None) => fut::Either::B(fut::ok(Err(ServerError::InvalidToken))),
-                Err(e) => fut::Either::B(fut::ok(Err(e))),
-            })
-            .map(|res, act, _ctx| match res {
-                Ok((token, user)) => {
-                    let token_stale_days = act.config.token_stale_days as i64;
+        if !self.communities.contains(&message.to_community) {
+            self.respond_error(ErrResponse::InvalidCommunity, request, ctx).await;
+            return Ok(());
+        }
 
-                    if user.locked {
-                        Err(ServerError::UserLocked)
-                    } else if user.banned {
-                        Err(ServerError::UserBanned)
-                    } else if user.compromised {
-                        Err(ServerError::UserCompromised)
-                    } else if (Utc::now() - token.last_used).num_days() > token_stale_days {
-                        Err(ServerError::StaleToken)
-                    } else {
-                        Ok(token)
-                    }
-                }
+        if let Some(community) = COMMUNITIES.get(&message.to_community) {
+            let msg = IdentifiedMessage {
+                user,
+                device,
+                message,
+            };
+            let res = community.send(msg).map_ok(|res| match res {
+                Ok(id) => Ok(OkResponse::MessageId { id }),
                 Err(e) => Err(e),
-            })
-            .and_then(|res, act, _ctx| match res {
-                Ok(token) => {
-                    let Token {
-                        token_hash,
-                        hash_scheme_version,
-                        user_id,
-                        device_id,
-                        permission_flags,
-                        ..
-                    } = token;
+            }).await?;
 
-                    if login_token.0.len() > auth::MAX_TOKEN_LENGTH {
-                        fut::Either::B(fut::ok(Err(ServerError::InvalidToken)))
-                    } else {
-                        fut::Either::A(
-                            auth::verify(login_token.0, token_hash, hash_scheme_version)
-                                .map(move |matches| {
-                                    if matches {
-                                        Ok((user_id, device_id, permission_flags))
-                                    } else {
-                                        Err(ServerError::InvalidToken)
-                                    }
-                                })
-                                .into_actor(act),
-                        )
-                    }
-                }
-                Err(e) => fut::Either::B(fut::ok(Err(e))),
-            })
-            .and_then(move |res, act, _ctx| match res {
-                Ok((user_id, device_id, perms)) => fut::Either::A(
-                    act.database_server
-                        .send(RefreshToken(device_id))
-                        .map(move |res| match res {
-                            Ok(true) => Ok((user_id, device_id, perms)),
-                            Ok(false) => Err(ServerError::DeviceDoesNotExist),
-                            Err(e) => Err(e),
-                        })
-                        .into_actor(act),
-                ),
-                Err(e) => fut::Either::B(fut::ok(Err(e))),
-            })
-            .and_then(move |res, act, ctx| match res {
-                Ok((user_id, device_id, perms)) => fut::Either::A(
-                    act.client_server
-                        .send(Connect {
-                            session: ctx.address(),
-                            device_id,
-                            user_id,
-                        })
-                        .map(move |_| Ok((user_id, device_id, perms)))
-                        .into_actor(act),
-                ),
-                Err(e) => fut::Either::B(fut::ok(Err(e))),
-            })
-            .map(move |res, act, _ctx| match res {
-                Ok((user_id, device_id, perms)) => {
-                    act.state = SessionState::Ready(user_id, device_id, perms);
-                    RequestResponse::user(user_id)
-                }
-                Err(e) => RequestResponse::Error(e),
-            });
+            self.respond(res, request, ctx).await;
+            Ok(())
+        } else {
+            self.communities.remove_item(&message.to_community);
+            self.respond_error(ErrResponse::InvalidCommunity, request, ctx).await;
 
-        self.respond(fut, request_id, ctx)
+            let res = self.send(ServerMessage::Action(ServerAction::LeftCommunity(
+                LeftCommunityReason::Deleted,
+            ))).await;
+
+            if let Err(_) = res {
+                ctx.stop();
+            }
+
+            Ok(())
+        }
     }
 
-    fn create_token(
+    async fn edit_message(
+        &mut self,
+        edit: Edit,
+        user: UserId,
+        device: DeviceId,
+        perms: TokenPermissionFlags,
+        request: RequestId,
+        ctx: &mut Context<Self>,
+    ) -> Result<(), Disconnected> {
+        if !perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
+            self.respond_error(ErrResponse::AccessDenied, request, ctx).await;
+            return Ok(());
+        }
+
+        if !self.communities.contains(&edit.community) {
+            self.respond_error(ErrResponse::InvalidCommunity, request, ctx).await;
+            return Ok(());
+        }
+
+        if let Some(community) = COMMUNITIES.get(&edit.community) {
+            let msg = IdentifiedMessage {
+                user,
+                device,
+                message: edit,
+            };
+
+            let res = community.send(msg).map_ok(|res| match res {
+                Ok(()) => Ok(OkResponse::NoData),
+                Err(e) => Err(e),
+            }).await?;
+
+            self.respond(res, request, ctx).await;
+        } else {
+            self.communities.remove_item(&edit.community);
+            self.respond_error(ErrResponse::InvalidCommunity, request, ctx).await;
+
+            let res = self.send(ServerMessage::Action(ServerAction::LeftCommunity(
+                LeftCommunityReason::Deleted,
+            ))).await;
+
+            if let Err(_) = res {
+                ctx.stop();
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn login(
+        &mut self,
+        device: DeviceId,
+        token_str: AuthToken,
+        request: RequestId,
+        ctx: &mut Context<Self>,
+    ) -> Result<(), Disconnected> {
+        if self.logged_in() {
+            self.respond_error(ErrResponse::AlreadyLoggedIn, request, ctx).await;
+            return Ok(());
+        }
+
+        let token = match self.database_server.send(GetToken { device }).await? {
+            Ok(Some(token)) => token,
+            Ok(None) => {
+                self.respond_error(ErrResponse::InvalidToken, request, ctx).await;
+                return Ok(());
+            },
+            Err(e) => {
+                self.respond_error(e, request, ctx).await;
+                return Ok(());
+            },
+        };
+
+        let user = match self.database_server.send(GetUserById(token.user)).await? {
+            Ok(Some(user)) => user,
+            Ok(None) => {
+                self.respond_error(ErrResponse::InvalidUser, request, ctx).await;
+                return Ok(());
+            },
+            Err(e) => {
+                self.respond_error(e, request, ctx).await;
+                return Ok(());
+            },
+        };
+
+        // Check if can log in with this token
+        if user.locked {
+            self.respond_error(ErrResponse::UserLocked, request, ctx).await;
+            return Ok(());
+        } else if user.banned {
+            self.respond_error(ErrResponse::UserBanned, request, ctx).await;
+            return Ok(());
+        } else if user.compromised {
+            self.respond_error(ErrResponse::UserCompromised, request, ctx).await;
+            return Ok(());
+        } else if (Utc::now() - token.last_used).num_days() > self.config.token_stale_days as i64 {
+            self.respond_error(ErrResponse::StaleToken, request, ctx).await;
+            return Ok(());
+        }
+
+        if token_str.0.len() > auth::MAX_TOKEN_LENGTH {
+            self.respond_error(ErrResponse::InvalidToken, request, ctx).await;
+            return Ok(());
+        }
+
+        let Token {
+            token_hash,
+            hash_scheme_version,
+            user,
+            permission_flags,
+            ..
+        } = token;
+        let matches = auth::verify(token_str.0, token_hash, hash_scheme_version).await;
+
+        if !matches {
+            self.respond_error(ErrResponse::InvalidToken, request, ctx).await;
+            return Ok(());
+        }
+
+        let res = match self.database_server.send(RefreshToken(device)).await? {
+            Ok(true) => (user, permission_flags),
+            Ok(false) => {
+                self.respond_error(ErrResponse::InvalidToken, request, ctx).await;
+                return Ok(());
+            },
+            Err(e) => {
+                self.respond_error(e, request, ctx).await;
+                return Ok(());
+            },
+        };
+
+        let (user, perms) = res;
+        let addr = ctx.address().unwrap();
+        let mut inserted = false;
+
+        // Add this user to the users map
+        USERS
+            .entry(user)
+            .and_modify(move |user| {
+                if user.sessions.iter().find(|(id, _)| *id == device).is_none() {
+                    inserted = true;
+                    user.sessions.push((device, addr));
+                }
+            })
+            .or_insert_with(|| {
+                inserted = true;
+                UserSessions::new((device, ctx.address().unwrap()))
+            });
+
+        // This token is currently in use on another device
+        if !inserted {
+            self.respond_error(ErrResponse::TokenInUse, request, ctx).await;
+        } else {
+            self.state = SessionState::Ready(user, device, perms);
+            self.respond(Ok(OkResponse::User { id: user }), request, ctx).await;
+        }
+
+        Ok(())
+    }
+
+    async fn create_token(
         &mut self,
         username: String,
         password: String,
         device_name: Option<String>,
         expiration_date: Option<DateTime<Utc>>,
         permission_flags: TokenPermissionFlags,
-        request_id: RequestId,
-        ctx: &mut WebsocketContext<Self>,
-    ) {
+        request: RequestId,
+        ctx: &mut Context<Self>,
+    ) -> Result<(), Disconnected> {
         let mut token_bytes: [u8; 32] = [0; 32]; // 256 bits
         rand::thread_rng().fill_bytes(&mut token_bytes);
         let token_string = base64::encode(&token_bytes);
         let auth_token = AuthToken(token_string.clone());
-        let username = auth::process_username(&username, self.config.get_ref());
+        let username = auth::process_username(&username, &self.config);
 
-        let fut = self
-            .verify_username_password(username, password)
-            .and_then(|user_id| {
-                auth::hash(token_string).map(move |(hash, ver)| (hash, ver, user_id))
-            })
-            .into_actor(self)
-            .and_then(
-                move |(hash, hash_version, user_id), act, _ctx| match user_id {
-                    Ok(user_id) => {
-                        let device_id = DeviceId(Uuid::new_v4());
-                        let token = Token {
-                            token_hash: hash,
-                            hash_scheme_version: hash_version,
-                            user_id,
-                            device_id,
-                            device_name,
-                            last_used: Utc::now(),
-                            expiration_date,
-                            permission_flags,
-                        };
+        let verify = self.verify_username_password(username, password);
+        let db_server = self.database_server.clone();
 
-                        fut::Either::A(
-                            act.database_server
-                                .send(CreateToken(token))
-                                .map(move |res| match res {
-                                    Ok(_) => Ok((device_id, auth_token)),
-                                    Err(e) => Err(e),
-                                })
-                                .into_actor(act),
-                        )
-                    }
-                    Err(e) => fut::Either::B(fut::ok(Err(e))),
-                },
-            )
-            .map(move |res, _act, _ctx| match res {
-                Ok((device_id, token)) => RequestResponse::token(device_id, token),
-                Err(e) => RequestResponse::Error(e),
-            });
+        let user = match verify.await {
+            Ok(id) => id,
+            Err(e) => {
+                self.respond_error(e, request, ctx).await;
+                return Ok(());
+            },
+        };
 
-        self.respond(fut, request_id, ctx)
+        let (token_hash, hash_scheme_version) = auth::hash(token_string).await;
+
+        let device = DeviceId(Uuid::new_v4());
+        let token = Token {
+            token_hash,
+            hash_scheme_version,
+            user,
+            device,
+            device_name,
+            last_used: Utc::now(),
+            expiration_date,
+            permission_flags,
+        };
+
+        if let Err(e) = db_server.send(CreateToken(token)).await? {
+            self.respond_error(e, request, ctx).await;
+            return Ok(());
+        }
+
+        let res = Ok(OkResponse::Token {
+            device,
+            token: auth_token,
+        });
+
+        self.respond(res, request, ctx).await;
+        Ok(())
     }
 
-    fn revoke_token(
+    async fn revoke_token(
         &mut self,
         to_revoke: DeviceId,
         password: Option<String>,
-        user_id: UserId,
-        current_device_id: DeviceId,
-        request_id: RequestId,
-        ctx: &mut WebsocketContext<Self>,
-    ) {
-        let fut = if to_revoke != current_device_id {
-            Either::A(self.verify_user_id_password(user_id, password.unwrap()))
-        } else {
-            Either::B(future::ok(Ok(())))
-        }
-        .into_actor(self)
-        .and_then(move |res, act, _ctx| match res {
-            Ok(()) => fut::Either::A(
-                act.database_server
-                    .send(RevokeToken(to_revoke))
-                    .map(|res| match res {
-                        Ok(true) => Ok(()),
-                        Ok(false) => Err(ServerError::DeviceDoesNotExist),
-                        Err(e) => Err(e),
-                    })
-                    .into_actor(act),
-            ),
-            Err(e) => fut::Either::B(fut::ok(Err(e))),
-        })
-        .and_then(move |res, act, _ctx| match res {
-            Ok(()) => {
-                if to_revoke == current_device_id {
-                    act.state = SessionState::WaitingForLogin;
-                    fut::Either::A(
-                        act.client_server
-                            .send(Disconnect {
-                                user_id,
-                                device_id: current_device_id,
-                            })
-                            .map(|_| Ok(()))
-                            .into_actor(act),
-                    )
-                } else {
-                    fut::Either::B(fut::ok(Ok(())))
-                }
-            }
-            Err(e) => fut::Either::B(fut::ok(Err(e))),
-        })
-        .map(|res, _act, _ctx| match res {
-            Ok(()) => RequestResponse::success(),
-            Err(e) => RequestResponse::Error(e),
-        });
+        user: UserId,
+        current_device: DeviceId,
+        request: RequestId,
+        ctx: &mut Context<Self>,
+    ) -> Result<(), Disconnected> {
+        if to_revoke != current_device {
+            let password = match password {
+                Some(password) => password,
+                None => {
+                    self.respond_error(ErrResponse::AccessDenied, request, ctx).await;
+                    return Ok(());
+                },
+            };
 
-        self.respond(fut, request_id, ctx)
+            if let Err(e) = self.verify_user_password(user, password).await {
+                self.respond_error(e.into(), request, ctx).await;
+                return Ok(());
+            }
+        }
+
+        let res = self.database_server.send(RevokeToken(to_revoke)).await?;
+        match res {
+            Ok(false) => {
+                self.respond_error(ErrResponse::DeviceDoesNotExist.into(), request, ctx).await;
+                return Ok(());
+            },
+            Err(e) => {
+                self.respond_error(e.into(), request, ctx).await;
+                return Ok(());
+            },
+            _ => (),
+        }
+
+        if to_revoke == current_device {
+            ctx.notify_immediately(LogoutThisSession);
+        }
+
+        self.respond(Ok(OkResponse::NoData), request, ctx).await;
+
+        Ok(())
     }
 
-    fn refresh_token(
+    async fn refresh_token(
         &mut self,
         to_refresh: DeviceId,
         username: String,
         password: String,
-        request_id: RequestId,
-        ctx: &mut WebsocketContext<Self>,
-    ) {
-        let fut = self
-            .verify_username_password(username, password)
-            .into_actor(self)
-            .and_then(move |res, act, _ctx| match res {
-                Ok(_) => fut::Either::A(
-                    act.database_server
-                        .send(RefreshToken(to_refresh))
-                        .map(|res| match res {
-                            Ok(true) => Ok(()),
-                            Ok(false) => Err(ServerError::DeviceDoesNotExist),
-                            Err(e) => Err(e),
-                        })
-                        .into_actor(act),
-                ),
-                Err(e) => fut::Either::B(fut::ok(Err(e))),
-            })
-            .map(|res, _act, _ctx| match res {
-                Ok(()) => RequestResponse::success(),
-                Err(e) => RequestResponse::Error(e),
-            });
+        request: RequestId,
+        ctx: &mut Context<Self>,
+    )  -> Result<(), Disconnected> {
+        if let Err(e) = self.verify_username_password(username, password).await {
+            self.respond_error(e, request, ctx).await;
+            return Ok(());
+        }
 
-        self.respond(fut, request_id, ctx)
+        let res = self.database_server.send(RefreshToken(to_refresh)).await?;
+        let res = match res {
+            Ok(true) => Ok(OkResponse::NoData),
+            Ok(false) => Err(ErrResponse::DeviceDoesNotExist),
+            Err(e) => Err(e),
+        };
+
+        self.respond(res, request, ctx).await;
+
+        Ok(())
     }
 
-    fn create_user(
+    async fn create_user(
         &mut self,
         username: String,
         display_name: String,
         password: String,
-        request_id: RequestId,
-        ctx: &mut WebsocketContext<Self>,
-    ) {
-        if !auth::valid_password(&password, self.config.get_ref()) {
-            return ctx.binary(ServerMessage::Response {
-                response: RequestResponse::Error(ServerError::InvalidPassword),
-                request_id,
-            });
+        request: RequestId,
+        ctx: &mut Context<Self>,
+    ) -> Result<(), Disconnected> {
+        if !auth::valid_password(&password, &self.config) {
+            self.respond_error(ErrResponse::InvalidPassword, request, ctx).await;
+            return Ok(());
         }
 
-        let username = match auth::prepare_username(&username, self.config.get_ref()) {
+        let username = match auth::prepare_username(&username, &self.config) {
             Ok(name) => name,
             Err(auth::TooShort) => {
-                return ctx.binary(ServerMessage::Response {
-                    response: RequestResponse::Error(ServerError::InvalidUsername),
-                    request_id,
-                })
+                self.respond_error(ErrResponse::InvalidUsername, request, ctx).await;
+                return Ok(());
             }
         };
 
-        if !auth::valid_display_name(&display_name, self.config.get_ref()) {
-            return ctx.binary(ServerMessage::Response {
-                response: RequestResponse::Error(ServerError::InvalidDisplayName),
-                request_id,
-            });
+        if !auth::valid_display_name(&display_name, &self.config) {
+            self.respond_error(ErrResponse::InvalidDisplayName, request, ctx).await;
+            return Ok(());
         }
 
-        let fut = auth::hash(password)
-            .into_actor(self)
-            .and_then(move |(hash, hash_version), act, _ctx| {
-                let user = User::new(username, display_name, hash, hash_version);
-                let id = user.id.clone();
+        let (hash, hash_version) = auth::hash(password).await;
+        let user = UserRecord::new(username, display_name, hash, hash_version);
+        let id = user.id;
 
-                act.database_server
-                    .send(CreateUser(user))
-                    .map(move |res| res.map(|success| (success, id)))
-                    .into_actor(act)
-            })
-            .map(move |res, _act, _ctx| match res {
-                Ok((success, id)) => {
-                    if success {
-                        RequestResponse::user(id)
-                    } else {
-                        RequestResponse::Error(ServerError::UsernameAlreadyExists)
-                    }
-                }
-                Err(e) => RequestResponse::Error(e),
-            });
+        match self.database_server.send(CreateUser(user)).await? {
+            Ok(true) => self.respond(Ok(OkResponse::User { id }), request, ctx).await,
+            Ok(false) => self.respond_error(ErrResponse::UsernameAlreadyExists, request, ctx).await,
+            Err(e) => self.respond_error(e, request, ctx).await,
+        }
 
-        self.respond(fut, request_id, ctx)
+        Ok(())
     }
 
-    fn change_username(
+    async fn change_username(
         &mut self,
         new_username: String,
-        user_id: UserId,
-        request_id: RequestId,
-        ctx: &mut WebsocketContext<Self>,
-    ) {
-        let new_username = match auth::prepare_username(&new_username, self.config.get_ref()) {
+        user: UserId,
+        perms: TokenPermissionFlags,
+        request: RequestId,
+        ctx: &mut Context<Self>,
+    ) -> Result<(), Disconnected> {
+        if !perms.has_perms(TokenPermissionFlags::CHANGE_USERNAME) {
+            self.respond_error(ErrResponse::AccessDenied, request, ctx).await;
+            return Ok(());
+        }
+
+        let new_username = match auth::prepare_username(&new_username, &self.config) {
             Ok(name) => name,
             Err(auth::TooShort) => {
-                return ctx.binary(ServerMessage::Response {
-                    response: RequestResponse::Error(ServerError::InvalidUsername),
-                    request_id,
-                })
+                self.respond_error(ErrResponse::InvalidUsername, request, ctx).await;
+                return Ok(());
             }
         };
 
-        let fut = self
+        let req = self
             .database_server
-            .send(ChangeUsername {
-                user_id,
-                new_username,
-            })
-            .into_actor(self)
-            .map(move |res, _act, _ctx| match res {
-                Ok(success) => {
-                    if success {
-                        RequestResponse::success()
-                    } else {
-                        RequestResponse::Error(ServerError::UsernameAlreadyExists)
-                    }
-                }
-                Err(e) => RequestResponse::Error(e),
-            });
+            .send(ChangeUsername { user, new_username });
 
-        self.respond(fut, request_id, ctx)
+        let res = match req.await? {
+            Ok(true) => Ok(OkResponse::NoData),
+            Ok(false) => Err(ErrResponse::UsernameAlreadyExists),
+            Err(e) => {
+                self.respond_error(e, request, ctx).await;
+                return Ok(());
+            }
+        };
+
+        self.respond(res, request, ctx).await;
+
+        Ok(())
     }
 
-    fn change_display_name(
+    async fn change_display_name(
         &mut self,
         new_display_name: String,
-        user_id: UserId,
-        request_id: RequestId,
-        ctx: &mut WebsocketContext<Self>,
-    ) {
-        if !auth::valid_display_name(&new_display_name, self.config.get_ref()) {
-            return ctx.binary(ServerMessage::Response {
-                response: RequestResponse::Error(ServerError::InvalidDisplayName),
-                request_id,
-            });
+        user: UserId,
+        request: RequestId,
+        perms: TokenPermissionFlags,
+        ctx: &mut Context<Self>,
+    ) -> Result<(), Disconnected> {
+        if !perms.has_perms(TokenPermissionFlags::CHANGE_DISPLAY_NAME) {
+            self.respond_error(ErrResponse::AccessDenied, request, ctx).await;
+            return Ok(());
+        }
+        if !auth::valid_display_name(&new_display_name, &self.config) {
+            self.respond_error(ErrResponse::InvalidDisplayName, request, ctx).await;
+            return Ok(());
+        };
+
+        let req = self.database_server.send(ChangeDisplayName {
+            user,
+            new_display_name,
+        });
+
+        match req.await? {
+            Ok(()) => self.respond(Ok(OkResponse::NoData), request, ctx).await,
+            Err(e) => self.respond_error(e, request, ctx).await,
         }
 
-        let fut = self
-            .database_server
-            .send(ChangeDisplayName {
-                user_id,
-                new_display_name,
-            })
-            .map(move |res| res.map(|_| ()))
-            .into_actor(self)
-            .map(move |res, _act, _ctx| match res {
-                Ok(_) => RequestResponse::success(),
-                Err(e) => RequestResponse::Error(e),
-            });
-
-        self.respond(fut, request_id, ctx)
+        Ok(())
     }
 
-    fn change_password(
+    async fn change_password(
         &mut self,
         old_password: String,
         new_password: String,
-        user_id: UserId,
-        request_id: RequestId,
-        ctx: &mut WebsocketContext<Self>,
-    ) {
-        if !auth::valid_password(&new_password, self.config.get_ref()) {
-            return ctx.binary(ServerMessage::Response {
-                response: RequestResponse::Error(ServerError::InvalidPassword),
-                request_id,
-            });
+        user: UserId,
+        request: RequestId,
+        ctx: &mut Context<Self>,
+    ) -> Result<(), Disconnected> {
+        if !auth::valid_password(&new_password, &self.config) {
+            self.respond_error(ErrResponse::InvalidPassword, request, ctx).await;
+            return Ok(());
         }
 
-        let fut = self
-            .verify_user_id_password(user_id, old_password)
-            .and_then(|res| match res {
-                Ok(_) => Either::A(auth::hash(new_password).map(|ok| Ok(ok))),
-                Err(error) => Either::B(future::ok(Err(error))),
-            })
-            .into_actor(self)
-            .and_then(move |res, act, _ctx| {
-                let fut = match res {
-                    Ok((new_password_hash, hash_version)) => {
-                        let fut = act
-                            .database_server
-                            .send(ChangePassword {
-                                user_id,
-                                new_password_hash,
-                                hash_version,
-                            })
-                            .map(move |res| res.map(|_| ()))
-                            .map(|res| match res {
-                                Ok(_) => RequestResponse::success(),
-                                Err(e) => RequestResponse::Error(e),
-                            });
-                        Either::A(fut)
-                    }
-                    Err(e) => Either::B(future::ok(RequestResponse::Error(e))),
-                };
+        let verify = self.verify_user_password(user, old_password);
+        let db_server = self.database_server.clone();
 
-                fut.into_actor(act)
-            })
-            .and_then(move |res, act, _ctx| match res {
-                RequestResponse::Success(success) => fut::Either::A(
-                    act.client_server
-                        .send(LogoutUserSessions { user_id })
-                        .map(|_| RequestResponse::Success(success))
-                        .into_actor(act),
-                ),
-                response => fut::Either::B(fut::ok(response)),
-            });
+        if let Err(e) = verify.await {
+            self.respond_error(e, request, ctx).await;
+            return Ok(());
+        }
 
-        self.respond(fut, request_id, ctx)
+        let (new_password_hash, hash_version) = auth::hash(new_password).await;
+
+        let res = db_server
+            .send(ChangePassword {
+                user,
+                new_password_hash,
+                hash_version,
+            })
+            .await?;
+
+        if let Err(e) = res {
+            self.respond_error(e, request, ctx).await;
+            return Ok(());
+        }
+
+        self.respond(Ok(OkResponse::NoData), request, ctx).await;
+
+        Ok(())
     }
 
-    fn verify_user_id_password(
+    fn create_community(
         &mut self,
-        user_id: UserId,
+        user: UserId,
+        device: DeviceId,
+        community_name: String,
+        request: RequestId,
+    ) {
+        unimplemented!() // TODO(implement)
+    }
+
+    fn join_community(
+        &mut self,
+        user: UserId,
+        device: DeviceId,
+        community: CommunityId,
+        request: RequestId,
+    ) {
+        unimplemented!() // TODO(implement)
+    }
+
+    fn verify_user_password(
+        &mut self,
+        user: UserId,
         password: String,
-    ) -> impl Future<Item = Result<(), ServerError>, Error = MailboxError> {
-        self.database_server
-            .send(GetUserById(user_id))
-            .and_then(move |res| match res {
-                Ok(Some(user)) => {
-                    Either::A(auth::verify_user_password(user, password).map(|res| res.map(|_| ())))
+    ) -> impl Future<Output = Result<(), ErrResponse>> {
+        let user = self.database_server.send(GetUserById(user));
+
+        async {
+            let res = match user.await {
+                Ok(res) => res,
+                Err(e) => {
+                    error!("Xtra send error: {:#?}", e);
+                    return Err(ErrResponse::Internal);
                 }
-                Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
-                Err(e) => Either::B(future::ok(Err(e))),
-            })
+            };
+
+            let user = match res {
+                Ok(Some(user)) => user,
+                Ok(None) => return Err(ErrResponse::IncorrectUsernameOrPassword),
+                Err(server_error) => return Err(server_error),
+            };
+
+            auth::verify_user_password(user, password).await.map(|_| ())
+        }
     }
 
     fn verify_username_password(
         &mut self,
         username: String,
         password: String,
-    ) -> impl Future<Item = Result<UserId, ServerError>, Error = MailboxError> {
-        let username = auth::process_username(&username, self.config.get_ref());
-        self.database_server
-            .send(GetUserByName(username))
-            .and_then(move |res| match res {
-                Ok(Some(user)) => Either::A(auth::verify_user_password(user, password)),
-                Ok(None) => Either::B(future::ok(Err(ServerError::IncorrectUsernameOrPassword))),
-                Err(e) => Either::B(future::ok(Err(e))),
-            })
+    ) -> impl Future<Output = Result<UserId, ErrResponse>> {
+        let username = auth::process_username(&username, &self.config);
+        let user = self.database_server.send(GetUserByName(username));
+
+        async {
+            let res = match user.await {
+                Ok(res) => res,
+                Err(e) => {
+                    error!("Xtra send error: {:#?}", e);
+                    return Err(ErrResponse::Internal);
+                }
+            };
+
+            let user = match res {
+                Ok(Some(user)) => user,
+                Ok(None) => return Err(ErrResponse::IncorrectUsernameOrPassword),
+                Err(server_error) => return Err(server_error),
+            };
+
+            auth::verify_user_password(user, password).await
+        }
     }
 }

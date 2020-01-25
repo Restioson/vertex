@@ -1,24 +1,28 @@
 //! Some definitions common between server and client
-#[cfg(feature = "enable-actix")]
-use actix::prelude::*;
 use bitflags::bitflags;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use std::time::Duration;
 use uuid::Uuid;
+use serde::{Serialize, Deserialize};
 
-#[macro_use]
-extern crate serde_derive;
+pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 
-pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(10);
-
-pub trait ClientMessageType {}
-
+/// Does not need to be sequential; just unique within a desired time-span (or not, if you're a fan
+/// of trying to handle two responses with the same id attached). This exists for the client-side
+/// programmer's ease-of-use only - the server is request-id-agnostic.
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct RequestId(pub Uuid);
+pub struct RequestId(u32);
+
+impl RequestId {
+    pub const fn new(id: u32) -> Self { RequestId(id) }
+}
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct UserId(pub Uuid);
+
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct CommunityId(pub Uuid);
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RoomId(pub Uuid);
@@ -33,36 +37,33 @@ pub struct DeviceId(pub Uuid);
 pub struct AuthToken(pub String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ClientRequest {
-    pub message: ClientMessage,
-    pub request_id: RequestId,
+pub struct ClientMessage {
+    pub id: RequestId,
+    pub request: ClientRequest,
 }
 
-impl ClientRequest {
-    pub fn new(message: ClientMessage) -> Self {
-        ClientRequest {
-            message,
-            request_id: RequestId(Uuid::new_v4()),
-        }
+impl ClientMessage {
+    pub fn new(request: ClientRequest, id: RequestId) -> Self {
+        ClientMessage { request, id }
     }
 }
 
-impl Into<Bytes> for ClientRequest {
+impl Into<Bytes> for ClientMessage {
     fn into(self) -> Bytes {
         serde_cbor::to_vec(&self).unwrap().into()
     }
 }
 
-impl Into<Vec<u8>> for ClientRequest {
+impl Into<Vec<u8>> for ClientMessage {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ClientMessage {
+pub enum ClientRequest {
     Login {
-        device_id: DeviceId,
+        device: DeviceId,
         token: AuthToken,
     },
     CreateToken {
@@ -73,12 +74,12 @@ pub enum ClientMessage {
         permission_flags: TokenPermissionFlags,
     },
     RevokeToken {
-        device_id: DeviceId,
+        device: DeviceId,
         // Require re-authentication to revoke a token other than the current
         password: Option<String>,
     },
     RefreshToken {
-        device_id: DeviceId,
+        device: DeviceId,
         username: String,
         password: String,
     },
@@ -89,8 +90,14 @@ pub enum ClientMessage {
     },
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
-    CreateRoom,
-    JoinRoom(RoomId),
+    CreateCommunity {
+        name: String,
+    },
+    CreateRoom {
+        name: String,
+        community: CommunityId,
+    },
+    JoinCommunity(CommunityId),
     Delete(Delete),
     ChangeUsername {
         new_username: String,
@@ -106,20 +113,14 @@ pub enum ClientMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientSentMessage {
+    pub to_community: CommunityId,
     pub to_room: RoomId,
     pub content: String,
 }
 
-impl ClientMessageType for ClientSentMessage {}
-
-#[cfg(feature = "enable-actix")]
-impl Message for ClientSentMessage {
-    type Result = RequestResponse;
-}
-
-#[cfg_attr(feature = "enable-actix", derive(Message))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardedMessage {
+    pub community: CommunityId,
     pub room: RoomId,
     pub author: UserId,
     pub device: DeviceId,
@@ -133,6 +134,7 @@ impl ForwardedMessage {
         device: DeviceId,
     ) -> Self {
         ForwardedMessage {
+            community: msg.to_community,
             room: msg.to_room,
             author,
             device,
@@ -143,28 +145,17 @@ impl ForwardedMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Edit {
-    pub message_id: MessageId,
-    pub room_id: RoomId,
-}
-
-impl ClientMessageType for Edit {}
-
-#[cfg(feature = "enable-actix")]
-impl Message for Edit {
-    type Result = RequestResponse;
+    pub message: MessageId,
+    pub community: CommunityId,
+    pub room: RoomId,
+    pub new_content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delete {
-    pub message_id: MessageId,
-    pub room_id: RoomId,
-}
-
-impl ClientMessageType for Delete {}
-
-#[cfg(feature = "enable-actix")]
-impl Message for Delete {
-    type Result = RequestResponse;
+    pub message: MessageId,
+    pub community: CommunityId,
+    pub room: RoomId,
 }
 
 bitflags! {
@@ -186,10 +177,12 @@ bitflags! {
         const CHANGE_USERNAME = 1 << 6;
         /// Change the user's display name
         const CHANGE_DISPLAY_NAME = 1 << 7;
-        /// Join rooms
-        const JOIN_ROOMS = 1 << 8;
+        /// Join communities
+        const JOIN_COMMUNITIES = 1 << 8;
+        /// Create communities
+        const CREATE_COMMUNITIES = 1 << 9;
         /// Create rooms
-        const CREATE_ROOMS = 1 << 9;
+        const CREATE_ROOMS = 1 << 10;
     }
 }
 
@@ -201,15 +194,21 @@ impl TokenPermissionFlags {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
+    Action(ServerAction),
     Response {
-        response: RequestResponse,
-        request_id: RequestId,
+        id: RequestId,
+        result: Result<OkResponse, ErrResponse>,
     },
-    Error(ServerError),
+    MalformedMessage,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ServerAction {
     Message(ForwardedMessage),
     Edit(Edit),
     Delete(Delete),
     SessionLoggedOut,
+    LeftCommunity(LeftCommunityReason),
 }
 
 impl Into<Bytes> for ServerMessage {
@@ -225,43 +224,23 @@ impl Into<Vec<u8>> for ServerMessage {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum RequestResponse {
-    Success(Success),
-    Error(ServerError),
-}
-
-impl RequestResponse {
-    pub fn success() -> Self {
-        RequestResponse::Success(Success::NoData)
-    }
-    pub fn room(id: RoomId) -> Self {
-        RequestResponse::Success(Success::Room { id })
-    }
-    pub fn user(id: UserId) -> Self {
-        RequestResponse::Success(Success::User { id })
-    }
-    pub fn token(device_id: DeviceId, token: AuthToken) -> Self {
-        RequestResponse::Success(Success::Token { device_id, token })
-    }
-}
-
-#[cfg(feature = "enable-actix")]
-impl<A, M> actix::dev::MessageResponse<A, M> for RequestResponse
-where
-    A: actix::Actor,
-    M: actix::Message<Result = Self>,
-{
-    fn handle<R: actix::dev::ResponseChannel<M>>(self, _ctx: &mut A::Context, tx: Option<R>) {
-        if let Some(tx) = tx {
-            tx.send(self);
-        }
-    }
+pub enum LeftCommunityReason {
+    /// The community was deleted
+    Deleted,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ServerError {
-    InvalidMessage,
-    UnexpectedTextFrame,
+pub enum OkResponse {
+    NoData,
+    Room { id: RoomId },
+    Community { id: CommunityId },
+    MessageId { id: MessageId },
+    User { id: UserId },
+    Token { device: DeviceId, token: AuthToken },
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ErrResponse {
     Internal,
     NotLoggedIn,
     AlreadyLoggedIn,
@@ -270,6 +249,7 @@ pub enum ServerError {
     InvalidDisplayName,
     InvalidToken,
     StaleToken,
+    TokenInUse,
     UserCompromised,
     UserLocked,
     UserBanned,
@@ -280,25 +260,9 @@ pub enum ServerError {
     /// revoke authentication token requires re-entry of password.
     AccessDenied,
     InvalidRoom,
-    AlreadyInRoom,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Success {
-    NoData,
-    Room {
-        id: RoomId,
-    },
-    MessageSent {
-        id: MessageId,
-    },
-    User {
-        id: UserId,
-    },
-    Token {
-        device_id: DeviceId,
-        token: AuthToken,
-    },
+    InvalidCommunity,
+    InvalidUser,
+    AlreadyInCommunity,
 }
 
 #[macro_export]

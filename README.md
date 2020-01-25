@@ -6,8 +6,8 @@ Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, feder
 ## Installation
 
 ### Development
-1. Install the latest Rust stable compiler
-2. Install gtk+, cairo, and glib development libraries
+1. Install the latest Rust **nightly** compiler (because of the `l337` crate)
+2. Install gtk+ development libraries
 3. Install the openssl development package
 
 ### Server - Docker
@@ -42,19 +42,18 @@ rebuild the docker image with `docker-compose up --build`.
 | `min_username_len`           | The minimum username length that a user may enter. It must be greater than or equal to 1. This is applied only for future usernames -- it is not retroactively applied.                                                             | 1                                  |
 | `max_display_name_len`       | The maximum display name length that a user may enter. It must be greater than or equal to 1 and the minimum password length. This is applied only for future display names -- it is not retroactively applied.                     | 64                                 |
 | `min_display_name_len`       | The minimum password length that a user may enter. It must be  greater than or equal to 1. This is  applied only for future display names -- it is not retroactively applied.                                                       | 1                                  |
-| `profile_pictures`           | The directory to serve profile pictures from.                                                                                                                                                                                       | `./files/images/profile_pictures/` |
 | `tokens_sweep_interval_secs` | How often to sweep the database for possibly expired tokens in seconds. A warning will be printed if this is less than the time taken to complete a single sweep.                                                                   | 1800 (30min)                       |
 | `token_stale_days`           | How many days it takes for a token to become stale and require the user to refresh it with their password.                                                                                                                          | 7 (1 week)                         |
 | `token_expiry_days`          | How many days it takes for a token to expire and the device to be deleted from the user's account.                                                                                                                                  | 90 (~3 months)                     |
+| `log_level`                  | The minimum log level to display log statements for. Valid options are `trace`, `debug`, `info`, `warn`, and `error`. It must be written in quotation marks (e.g `"info"`).                                                        | `"info"                            |
 
 It is written in TOML. 
 
 The server must also be provided with a certificate and private key pair. They should be named `cert.pem` and `key.pem`
 respectively, and be contained in the standard configuration directories, as is the config file. The private key must be
-encrypted, and its passphrase must be passed to the server through the `VERTEX_SERVER_KEY_PASS` environment variable.
+encrypted, and it must not have a passphrase.
 When using Docker, put the `cert.pem` and `key.pem` in the `server/docker/` folder. Upon changing these, please make
-sure to rebuild the docker image with `docker-compose up --build`. The passphrase is passed through the same variable 
-when using Docker too, e.g `VERTEX_SERVER_KEY_PASS=<pass> docker-compose up --build`.
+sure to rebuild the docker image with `docker-compose up --build`. 
 
 The server's log files can be found in the log folder, under the standard data directories:
 

@@ -1,17 +1,12 @@
 use crate::config::Config;
-use crate::database::User;
-use futures::{future, Future};
-use lazy_static::lazy_static;
+use crate::database::UserRecord;
+use futures::Future;
+use futures::FutureExt;
 use rand::RngCore;
-use tokio_threadpool::ThreadPool;
 use unicode_normalization::UnicodeNormalization;
-use vertex_common::{ServerError, UserId};
+use vertex_common::{ErrResponse, UserId};
 
 pub const MAX_TOKEN_LENGTH: usize = 45;
-
-lazy_static! {
-    static ref THREAD_POOL: ThreadPool = ThreadPool::new();
-}
 
 #[derive(Debug)]
 #[repr(u8)]
@@ -60,58 +55,50 @@ pub fn prepare_username(username: &str, config: &Config) -> Result<String, TooSh
 // The `<E: Send + 'static>`s here are to allow the caller to specify an error type for easier use,
 // since this will never return an error
 
-pub fn hash<E: Send + 'static>(
-    pass: String,
-) -> impl Future<Item = (String, HashSchemeVersion), Error = E> {
-    THREAD_POOL.spawn_handle(future::poll_fn(move || {
-        tokio_threadpool::blocking(|| {
-            let mut salt: [u8; 32] = [0; 32]; // 256 bits
-            rand::thread_rng().fill_bytes(&mut salt);
-            let config = Default::default();
+pub fn hash(pass: String) -> impl Future<Output = (String, HashSchemeVersion)> {
+    tokio::task::spawn_blocking(move || {
+        let mut salt: [u8; 32] = [0; 32]; // 256 bits
+        rand::thread_rng().fill_bytes(&mut salt);
+        let config = Default::default();
 
-            let hash = argon2::hash_encoded(pass.as_bytes(), &salt, &config)
-                .expect("Error generating password hash");
+        let hash = argon2::hash_encoded(pass.as_bytes(), &salt, &config)
+            .expect("Error generating password hash");
 
-            (hash, HashSchemeVersion::Argon2V1)
-        })
-        .map_err(|_| panic!("the threadpool shut down"))
-    }))
+        (hash, HashSchemeVersion::Argon2V1)
+    })
+    .map(|r| r.expect("auth error"))
 }
 
-pub fn verify<E: Send + 'static>(
+pub fn verify(
     pass: String,
     hash: String,
     scheme_version: HashSchemeVersion,
-) -> impl Future<Item = bool, Error = E> {
-    THREAD_POOL.spawn_handle(future::poll_fn(move || {
-        tokio_threadpool::blocking(|| {
-            use HashSchemeVersion::*;
+) -> impl Future<Output = bool> {
+    tokio::task::spawn_blocking(move || {
+        use HashSchemeVersion::*;
 
-            match scheme_version {
-                Argon2V1 => argon2::verify_encoded(&hash, pass.as_bytes())
-                    .expect("Error verifying password hash"),
-            }
-        })
-        .map_err(|_| panic!("the threadpool shut down"))
-    }))
+        match scheme_version {
+            Argon2V1 => argon2::verify_encoded(&hash, pass.as_bytes())
+                .expect("Error verifying password hash"),
+        }
+    })
+    .map(|r| r.expect("auth error"))
 }
 
-pub fn verify_user_password<E: Send + 'static>(
-    user: User,
+pub async fn verify_user_password(
+    user: UserRecord,
     password: String,
-) -> impl Future<Item = Result<UserId, ServerError>, Error = E> {
-    let User {
-        id: user_id,
+) -> Result<UserId, ErrResponse> {
+    let UserRecord {
+        id: user,
         password_hash,
         hash_scheme_version,
         ..
     } = user;
-
-    verify(password, password_hash, hash_scheme_version).map(move |matches| {
-        if matches {
-            Ok(user_id)
-        } else {
-            Err(ServerError::IncorrectUsernameOrPassword)
-        }
-    })
+    let matches = verify(password, password_hash, hash_scheme_version).await;
+    if matches {
+        Ok(user)
+    } else {
+        Err(ErrResponse::IncorrectUsernameOrPassword)
+    }
 }

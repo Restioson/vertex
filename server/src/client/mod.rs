@@ -1,10 +1,13 @@
-use actix::prelude::*;
-
-mod server;
 mod session;
+mod user;
 
-pub use server::*;
 pub use session::*;
+pub use user::*;
+use xtra::Message;
 
-#[derive(Debug, Message)]
+#[derive(Debug)]
 pub struct LogoutThisSession;
+
+impl Message for LogoutThisSession {
+    type Result = ();
+}
