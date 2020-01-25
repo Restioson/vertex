@@ -106,8 +106,7 @@ fn push_community(screen: Screen<Model>, communities: &gtk::ListBox, name: &str,
     for &room in rooms {
         let room_label = gtk::LabelBuilder::new()
             .name("room_label")
-            .label(&format!("<b>#</b> {}", room))
-            .use_markup(true)
+            .label(room)
             .halign(gtk::Align::Start)
             .build();
         rooms_list.add(&room_label);
@@ -158,7 +157,7 @@ pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
     let screen = Screen::new(viewport, model);
 
     for i in 1..=5 {
-        push_community(screen.clone(), &screen.model().widgets.communities, &format!("Community {}", i), &["general", "off-topic"]);
+        push_community(screen.clone(), &screen.model().widgets.communities, &format!("Community {}", i), &["General", "Off Topic"]);
     }
 
     bind_events(&screen);
