@@ -175,7 +175,9 @@ async fn main() {
         let url = url.clone();
         let app = App::build(app);
 
-        glib::MainContext::ref_thread_default().block_on(async move {
+        app.set_screen(DynamicScreen::Loading(screen::loading::build()));
+
+        glib::MainContext::ref_thread_default().spawn_local(async move {
             let net = vertex::net::connect((*url).clone()).await
                 .expect("failed to connect");
 

@@ -7,6 +7,7 @@ pub mod active;
 pub mod login;
 pub mod register;
 pub mod settings;
+pub mod loading;
 
 mod connect;
 
@@ -16,6 +17,7 @@ pub enum DynamicScreen {
     Login(Screen<login::Model>),
     Register(Screen<register::Model>),
     Settings(Screen<settings::Model>),
+    Loading(Screen<()>),
 }
 
 impl DynamicScreen {
@@ -26,6 +28,7 @@ impl DynamicScreen {
             DynamicScreen::Login(screen) => screen.viewport(),
             DynamicScreen::Register(screen) => screen.viewport(),
             DynamicScreen::Settings(screen) => screen.viewport(),
+            DynamicScreen::Loading(screen) => screen.viewport(),
         }
     }
 }

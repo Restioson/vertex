@@ -56,8 +56,8 @@ fn bind_events(screen: &Screen<Model>) {
 
                     match name.as_str() {
                         "log_out" => {
-                            model.client.revoke_current_token().await.expect("failed to revoke token");
                             model.app.token_store.forget_token();
+                            model.client.revoke_current_token().await.expect("failed to revoke token");
 
                             let login = screen::login::build(model.app.clone());
                             model.app.set_screen(DynamicScreen::Login(login));
