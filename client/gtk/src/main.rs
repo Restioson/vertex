@@ -93,9 +93,9 @@ impl App {
                 while let Some(action) = stream.next().await {
                     let action: vertex::Action = action;
                     match action {
-                        vertex::Action::AddMessage(_) => {},
-                        vertex::Action::LoggedOut => {},
-                        vertex::Action::Error(_) => {},
+                        vertex::Action::AddMessage(_) => {}
+                        vertex::Action::LoggedOut => {}
+                        vertex::Action::Error(_) => {}
                     }
                     println!("{:?}", action);
                 }
@@ -103,8 +103,8 @@ impl App {
             async {
                 let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(2));
                 loop {
-                    ticker.tick().await;
                     self.net().dispatch_heartbeat().await.expect("failed to dispatch heartbeat");
+                    ticker.tick().await;
                 }
             },
         ).await;
@@ -154,7 +154,7 @@ async fn main() {
 
     let ip = matches.value_of("ip")
         .map(|ip| ip.to_string())
-        .unwrap_or("127.0.0.1:8080".to_string());
+        .unwrap_or("localhost:8080".to_string());
 
     let url = Url::parse(&format!("wss://{}/client/", ip)).unwrap();
     let url = Rc::new(url);
@@ -169,7 +169,9 @@ async fn main() {
         let app = App::build(app);
 
         glib::MainContext::ref_thread_default().block_on(async move {
-            let net = vertex::net::connect((*url).clone()).await.expect("failed to connect");
+            let net = vertex::net::connect((*url).clone()).await
+                .expect("failed to connect");
+
             app.start(net).await;
         });
     });

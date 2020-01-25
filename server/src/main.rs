@@ -135,7 +135,7 @@ async fn main() {
                 move |websocket| {
                     let (tx, rx) = websocket.split();
                     let addr = ClientWsSession::new(tx, db_server.clone(), config.clone()).spawn();
-                    addr.into_downgraded().attach_stream(rx.map(|res| WebSocketMessage(res)));
+                    addr.attach_stream(rx.map(|res| WebSocketMessage(res)));
                     async {}
                 }
             })
