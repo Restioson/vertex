@@ -1754,7 +1754,7 @@ dependencies = [
  "uuid 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "vertex_common 0.1.0",
  "warp 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "xtra 0.2.0-rc.2 (git+https://github.com/Restioson/xtra?rev=93951f2)",
+ "xtra 0.2.3 (git+https://github.com/Restioson/xtra?rev=d087211)",
 ]
 
 [[package]]
@@ -1930,8 +1930,8 @@ dependencies = [
 
 [[package]]
 name = "xtra"
-version = "0.2.0-rc.2"
-source = "git+https://github.com/Restioson/xtra?rev=93951f2#93951f24d786f827bfac441e936529f874e8b5f9"
+version = "0.2.3"
+source = "git+https://github.com/Restioson/xtra?rev=d087211#d087211b6d5fa66b80a8d0aa0b1d0199bcf5a7a5"
 dependencies = [
  "futures 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.2.9 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2158,4 +2158,4 @@ dependencies = [
 "checksum winapi-i686-pc-windows-gnu 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
 "checksum winapi-x86_64-pc-windows-gnu 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 "checksum ws2_32-sys 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "d59cefebd0c892fa2dd6de581e937301d8552cb44489cdff035c6187cb63fa5e"
-"checksum xtra 0.2.0-rc.2 (git+https://github.com/Restioson/xtra?rev=93951f2)" = "<none>"
+"checksum xtra 0.2.3 (git+https://github.com/Restioson/xtra?rev=d087211)" = "<none>"

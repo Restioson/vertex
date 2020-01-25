@@ -92,6 +92,7 @@ impl Handler<WebSocketMessage> for ClientWsSession {
                 msg
             } else {
                 self.delete();
+                ctx.stop();
                 return;
             };
 

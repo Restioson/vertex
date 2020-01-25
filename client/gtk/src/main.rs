@@ -59,7 +59,14 @@ impl App {
 
     pub async fn start(mut self, net: vertex::Net) {
         let (net_send, net_recv) = net.split();
-        self.net = Some(Rc::new(net_send));
+        let net_send = Rc::new(net_send);
+
+        self.net = Some(net_send.clone());
+
+        self.window.connect_delete_event(move |_window, _event| {
+            let _ = futures::executor::block_on(net_send.close());
+            gtk::Inhibit(false)
+        });
 
         let app = Rc::new(self);
 

@@ -146,6 +146,10 @@ impl Sender {
         self.sink.borrow_mut().send(message).await?;
         Ok(())
     }
+
+    pub async fn close(&self) -> VertexResult<()> {
+        self.send_raw(tungstenite::Message::Close(None)).await
+    }
 }
 
 pub struct Receiver {
