@@ -11,6 +11,7 @@ use std::convert::TryInto;
 pub mod active;
 pub mod login;
 pub mod register;
+pub mod settings;
 
 mod connect;
 
@@ -19,6 +20,7 @@ pub enum DynamicScreen {
     Active(Screen<active::Model>),
     Login(Screen<login::Model>),
     Register(Screen<register::Model>),
+    Settings(Screen<settings::Model>),
 }
 
 impl DynamicScreen {
@@ -28,6 +30,7 @@ impl DynamicScreen {
             DynamicScreen::Active(screen) => screen.viewport(),
             DynamicScreen::Login(screen) => screen.viewport(),
             DynamicScreen::Register(screen) => screen.viewport(),
+            DynamicScreen::Settings(screen) => screen.viewport(),
         }
     }
 }

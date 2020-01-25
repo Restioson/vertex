@@ -74,8 +74,8 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton" id="sign_out_button">
-                        <property name="label" translatable="yes">Sign out</property>
+                      <object class="GtkButton" id="settings_button">
+                        <property name="label" translatable="yes">Settings</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>

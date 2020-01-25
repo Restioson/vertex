@@ -127,13 +127,10 @@
                     </child>
                     <child>
                       <object class="GtkLabel" id="error_label">
-                        <property name="name">error</property>
+                        <property name="name">error_label</property>
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="halign">center</property>
-                        <attributes>
-                          <attribute name="foreground" value="#bfff3fff3fff"/>
-                        </attributes>
                       </object>
                       <packing>
                         <property name="expand">False</property>

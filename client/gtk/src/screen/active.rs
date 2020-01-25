@@ -13,7 +13,7 @@ pub struct Widgets {
     communities: gtk::ListBox,
     messages: gtk::ListBox,
     message_entry: gtk::Entry,
-    sign_out_button: gtk::Button,
+    settings_button: gtk::Button,
 }
 
 pub struct Model {
@@ -135,7 +135,7 @@ pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
             communities: builder.get_object("communities").unwrap(),
             messages: builder.get_object("messages").unwrap(),
             message_entry: builder.get_object("message_entry").unwrap(),
-            sign_out_button: builder.get_object("sign_out_button").unwrap(),
+            settings_button: builder.get_object("settings_button").unwrap(),
         },
         selected_community_widget: None,
     };
@@ -166,15 +166,12 @@ fn bind_events(screen: &Screen<Model>) {
             .build_cloned_consumer()
     );
 
-    widgets.sign_out_button.connect_button_press_event(
+    widgets.settings_button.connect_button_press_event(
         screen.connector()
-            .do_async(|screen, (button, event)| async move {
+            .do_sync(|screen, (button, event)| {
                 let model = screen.model();
-                model.client.revoke_current_token().await.expect("failed to revoke token");
-                model.app.token_store.forget_token();
-
-                let login = screen::login::build(model.app.clone());
-                model.app.set_screen(DynamicScreen::Login(login));
+                let settings = screen::settings::build(model.app.clone(), model.client.clone());
+                model.app.set_screen(DynamicScreen::Settings(settings));
             })
             .build_widget_event()
     );
