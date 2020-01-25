@@ -1,5 +1,5 @@
 # Vertex
-![Vertex logo](client/gtk/icon.png)
+![Vertex logo](client/gtk/res/icon.png)
 
 Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, federated chat platform.
 

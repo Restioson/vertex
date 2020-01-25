@@ -71,7 +71,7 @@ mod ws {
     }
 }
 
-pub async fn connect(url: Url) -> VertexResult<(Sender, Receiver)> {
+pub async fn connect(url: Url) -> VertexResult<Net> {
     let (client, _) = ws::connect_async(url).await?;
 
     let (sink, stream) = client.split();
@@ -79,7 +79,7 @@ pub async fn connect(url: Url) -> VertexResult<(Sender, Receiver)> {
     let request_tracker = RequestTracker::new();
     let request_tracker = Rc::new(request_tracker);
 
-    Ok((
+    Ok(Net(
         Sender {
             request_tracker: request_tracker.clone(),
             request_id_generator: RequestIdGenerator::new(),
@@ -88,7 +88,7 @@ pub async fn connect(url: Url) -> VertexResult<(Sender, Receiver)> {
         Receiver {
             request_tracker: request_tracker.clone(),
             stream,
-        }
+        },
     ))
 }
 
@@ -98,6 +98,18 @@ impl Request {
     pub async fn response(self) -> RequestResult {
         self.0.map(|result| result.expect("channel closed")).await
     }
+}
+
+pub struct Net(Sender, Receiver);
+
+impl Net {
+    pub fn split(self) -> (Sender, Receiver) {
+        (self.0, self.1)
+    }
+
+    pub fn sender(&self) -> &Sender { &self.0 }
+
+    pub fn receiver(&self) -> &Receiver { &self.1 }
 }
 
 pub struct Sender {

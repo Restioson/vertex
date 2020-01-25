@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS login_tokens (
     device_name          VARCHAR,
     token_hash           VARCHAR NOT NULL,
     hash_scheme_version  SMALLINT NOT NULL,
-    \"user\"                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     last_used            TIMESTAMP WITH TIME ZONE NOT NULL,
     expiration_date      TIMESTAMP WITH TIME ZONE,
     permission_flags     BIGINT NOT NULL
@@ -40,7 +40,7 @@ impl TryFrom<Row> for Token {
             hash_scheme_version: HashSchemeVersion::from(
                 row.try_get::<&str, i16>("hash_scheme_version")?,
             ),
-            user: UserId(row.try_get("user")?),
+            user: UserId(row.try_get("user_id")?),
             device: DeviceId(row.try_get("device")?),
             device_name: row.try_get("device_name")?,
             last_used: row.try_get("last_used")?,
@@ -122,7 +122,7 @@ impl Handler<CreateToken> for DatabaseServer {
                             device_name,
                             token_hash,
                             hash_scheme_version,
-                            user,
+                            user_id,
                             last_used,
                             expiration_date,
                             permission_flags

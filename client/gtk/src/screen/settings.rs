@@ -1,0 +1,75 @@
+use gtk::prelude::*;
+
+use std::rc::Rc;
+
+use vertex_client_backend as vertex;
+
+use crate::screen::{self, Screen, DynamicScreen};
+
+const GLADE_SRC: &str = include_str!("glade/settings.glade");
+
+pub struct Widgets {
+    category_list: gtk::ListBox,
+    settings_viewport: gtk::Viewport,
+}
+
+pub struct Model {
+    app: Rc<crate::App>,
+    client: Rc<vertex::Client>,
+    widgets: Widgets,
+}
+
+pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
+    let builder = gtk::Builder::new_from_string(GLADE_SRC);
+
+    let viewport = builder.get_object("viewport").unwrap();
+
+    let model = Model {
+        app,
+        client,
+        widgets: Widgets {
+            category_list: builder.get_object("category_list").unwrap(),
+            settings_viewport: builder.get_object("settings_viewport").unwrap(),
+        },
+    };
+
+    let screen = Screen::new(viewport, model);
+    bind_events(&screen);
+
+    screen
+}
+
+fn bind_events(screen: &Screen<Model>) {
+    let model = screen.model();
+    let widgets = &model.widgets;
+
+    widgets.category_list.connect_row_selected(
+        screen.connector()
+            .do_async(|screen, (_list, row)| async move {
+                if let Some(row) = row {
+                    let row: gtk::ListBoxRow = row;
+                    let name = row.get_widget_name()
+                        .map(|s| s.as_str().to_owned())
+                        .unwrap_or_default();
+
+                    let model = screen.model();
+
+                    match name.as_str() {
+                        "log_out" => {
+                            model.client.revoke_current_token().await.expect("failed to revoke token");
+                            model.app.token_store.forget_token();
+
+                            let login = screen::login::build(model.app.clone());
+                            model.app.set_screen(DynamicScreen::Login(login));
+                        }
+                        "close" => {
+                            let active = screen::active::build(model.app.clone(), model.client.clone());
+                            model.app.set_screen(DynamicScreen::Active(active));
+                        }
+                        _ => ()
+                    }
+                }
+            })
+            .build_widget_and_option_consumer()
+    );
+}

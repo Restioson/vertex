@@ -8,17 +8,17 @@ use vertex_common::{CommunityId, ErrResponse, RoomId, UserId};
 pub(super) const CREATE_COMMUNITY_MEMBERSHIP_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS community_membership (
     community UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
-    \"user\" UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
-    UNIQUE(\"user\", community)
+    UNIQUE(user_id, community)
 )";
 
 /// Modified from https://stackoverflow.com/a/42217872/4871468
 const ADD_TO_ROOM: &'static str = r#"
-WITH input_rows(community, user) AS (
+WITH input_rows(community, user_id) AS (
     VALUES ($1::UUID, $2::UUID)
 ), ins AS (
-    INSERT INTO community_membership (community, user)
+    INSERT INTO community_membership (community, user_id)
         SELECT * FROM input_rows
         ON CONFLICT DO NOTHING
         RETURNING *
@@ -26,16 +26,16 @@ WITH input_rows(community, user) AS (
     SELECT 'i'::"char" AS source, * FROM ins           -- 'i' for 'inserted'
     UNION  ALL
     SELECT 's'::"char" AS source, * FROM input_rows    -- 's' for 'selected'
-    JOIN community_membership c USING (community, user)    -- columns of unique index
+    JOIN community_membership c USING (community, user_id)    -- columns of unique index
 ), ups AS (                                            -- RARE corner case
-   INSERT INTO community_membership AS c (community, user)
+   INSERT INTO community_membership AS c (community, user_id)
    SELECT i.*
    FROM input_rows i
-   LEFT JOIN sel s USING (community, user)            -- columns of unique index
-   WHERE s.user IS NULL                               -- missing!
-   ON CONFLICT (community, user) DO UPDATE            -- we've asked nicely the 1st time ...
-   SET user = c.user                                  -- ... this time we overwrite with old value
-   RETURNING 'u'::"char" AS source, *                 -- 'u' for updated
+   LEFT JOIN sel s USING (community, user_id)            -- columns of unique index
+   WHERE s.user_id IS NULL                               -- missing!
+   ON CONFLICT (community, user_id) DO UPDATE            -- we've asked nicely the 1st time ...
+   SET user_id = c.user_id                               -- ... this time we overwrite with old value
+   RETURNING 'u'::"char" AS source, *                    -- 'u' for updated
 )
 
 SELECT * FROM sel
@@ -54,7 +54,7 @@ impl TryFrom<&Row> for RoomMember {
     fn try_from(row: &Row) -> Result<RoomMember, tokio_postgres::Error> {
         Ok(RoomMember {
             community: RoomId(row.try_get("community")?),
-            user: UserId(row.try_get("user")?),
+            user: UserId(row.try_get("user_id")?),
         })
     }
 }
