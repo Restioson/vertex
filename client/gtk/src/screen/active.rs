@@ -5,7 +5,6 @@ use std::rc::Rc;
 use vertex_client_backend as vertex;
 
 use crate::screen::{self, Screen, DynamicScreen, TryGetText};
-use gtk::ListBoxRow;
 
 const GLADE_SRC: &str = include_str!("glade/active.glade");
 
@@ -168,7 +167,7 @@ fn bind_events(screen: &Screen<Model>) {
 
     widgets.settings_button.connect_button_press_event(
         screen.connector()
-            .do_sync(|screen, (button, event)| {
+            .do_sync(|screen, (_button, _event)| {
                 let model = screen.model();
                 let settings = screen::settings::build(model.app.clone(), model.client.clone());
                 model.app.set_screen(DynamicScreen::Settings(settings));

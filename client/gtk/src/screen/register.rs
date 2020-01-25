@@ -53,7 +53,7 @@ fn bind_events(screen: &Screen<Model>) {
 
     widgets.login_button.connect_button_press_event(
         screen.connector()
-            .do_sync(|screen, (button, event)| {
+            .do_sync(|screen, (_button, _event)| {
                 let login = screen::login::build(screen.model().app.clone());
                 screen.model().app.set_screen(DynamicScreen::Login(login));
             })
@@ -62,7 +62,7 @@ fn bind_events(screen: &Screen<Model>) {
 
     widgets.register_button.connect_button_press_event(
         screen.connector()
-            .do_async(|screen, (button, event)| async move {
+            .do_async(|screen, (_button, _event)| async move {
                 let model = screen.model();
 
                 let username = model.widgets.username_entry.try_get_text().unwrap_or_default();
@@ -97,7 +97,7 @@ async fn register(app: &crate::App, username: String, password_1: String, passwo
 
     let client = vertex::AuthClient::new(app.net());
 
-    let user = client.register(username.clone(), username.clone(), password.clone()).await?;
+    let _ = client.register(username.clone(), username.clone(), password.clone()).await?;
     let (device, token) = client.authenticate(username, password).await?;
 
     Ok(client.login(device, token).await?)

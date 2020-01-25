@@ -16,7 +16,6 @@ use url::Url;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::ops::Deref;
 
 struct RequestIdGenerator {
     next_request_id: AtomicU32,

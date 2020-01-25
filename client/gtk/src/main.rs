@@ -3,16 +3,14 @@ use gio::prelude::*;
 
 use url::Url;
 use vertex_client_backend as vertex;
-use vertex_common::*;
 
 use std::rc::Rc;
-use futures::task::LocalSpawnExt;
 use futures::stream::StreamExt;
 
-use crate::screen::{Screen, DynamicScreen};
-use std::cell::RefCell;
+use crate::screen::DynamicScreen;
 use crate::token_store::TokenStore;
-use vertex_client_backend::Action;
+
+use std::cell::RefCell;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -95,9 +93,9 @@ impl App {
                 while let Some(action) = stream.next().await {
                     let action: vertex::Action = action;
                     match action {
-                        Action::AddMessage(_) => {},
-                        Action::LoggedOut => {},
-                        Action::Error(_) => {},
+                        vertex::Action::AddMessage(_) => {},
+                        vertex::Action::LoggedOut => {},
+                        vertex::Action::Error(_) => {},
                     }
                     println!("{:?}", action);
                 }

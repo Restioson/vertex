@@ -3,9 +3,7 @@ pub use vertex_common::*;
 use std::time::Duration;
 use url::Url;
 
-use std::cell::RefCell;
 use futures::{Stream, StreamExt};
-use std::sync::Mutex;
 use std::rc::Rc;
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);

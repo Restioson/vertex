@@ -1,12 +1,7 @@
-use gtk::prelude::*;
-
 use std::rc::Rc;
 use std::cell::{self, RefCell};
 use std::future::Future;
 use std::pin::Pin;
-
-use vertex_client_backend as vertex;
-use std::convert::TryInto;
 
 pub mod active;
 pub mod login;
