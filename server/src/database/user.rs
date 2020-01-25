@@ -67,44 +67,56 @@ impl TryFrom<Row> for UserRecord {
     }
 }
 
-#[derive(Message)]
-#[rtype(result = "Result<Option<UserRecord>, ErrResponse>")]
 pub struct GetUserById(pub UserId);
 
-#[derive(Message)]
-#[rtype(result = "Result<Option<UserRecord>, ErrResponse>")]
+impl Message for GetUserById {
+    type Result = Result<Option<UserRecord>, ErrResponse>;
+}
+
 pub struct GetUserByName(pub String);
 
-#[derive(Message)]
-#[rtype(result = "Result<bool, ErrResponse>")]
+impl Message for GetUserByName {
+    type Result = Result<Option<UserRecord>, ErrResponse>;
+}
+
 pub struct CreateUser(pub UserRecord);
 
-#[derive(Message)]
-#[rtype(result = "Result<bool, ErrResponse>")]
+impl Message for CreateUser {
+    type Result = Result<bool, ErrResponse>;
+}
+
 pub struct ChangeUsername {
     pub user: UserId,
     pub new_username: String,
 }
 
-#[derive(Message)]
-#[rtype(result = "Result<(), ErrResponse>")]
+impl Message for ChangeUsername {
+    type Result = Result<bool, ErrResponse>;
+}
+
 pub struct ChangeDisplayName {
     pub user: UserId,
     pub new_display_name: String,
 }
 
-#[derive(Message)]
-#[rtype(result = "Result<(), ErrResponse>")]
+impl Message for ChangeDisplayName {
+    type Result = Result<(), ErrResponse>;
+}
+
 pub struct ChangePassword {
     pub user: UserId,
     pub new_password_hash: String,
     pub hash_version: HashSchemeVersion,
 }
 
-impl Handler<CreateUser> for DatabaseServer {
-    type Result = ResponseFuture<Result<bool, ErrResponse>>;
+impl Message for ChangePassword {
+    type Result = Result<(), ErrResponse>;
+}
 
-    fn handle(&mut self, create: CreateUser, _: &mut Context<Self>) -> Self::Result {
+impl Handler<CreateUser> for DatabaseServer {
+    type Responder<'a> = impl Future<Output = Result<bool, ErrResponse>> + 'a;
+
+    fn handle(&mut self, create: CreateUser, _: &mut Context<Self>) -> Self::Responder<'_> {
         let user = create.0;
         let pool = self.pool.clone();
         Box::pin(async move {
@@ -153,9 +165,9 @@ impl Handler<CreateUser> for DatabaseServer {
 }
 
 impl Handler<GetUserById> for DatabaseServer {
-    type Result = ResponseFuture<Result<Option<UserRecord>, ErrResponse>>;
+    type Responder<'a> = impl Future<Output = Result<Option<UserRecord>, ErrResponse>> + 'a;
 
-    fn handle(&mut self, get: GetUserById, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, get: GetUserById, _: &mut Context<Self>) -> Self::Responder<'_> {
         let id = get.0;
         let pool = self.pool.clone();
         Box::pin(async move {
@@ -181,9 +193,9 @@ impl Handler<GetUserById> for DatabaseServer {
 }
 
 impl Handler<GetUserByName> for DatabaseServer {
-    type Result = ResponseFuture<Result<Option<UserRecord>, ErrResponse>>;
+    type Responder<'a> = impl Future<Output = Result<Option<UserRecord>, ErrResponse>> + 'a;
 
-    fn handle(&mut self, get: GetUserByName, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, get: GetUserByName, _: &mut Context<Self>) -> Self::Responder<'_> {
         let name = get.0;
         let pool = self.pool.clone();
         Box::pin(async move {
@@ -209,9 +221,9 @@ impl Handler<GetUserByName> for DatabaseServer {
 }
 
 impl Handler<ChangeUsername> for DatabaseServer {
-    type Result = ResponseFuture<Result<bool, ErrResponse>>;
+    type Responder<'a> = impl Future<Output = Result<bool, ErrResponse>> + 'a;
 
-    fn handle(&mut self, change: ChangeUsername, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, change: ChangeUsername, _: &mut Context<Self>) -> Self::Responder<'_> {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
@@ -239,9 +251,9 @@ impl Handler<ChangeUsername> for DatabaseServer {
 }
 
 impl Handler<ChangeDisplayName> for DatabaseServer {
-    type Result = ResponseFuture<Result<(), ErrResponse>>;
+    type Responder<'a> = impl Future<Output = Result<(), ErrResponse>> + 'a;
 
-    fn handle(&mut self, change: ChangeDisplayName, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, change: ChangeDisplayName, _: &mut Context<Self>) -> Self::Responder<'_> {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;
@@ -260,9 +272,9 @@ impl Handler<ChangeDisplayName> for DatabaseServer {
 }
 
 impl Handler<ChangePassword> for DatabaseServer {
-    type Result = ResponseFuture<Result<(), ErrResponse>>;
+    type Responder<'a> = impl Future<Output = Result<(), ErrResponse>> + 'a;
 
-    fn handle(&mut self, change: ChangePassword, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, change: ChangePassword, _: &mut Context<Self>) -> Self::Responder<'_> {
         let pool = self.pool.clone();
         Box::pin(async move {
             let conn = pool.connection().await.map_err(handle_error)?;

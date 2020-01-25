@@ -8,11 +8,7 @@ edition = "2018"
 serde = "^1"
 serde_derive = "^1"
 serde_cbor = "^0.9"
-actix = { version = "^0.9", optional = true }
 uuid = { version = "0.8", features = ["serde", "v4"] }
 bytes = { version = "^0.5", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 bitflags = "^1"
-
-[features]
-enable-actix = ["actix"]

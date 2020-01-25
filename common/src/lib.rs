@@ -4,9 +4,7 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use std::time::Duration;
 use uuid::Uuid;
-
-#[macro_use]
-extern crate serde_derive;
+use serde::{Serialize, Deserialize};
 
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -229,19 +227,6 @@ impl Into<Vec<u8>> for ServerMessage {
 pub enum LeftCommunityReason {
     /// The community was deleted
     Deleted,
-}
-
-#[cfg(feature = "enable-actix")]
-impl<A, M> actix::dev::MessageResponse<A, M> for OkResponse
-where
-    A: actix::Actor,
-    M: actix::Message<Result = Self>,
-{
-    fn handle<R: actix::dev::ResponseChannel<M>>(self, _ctx: &mut A::Context, tx: Option<R>) {
-        if let Some(tx) = tx {
-            tx.send(self);
-        }
-    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

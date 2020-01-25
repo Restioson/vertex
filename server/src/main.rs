@@ -1,8 +1,7 @@
-use actix::prelude::*;
-use actix_web::web::{Data, Payload};
-use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
-use actix_web_actors::ws;
+#![feature(type_alias_impl_trait, generic_associated_types)]
+
 use std::{env, fmt::Debug, fs};
+use xtra::prelude::*;
 
 mod auth;
 mod client;
@@ -18,46 +17,44 @@ use log::{info, LevelFilter};
 use std::fs::OpenOptions;
 use std::str::FromStr;
 use vertex_common::*;
+use std::sync::Arc;
+use warp::Filter;
+use crate::client::WebSocketMessage;
+use futures::StreamExt;
+use std::net::SocketAddr;
 
-#[derive(Debug, Message, Clone)]
-#[rtype(result = "()")]
+#[derive(Debug, Clone)]
 pub struct SendMessage<T: Debug>(T);
 
-/// Marker trait for `vertex_common` structs that are Actix messages too
-trait VertexActixMessage {
-    type Result;
-}
-
-impl VertexActixMessage for ClientSentMessage {
-    type Result = MessageId;
-}
-
-impl VertexActixMessage for Edit {
+impl<T: Debug + Send + 'static> Message for SendMessage<T> {
     type Result = ();
 }
 
-struct IdentifiedMessage<T: VertexActixMessage> {
+/// Marker trait for `vertex_common` structs that are actor messages too
+trait VertexActorMessage: Send + 'static {
+    type Result: Send;
+}
+
+impl VertexActorMessage for ClientSentMessage {
+    type Result = MessageId;
+}
+
+impl VertexActorMessage for Edit {
+    type Result = ();
+}
+
+struct IdentifiedMessage<T: VertexActorMessage> {
     user: UserId,
     device: DeviceId,
     message: T,
 }
 
 impl<T> Message for IdentifiedMessage<T>
-    where T: VertexActixMessage,
-          T::Result: 'static
+where
+    T: VertexActorMessage,
+    T::Result: 'static,
 {
     type Result = Result<T::Result, ErrResponse>;
-}
-
-async fn dispatch_client_ws(
-    request: HttpRequest,
-    stream: Payload,
-    db_server: Data<Addr<DatabaseServer>>,
-    config: Data<config::Config>,
-) -> Result<HttpResponse, Error> {
-    let db_server = db_server.get_ref().clone();
-
-    ws::start(ClientWsSession::new(db_server, config), &request, stream)
 }
 
 fn create_files_directories(config: &Config) {
@@ -112,7 +109,8 @@ fn setup_logging(config: &Config) {
     info!("Logging set up");
 }
 
-fn main() -> std::io::Result<()> {
+#[tokio::main]
+async fn main() {
     println!("Vertex server starting...");
 
     let config = config::load_config();
@@ -123,22 +121,30 @@ fn main() -> std::io::Result<()> {
 
     create_files_directories(&config);
 
-    let ssl_config = config::ssl_config();
+    let (cert_path, key_path) = config::ssl_config();
+    let db_server = Actor::spawn(DatabaseServer::new(&config).await);
+    let config = Arc::new(config);
 
-    let mut sys = System::new("vertex_server");
-    let db_server = DatabaseServer::new(&mut sys, &config).start();
+    let routes = warp::path("client")
+        .and(warp::ws())
+        .map(move |ws: warp::ws::Ws| {
+            let db_server = db_server.clone();
+            let config = config.clone();
 
-    HttpServer::new(move || {
-        App::new()
-            .data(db_server.clone())
-            .data(config.clone())
-            .service(web::resource("/client/").route(web::get().to(dispatch_client_ws)))
-    })
-    .bind_openssl(addr.clone(), ssl_config)
-    .expect("Error binding to socket")
-    .run();
+            ws.on_upgrade({
+                move |websocket| {
+                    let (tx, rx) = websocket.split();
+                    let addr = ClientWsSession::new(tx, db_server.clone(), config.clone()).spawn();
+                    addr.into_downgraded().attach_stream(rx.map(|res| WebSocketMessage(res)));
+                    async {}
+                }
+            })
+        });
 
-    info!("Vertex server started on addr {}", addr);
-
-    sys.run()
+    info!("Vertex server starting on addr {}", addr);
+    warp::serve(routes)
+        .tls()
+        .cert_path(cert_path)
+        .key_path(key_path)
+        .run(addr.parse::<SocketAddr>().unwrap()).await;
 }

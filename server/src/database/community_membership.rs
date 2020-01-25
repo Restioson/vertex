@@ -1,10 +1,9 @@
 use super::*;
-use actix::{Context, Handler, Message, ResponseFuture};
 use std::convert::TryFrom;
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
 use tokio_postgres::Row;
-use vertex_common::{CommunityId, RoomId, ErrResponse, UserId};
+use vertex_common::{CommunityId, ErrResponse, RoomId, UserId};
 
 pub(super) const CREATE_COMMUNITY_MEMBERSHIP_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS community_membership (
@@ -60,11 +59,13 @@ impl TryFrom<&Row> for RoomMember {
     }
 }
 
-#[derive(Message)]
-#[rtype(result = "Result<(), ErrResponse>")]
 pub struct AddToCommunity {
     pub community: CommunityId,
     pub user: UserId,
+}
+
+impl Message for AddToCommunity {
+    type Result = Result<(), ErrResponse>;
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -105,14 +106,13 @@ impl TryFrom<&Row> for AddToRoomResult {
 }
 
 impl Handler<AddToCommunity> for DatabaseServer {
-    type Result = ResponseFuture<Result<(), ErrResponse>>;
+    type Responder<'a> = impl Future<Output = Result<(), ErrResponse>> + 'a;
 
-    fn handle(&mut self, add: AddToCommunity, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, add: AddToCommunity, _: &mut Context<Self>) -> Self::Responder<'_> {
         use AddToRoomSource::*;
 
-        let pool = self.pool.clone();
-        Box::pin(async move {
-            let conn = pool.connection().await.map_err(handle_error)?;
+        async move {
+            let conn = self.pool.connection().await.map_err(handle_error)?;
             let query = conn
                 .client
                 .prepare(ADD_TO_ROOM)
@@ -159,6 +159,6 @@ impl Handler<AddToCommunity> for DatabaseServer {
                     Err(err)
                 }
             }
-        })
+        }
     }
 }

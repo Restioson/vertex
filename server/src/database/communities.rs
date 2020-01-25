@@ -1,9 +1,10 @@
 use crate::database::{handle_error, handle_error_psql, DatabaseServer};
-use actix::{Context, Handler, Message, ResponseFuture};
 use std::convert::TryFrom;
 use tokio_postgres::Row;
 use uuid::Uuid;
 use vertex_common::{CommunityId, ErrResponse};
+use xtra::prelude::*;
+use futures::Future;
 
 pub(super) const CREATE_COMMUNITIES_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS communities (
@@ -28,24 +29,27 @@ impl TryFrom<Row> for CommunityRecord {
     }
 }
 
-#[derive(Message)]
-#[rtype(result = "Result<Option<CommunityRecord>, ErrResponse>")]
 pub struct GetCommunityMetadata(CommunityId);
 
-#[derive(Message)]
-#[rtype(result = "Result<CommunityRecord, ErrResponse>")]
+impl Message for GetCommunityMetadata {
+    type Result = Result<Option<CommunityRecord>, ErrResponse>;
+}
+
 pub struct CreateCommunity {
     pub name: String,
 }
 
+impl Message for CreateCommunity {
+    type Result = Result<CommunityRecord, ErrResponse>;
+}
+
 // TODO(room_persistence): load at boot
 impl Handler<GetCommunityMetadata> for DatabaseServer {
-    type Result = ResponseFuture<Result<Option<CommunityRecord>, ErrResponse>>;
+    type Responder<'a> = impl Future<Output = Result<Option<CommunityRecord>, ErrResponse>> + 'a;
 
-    fn handle(&mut self, get: GetCommunityMetadata, _: &mut Context<Self>) -> Self::Result {
-        let pool = self.pool.clone();
-        Box::pin(async move {
-            let conn = pool.connection().await.map_err(handle_error)?;
+    fn handle(&mut self, get: GetCommunityMetadata, _: &mut Context<Self>) -> Self::Responder<'_> {
+        async move {
+            let conn = self.pool.connection().await.map_err(handle_error)?;
             let query = conn
                 .client
                 .prepare("SELECT * FROM communities WHERE id=$1")
@@ -64,18 +68,17 @@ impl Handler<GetCommunityMetadata> for DatabaseServer {
             } else {
                 Ok(None)
             }
-        })
+        }
     }
 }
 
 impl Handler<CreateCommunity> for DatabaseServer {
-    type Result = ResponseFuture<Result<CommunityRecord, ErrResponse>>;
+    type Responder<'a> = impl Future<Output = Result<CommunityRecord, ErrResponse>> + 'a;
 
-    fn handle(&mut self, create: CreateCommunity, _: &mut Context<Self>) -> Self::Result {
-        let id = Uuid::new_v4();
-        let pool = self.pool.clone();
-        Box::pin(async move {
-            let conn = pool.connection().await.map_err(handle_error)?;
+    fn handle(&mut self, create: CreateCommunity, _: &mut Context<Self>) -> Self::Responder<'_> {
+        async move {
+            let id = Uuid::new_v4();
+            let conn = self.pool.connection().await.map_err(handle_error)?;
             let query = conn
                 .client
                 .prepare("INSERT INTO communities (id, name) VALUES ($1, $2) RETURNING *")
@@ -87,6 +90,6 @@ impl Handler<CreateCommunity> for DatabaseServer {
                 .await
                 .map_err(handle_error_psql)?;
             CommunityRecord::try_from(row).map_err(handle_error_psql)
-        })
+        }
     }
 }

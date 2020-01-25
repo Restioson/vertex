@@ -5,19 +5,15 @@ authors = ["Restioson <restiosondev@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-actix = "^0.9"
-actix-web = { version = "^2", features = ["openssl"] }
-actix-web-actors = "^2"
-actix-files = "^0.2"
-actix-service = "^1"
+xtra = { git = "https://github.com/Restioson/xtra", rev = "93951f2", features = ["with-tokio-0_2"] }
+warp = { version = "^0.2", features = ["tls"] }
 serde = "^1"
 serde_cbor = "^0.10"
-websocket = "^0.23"
 url = "^2"
 futures = "^0.3"
 l337 = { git = "https://github.com/OneSignal/L3-37", rev = "a970fe669787c4caf8ae699870b97ed1d7616f00" }
 l337-postgres = { git = "https://github.com/OneSignal/L3-37", rev = "a970fe669787c4caf8ae699870b97ed1d7616f00" }
-tokio = { version = "^0.2", features = ["rt-threaded", "blocking"] }
+tokio = { version = "^0.2", features = ["full"] }
 tokio-postgres = { version = "^0.5", features = ["with-uuid-0_8", "with-chrono-0_4"] }
 uuid = { version = "0.8", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -29,11 +25,10 @@ base64 = "^0.10"
 directories = "^2"
 toml = "^0.5"
 unicode-normalization = "^0.1"
-openssl = "^0.10"
 log = "^0.4"
 fern = "^0.5"
 dashmap = "^3"
-vertex_common = { path = "../common/", features = ["enable-actix"] }
+vertex_common = { path = "../common/" }
 
 [profile.dev.package.rust-argon2] # Otherwise, login is painfully slow on dev
 opt-level = 3

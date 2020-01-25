@@ -36,4 +36,4 @@ services:
       POSTGRES_DB: vertex
 
 volumes:
-  data-volume:
+  vertex_postgres_db:
