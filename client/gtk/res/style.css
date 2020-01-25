@@ -1,5 +1,6 @@
 @define-color content_bg_color #343434;
 @define-color sidebar_bg_color #313131;
+@define-color upper_bar_bg_color #3D3D3D;
 @define-color lower_bar_bg_color #2D2D2D;
 
 @define-color room_list_bg_color #2D2D2D;
@@ -8,13 +9,40 @@
 
 @define-color message_entry_color #343434;
 
-@define-color widget_color #404040;
+@define-color widget_color #3D3D3D;
 
 @define-color error_color #d15c4f;
 
-#communities {
-  background: @sidebar_bg_color;
+#upper_bar {
+  background: @upper_bar_bg_color;
+}
+
+#upper_bar button.flat {
+  background: @upper_bar_bg_color;
+  border-radius: 0px;
+}
+
+#upper_bar button.flat:hover {
+  background: shade(@upper_bar_bg_color, 1.2);
+}
+
+#sidebar {
+  padding-top: 4px;
   min-width: 260px;
+}
+
+#sidebar, #communities {
+  background: @sidebar_bg_color;
+}
+
+#add_community_button {
+  background: @widget_color;
+  margin: 10px;
+  padding: 6px;
+}
+
+#add_community_button:hover {
+  background: shade(@widget_color, 1.2);
 }
 
 #sidebar_lower_bar {
@@ -26,6 +54,10 @@
 }
 
 #messages {
+  background: @content_bg_color;
+}
+
+#messages row, #message row:hover {
   background: @content_bg_color;
 }
 
@@ -83,10 +115,16 @@
   border-style: none;
 }
 
-#community_label {
+#community_name {
   color: #d0d0d0;
   font-size: 15px;
   font-weight: 600;
+}
+
+#community_motd {
+  color: #a0a0a0;
+  font-size: 12px;
+  font-style: italic;
 }
 
 #room_label {
@@ -150,11 +188,6 @@
 
 #login button, #register button {
   min-height: 26px;
-}
-
-#settings button.flat {
-  border-radius: 0px;
-  font-size: 14px;
 }
 
 #settings #category_list {

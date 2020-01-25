@@ -71,12 +71,28 @@ fn push_community(screen: Screen<Model>, communities: &gtk::ListBox, name: &str,
         .name("community_icon")
         .build()
     );
-    community_header.add(&gtk::LabelBuilder::new()
-        .name("community_label")
+
+    let community_description = gtk::BoxBuilder::new()
+        .name("community_description")
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(2)
+        .build();
+
+    community_description.add(&gtk::LabelBuilder::new()
+        .name("community_name")
         .label(name)
-        .valign(gtk::Align::Start)
+        .halign(gtk::Align::Start)
         .build()
     );
+
+    community_description.add(&gtk::LabelBuilder::new()
+        .name("community_motd")
+        .label("Message of the day!")
+        .halign(gtk::Align::Start)
+        .build()
+    );
+
+    community_header.add(&community_description);
 
     let expander = gtk::ExpanderBuilder::new()
         .name("community_expander")
