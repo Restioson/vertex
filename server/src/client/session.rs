@@ -187,6 +187,8 @@ impl ClientWsSession {
                 }
             }
         }
+
+        self.state = SessionState::WaitingForLogin;
     }
 
     async fn respond(
