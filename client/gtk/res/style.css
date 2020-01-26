@@ -167,9 +167,11 @@
   background: shade(@content_bg_color, 0.85);
 }
 
-#login frame frame, #register frame frame {
+#login frame, #register frame {
   background: @content_bg_color;
-  padding: 80px 40px;
+  min-width: 300px;
+  min-height: 300px;
+  padding: 40px;
   border-radius: 20px;
 }
 

@@ -6,125 +6,116 @@
     <property name="name">login</property>
     <property name="can_focus">False</property>
     <child>
-      <object class="GtkAspectFrame">
+      <object class="GtkAlignment">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="label_xalign">0</property>
-        <property name="shadow_type">none</property>
-        <property name="obey_child">False</property>
+        <property name="xscale">0</property>
+        <property name="yscale">0</property>
         <child>
-          <object class="GtkAlignment">
+          <object class="GtkFrame">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="xscale">0.5</property>
-            <property name="yscale">0.10000000149011612</property>
+            <property name="label_xalign">0</property>
+            <property name="shadow_type">none</property>
             <child>
-              <object class="GtkFrame">
+              <object class="GtkBox">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label_xalign">0</property>
-                <property name="shadow_type">none</property>
+                <property name="orientation">vertical</property>
+                <property name="spacing">10</property>
                 <child>
-                  <object class="GtkBox">
+                  <object class="GtkLabel" id="title">
+                    <property name="name">title</property>
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="orientation">vertical</property>
-                    <property name="spacing">10</property>
+                    <property name="margin_bottom">20</property>
+                    <property name="label" translatable="yes">Login</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkEntry" id="username_entry">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="placeholder_text" translatable="yes">Username</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkEntry" id="password_entry">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="visibility">False</property>
+                    <property name="invisible_char">•</property>
+                    <property name="placeholder_text" translatable="yes">Password</property>
+                    <property name="input_purpose">password</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">2</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="register_button">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                    <property name="halign">end</property>
+                    <property name="relief">none</property>
                     <child>
-                      <object class="GtkLabel" id="title">
-                        <property name="name">title</property>
+                      <object class="GtkLabel">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="margin_bottom">20</property>
-                        <property name="label" translatable="yes">Login</property>
+                        <property name="label" translatable="yes">Register</property>
+                        <style>
+                          <class name="link"/>
+                        </style>
                       </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">0</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkEntry" id="username_entry">
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="placeholder_text" translatable="yes">Username</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">1</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkEntry" id="password_entry">
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="visibility">False</property>
-                        <property name="invisible_char">•</property>
-                        <property name="placeholder_text" translatable="yes">Password</property>
-                        <property name="input_purpose">password</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">2</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkButton" id="register_button">
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="receives_default">True</property>
-                        <property name="halign">end</property>
-                        <property name="relief">none</property>
-                        <child>
-                          <object class="GtkLabel">
-                            <property name="visible">True</property>
-                            <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">Register</property>
-                            <style>
-                              <class name="link"/>
-                            </style>
-                          </object>
-                        </child>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="pack_type">end</property>
-                        <property name="position">3</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkButton" id="login_button">
-                        <property name="label" translatable="yes">Login</property>
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="receives_default">True</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="pack_type">end</property>
-                        <property name="position">4</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel" id="error_label">
-                        <property name="name">error_label</property>
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="halign">center</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="pack_type">end</property>
-                        <property name="position">5</property>
-                      </packing>
                     </child>
                   </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="pack_type">end</property>
+                    <property name="position">3</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="login_button">
+                    <property name="label" translatable="yes">Login</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="pack_type">end</property>
+                    <property name="position">4</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="error_label">
+                    <property name="name">error_label</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="halign">center</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="pack_type">end</property>
+                    <property name="position">5</property>
+                  </packing>
                 </child>
               </object>
             </child>
