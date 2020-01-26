@@ -9,63 +9,139 @@
 
 @define-color message_entry_color #343434;
 
-@define-color widget_color #3D3D3D;
+@define-color widget_bg_color #3d3d3d;
+@define-color widget_color #dadada;
 
 @define-color error_color #d15c4f;
 
-#upper_bar {
+@define-color accent_color #8fa876;
+
+/* general styling */
+
+* {
+  all: unset;
+}
+
+viewport {
+  background: @content_bg_color;
+}
+
+entry {
+  background: @widget_bg_color;
+  color: @widget_color;
+  caret-color: currentColor;
+
+  padding: 5px 8px;
+  border-radius: 10px;
+
+  transition: all 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+entry:focus {
+  background: shade(@widget_bg_color, 1.2);
+}
+
+entry selection {
+  color: #ffffff;
+  background-color: @accent_color;
+}
+
+expander arrow {
+  min-width: 16px;
+  min-height: 16px;
+  -gtk-icon-source: image(-gtk-recolor(url("feather/chevron-right.svg")));
+}
+
+expander arrow:checked {
+  -gtk-icon-transform: rotate(90deg);
+}
+
+button {
+  background: @widget_bg_color;
+  color: @widget_color;
+
+  padding: 5px 8px;
+  border-radius: 10px;
+
+  transition: all 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+button:hover {
+  background: shade(@widget_bg_color, 1.2);
+}
+
+button.flat {
+  background: transparent;
+}
+
+button.flat:hover {
+  background: @widget_bg_color;
+}
+
+list row {
+  background: @sidebar_bg_color;
+}
+
+list row:hover {
+  background: shade(@sidebar_bg_color, 1.1);
+}
+
+list row:selected {
+  background: shade(@sidebar_bg_color, 1.3);
+}
+
+separator {
+  background: shade(@sidebar_bg_color, 0.9);
+  min-height: 2px;
+}
+
+/* specific styling */
+
+#active #upper_bar {
   background: @upper_bar_bg_color;
+  min-height: 30px;
 }
 
-#upper_bar button.flat {
-  background: @upper_bar_bg_color;
-  border-radius: 0px;
-}
-
-#upper_bar button.flat:hover {
-  background: shade(@upper_bar_bg_color, 1.2);
-}
-
-#sidebar {
+#active #sidebar {
   padding-top: 4px;
   min-width: 260px;
 }
 
-#sidebar, #communities {
+#active #sidebar, #communities {
   background: @sidebar_bg_color;
 }
 
-#add_community_button {
+#active #add_community_button {
   background: transparent;
   border-style: solid;
-  border-color: @widget_color;
+  border-color: @widget_bg_color;
   border-width: 3px;
   margin: 10px;
   padding: 6px;
   border-radius: 20px;
 }
 
-#add_community_button:hover {
-  background: @widget_color;
+#active #add_community_button:hover {
+  background: @widget_bg_color;
 }
 
-#sidebar_lower_bar {
+#active #sidebar_lower_bar {
   background: @lower_bar_bg_color;
 }
 
-#content_lower_bar {
+#active #content_lower_bar {
   background: @lower_bar_bg_color;
 }
 
-#messages {
+#active #messages {
   background: @content_bg_color;
 }
 
-#messages row, #message row:hover {
+#active #messages row, #active #message row:hover {
   background: @content_bg_color;
 }
 
-#message_entry {
+#active #message_entry {
   background: @message_entry_color;
   margin: 7px 4px;
   border-radius: 10px;
@@ -76,36 +152,36 @@
   transition: none;
 }
 
-#room_list {
+#active #room_list {
   background: @room_list_bg_color;
   padding: 5px 0px;
   border-radius: 4px;
 }
 
-#room_list row {
+#active #room_list row {
   background: @room_list_bg_color;
   margin-left: 35px;
   margin-right: 10px;
   border-radius: 6px;
 }
 
-#room_list row:hover {
+#active #room_list row:hover {
   background: shade(@room_list_bg_color, 1.1);
 }
 
-#room_list row:selected {
+#active #room_list row:selected {
   background: shade(@room_list_bg_color, 1.3);
 }
 
-#community_expander {
+#active #community_expander {
   margin: 4px 0px;
 }
 
-#community_header {
+#active #community_header {
   margin: 4px;
 }
 
-#community_icon {
+#active #community_icon {
   min-width: 40px;
   min-height: 40px;
 
@@ -115,40 +191,40 @@
   border-radius: 20px;
 }
 
-#community_icon border {
+#active #community_icon border {
   border-style: none;
 }
 
-#community_name {
+#active #community_name {
   color: #d0d0d0;
   font-size: 15px;
   font-weight: 600;
 }
 
-#community_motd {
+#active #community_motd {
   color: #a0a0a0;
   font-size: 12px;
   font-style: italic;
 }
 
-#room_label {
+#active #room_label {
   color: #d0d0d0;
   font-size: 14px;
   font-weight: 500;
   padding-left: 4px;
 }
 
-#message {
+#active #message {
   padding: 4px;
 }
 
-#message #author_name {
+#active #message #author_name {
   font-size: 14px;
   font-weight: 500;
   padding-left: 2px;
 }
 
-#message #author_icon {
+#active #message #author_icon {
   min-width: 40px;
   min-height: 40px;
 
@@ -158,9 +234,19 @@
   border-radius: 20px;
 }
 
-#message #message_content {
+#active #message #message_content {
   color: #e0e0e0;
   padding-left: 2px;
+}
+
+#active #settings_button {
+  background: @upper_bar_bg_color;
+  margin: 4px;
+  border-radius: 8px;
+}
+
+#active #settings_button:hover {
+  background: shade(@upper_bar_bg_color, 1.2);
 }
 
 #login, #register {
@@ -229,58 +315,4 @@
 #loading spinner {
   min-width: 25px;
   min-height: 25px;
-}
-
-* {
-  border-style: none;
-  outline: none;
-  color: white;
-}
-
-viewport {
-  background: @content_bg_color;
-}
-
-entry {
-  background: @widget_color;
-  border-radius: 10px;
-}
-
-entry:focus {
-  background: shade(@widget_color, 1.2);
-  box-shadow: none;
-}
-
-button {
-  background: @widget_color;
-  border-radius: 10px;
-}
-
-button:hover {
-  background: shade(@widget_color, 1.2);
-}
-
-button.flat {
-  background: transparent;
-}
-
-button.flat:hover {
-  background: @widget_color;
-}
-
-list row {
-  background: @sidebar_bg_color;
-}
-
-list row:hover {
-  background: shade(@sidebar_bg_color, 1.1);
-}
-
-list row:selected {
-  background: shade(@sidebar_bg_color, 1.3);
-}
-
-separator {
-  background: shade(@sidebar_bg_color, 0.9);
-  min-height: 2px;
 }
