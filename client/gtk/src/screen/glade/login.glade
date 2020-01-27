@@ -104,11 +104,34 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkLabel" id="error_label">
-                    <property name="name">error_label</property>
+                  <object class="GtkStack" id="status_stack">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="halign">center</property>
+                    <property name="transition_duration">0</property>
+                    <child>
+                      <object class="GtkLabel" id="error_label">
+                        <property name="name">error_label</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="halign">center</property>
+                      </object>
+                      <packing>
+                        <property name="name">error</property>
+                        <property name="title" translatable="yes">error</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkSpinner" id="spinner">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="active">True</property>
+                      </object>
+                      <packing>
+                        <property name="name">spinner</property>
+                        <property name="title" translatable="yes">spinner</property>
+                        <property name="position">1</property>
+                      </packing>
+                    </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>

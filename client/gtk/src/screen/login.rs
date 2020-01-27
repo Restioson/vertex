@@ -16,7 +16,9 @@ pub struct Widgets {
     password_entry: gtk::Entry,
     login_button: gtk::Button,
     register_button: gtk::Button,
+    status_stack: gtk::Stack,
     error_label: gtk::Label,
+    spinner: gtk::Spinner,
 }
 
 pub struct Model {
@@ -36,7 +38,9 @@ pub fn build(app: Rc<crate::App>) -> Screen<Model> {
             password_entry: builder.get_object("password_entry").unwrap(),
             login_button: builder.get_object("login_button").unwrap(),
             register_button: builder.get_object("register_button").unwrap(),
+            status_stack: builder.get_object("status_stack").unwrap(),
             error_label: builder.get_object("error_label").unwrap(),
+            spinner: builder.get_object("spinner").unwrap(),
         },
     };
 
@@ -58,6 +62,7 @@ fn bind_events(screen: &Screen<Model>) {
                 let username = model.widgets.username_entry.try_get_text().unwrap_or_default();
                 let password = model.widgets.password_entry.try_get_text().unwrap_or_default();
 
+                model.widgets.status_stack.set_visible_child(&model.widgets.spinner);
                 model.widgets.error_label.set_text("");
 
                 match login(&screen.model().app, username, password).await {
@@ -72,6 +77,8 @@ fn bind_events(screen: &Screen<Model>) {
                     }
                     Err(err) => model.widgets.error_label.set_text(&format!("{}", err)),
                 }
+
+                model.widgets.status_stack.set_visible_child(&model.widgets.error_label);
             })
             .build_widget_event()
     );
@@ -130,7 +137,8 @@ impl From<ErrResponse> for LoginError {
     fn from(err: ErrResponse) -> Self {
         match err {
             ErrResponse::Internal => LoginError::InternalServerError,
-            ErrResponse::IncorrectUsernameOrPassword => LoginError::InvalidUsernameOrPassword,
+            ErrResponse::IncorrectUsernameOrPassword | ErrResponse::InvalidUser => LoginError::InvalidUsernameOrPassword,
+
             _ => LoginError::UnknownError,
         }
     }

@@ -16,7 +16,9 @@ pub struct Widgets {
     password_entry_2: gtk::Entry,
     register_button: gtk::Button,
     login_button: gtk::Button,
+    status_stack: gtk::Stack,
     error_label: gtk::Label,
+    spinner: gtk::Spinner,
 }
 
 pub struct Model {
@@ -37,7 +39,9 @@ pub fn build(app: Rc<crate::App>) -> Screen<Model> {
             password_entry_2: builder.get_object("password_entry_2").unwrap(),
             register_button: builder.get_object("register_button").unwrap(),
             login_button: builder.get_object("login_button").unwrap(),
+            status_stack: builder.get_object("status_stack").unwrap(),
             error_label: builder.get_object("error_label").unwrap(),
+            spinner: builder.get_object("spinner").unwrap(),
         },
     };
 
@@ -69,6 +73,7 @@ fn bind_events(screen: &Screen<Model>) {
                 let password_1 = model.widgets.password_entry_1.try_get_text().unwrap_or_default();
                 let password_2 = model.widgets.password_entry_2.try_get_text().unwrap_or_default();
 
+                model.widgets.status_stack.set_visible_child(&model.widgets.spinner);
                 model.widgets.error_label.set_text("");
 
                 match register(&screen.model().app, username, password_1, password_2).await {
@@ -83,6 +88,8 @@ fn bind_events(screen: &Screen<Model>) {
                     }
                     Err(err) => model.widgets.error_label.set_text(&format!("{}", err)),
                 }
+
+                model.widgets.status_stack.set_visible_child(&model.widgets.error_label);
             })
             .build_widget_event()
     );
