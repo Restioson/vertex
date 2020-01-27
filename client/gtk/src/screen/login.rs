@@ -91,7 +91,7 @@ async fn login(app: &crate::App, username: String, password: String) -> Result<v
 
     let (device, token) = match app.token_store.get_stored_token() {
         Some(token) => token,
-        None => client.authenticate(username, password).await?,
+        None => client.authenticate(UserCredentials::new(username, password)).await?,
     };
 
     Ok(client.login(device, token).await?)

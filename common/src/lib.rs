@@ -37,6 +37,18 @@ pub struct DeviceId(pub Uuid);
 pub struct AuthToken(pub String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserCredentials {
+    pub username: String,
+    pub password: String,
+}
+
+impl UserCredentials {
+    pub fn new(username: String, password: String) -> UserCredentials {
+        UserCredentials { username, password }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientMessage {
     pub id: RequestId,
     pub request: ClientRequest,
@@ -49,15 +61,11 @@ impl ClientMessage {
 }
 
 impl Into<Bytes> for ClientMessage {
-    fn into(self) -> Bytes {
-        serde_cbor::to_vec(&self).unwrap().into()
-    }
+    fn into(self) -> Bytes { serde_cbor::to_vec(&self).unwrap().into() }
 }
 
 impl Into<Vec<u8>> for ClientMessage {
-    fn into(self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
-    }
+    fn into(self) -> Vec<u8> { serde_cbor::to_vec(&self).unwrap() }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,26 +75,21 @@ pub enum ClientRequest {
         token: AuthToken,
     },
     CreateToken {
-        username: String,
-        password: String,
-        device_name: Option<String>,
-        expiration_date: Option<DateTime<Utc>>,
-        permission_flags: TokenPermissionFlags,
+        credentials: UserCredentials,
+        options: TokenCreationOptions,
     },
-    RevokeToken {
+    RevokeToken,
+    RevokeForeignToken {
         device: DeviceId,
-        // Require re-authentication to revoke a token other than the current
-        password: Option<String>,
+        password: String,
     },
     RefreshToken {
+        credentials: UserCredentials,
         device: DeviceId,
-        username: String,
-        password: String,
     },
     CreateUser {
-        username: String,
+        credentials: UserCredentials,
         display_name: String,
-        password: String,
     },
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
@@ -158,6 +161,13 @@ pub struct Delete {
     pub room: RoomId,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenCreationOptions {
+    pub device_name: Option<String>,
+    pub expiration_date: Option<DateTime<Utc>>,
+    pub permission_flags: TokenPermissionFlags,
+}
+
 bitflags! {
     #[derive(Serialize, Deserialize)]
     pub struct TokenPermissionFlags: i64 {
@@ -197,7 +207,7 @@ pub enum ServerMessage {
     Action(ServerAction),
     Response {
         id: RequestId,
-        result: Result<OkResponse, ErrResponse>,
+        result: ResponseResult,
     },
     MalformedMessage,
 }
@@ -228,6 +238,8 @@ pub enum LeftCommunityReason {
     /// The community was deleted
     Deleted,
 }
+
+pub type ResponseResult = Result<OkResponse, ErrResponse>;
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum OkResponse {

@@ -97,8 +97,10 @@ async fn register(app: &crate::App, username: String, password_1: String, passwo
 
     let client = vertex::AuthClient::new(app.net());
 
-    let _ = client.register(username.clone(), username.clone(), password.clone()).await?;
-    let (device, token) = client.authenticate(username, password).await?;
+    let credentials = UserCredentials::new(username.clone(), password);
+
+    let _ = client.register(credentials.clone(), username.clone()).await?;
+    let (device, token) = client.authenticate(credentials).await?;
 
     Ok(client.login(device, token).await?)
 }

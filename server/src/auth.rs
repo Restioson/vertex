@@ -40,13 +40,13 @@ fn valid_username(username: &str, config: &Config) -> bool {
 
 pub struct TooShort;
 
-pub fn process_username(username: &str, _config: &Config) -> String {
+pub fn normalize_username(username: &str, _config: &Config) -> String {
     username.nfkc().flat_map(|c| c.to_lowercase()).collect()
 }
 
 pub fn prepare_username(username: &str, config: &Config) -> Result<String, TooShort> {
     if valid_username(username, config) {
-        Ok(process_username(username, config))
+        Ok(normalize_username(username, config))
     } else {
         Err(TooShort)
     }
@@ -85,20 +85,6 @@ pub fn verify(
     .map(|r| r.expect("auth error"))
 }
 
-pub async fn verify_user_password(
-    user: UserRecord,
-    password: String,
-) -> Result<UserId, ErrResponse> {
-    let UserRecord {
-        id: user,
-        password_hash,
-        hash_scheme_version,
-        ..
-    } = user;
-    let matches = verify(password, password_hash, hash_scheme_version).await;
-    if matches {
-        Ok(user)
-    } else {
-        Err(ErrResponse::IncorrectUsernameOrPassword)
-    }
+pub async fn verify_user(user: UserRecord, password: String) -> bool {
+    verify(password, user.password_hash, user.hash_scheme_version).await
 }
