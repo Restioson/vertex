@@ -108,7 +108,24 @@ spinner:checked {
   animation: spin 12s linear infinite;
 }
 
+#dialog_bg {
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.dialog {
+  background: @dialog_bg_color;
+  min-width: 100px;
+  min-height: 100px;
+  padding: 20px;
+  border-radius: 20px;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.5);
+}
+
 /* specific styling */
+
+/*
+  active screen
+*/
 
 #active #upper_bar {
   background: @upper_bar_bg_color;
@@ -277,6 +294,10 @@ spinner:checked {
   margin: 10px;
 }
 
+/*
+  login & register screen
+*/
+
 #login, #register {
   background: shade(@content_bg_color, 0.85);
 }
@@ -311,6 +332,10 @@ spinner:checked {
   min-height: 26px;
 }
 
+/*
+  settings screen
+*/
+
 #settings #category_list {
   min-width: 228px;
   background: @sidebar_bg_color;
@@ -336,6 +361,10 @@ spinner:checked {
   font-weight: 600;
 }
 
+/*
+  loading screen
+*/
+
 #loading label {
   font-size: 16px;
 }
@@ -343,17 +372,4 @@ spinner:checked {
 #loading spinner {
   min-width: 25px;
   min-height: 25px;
-}
-
-#dialog_bg {
-  background-color: rgba(0, 0, 0, 0.4);
-}
-
-.dialog {
-  background: @dialog_bg_color;
-  min-width: 100px;
-  min-height: 100px;
-  padding: 20px;
-  border-radius: 20px;
-  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.5);
 }

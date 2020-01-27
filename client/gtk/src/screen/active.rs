@@ -63,7 +63,7 @@ fn push_message(messages: &gtk::ListBox, author: &str, content: &str) {
     messages.insert(&outer_box, -1);
 }
 
-fn push_community(screen: Screen<Model>, communities: &gtk::ListBox, name: &str, rooms: &[&str]) {
+fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
     let community_header = gtk::BoxBuilder::new()
         .name("community_header")
         .orientation(gtk::Orientation::Horizontal)
@@ -137,7 +137,8 @@ fn push_community(screen: Screen<Model>, communities: &gtk::ListBox, name: &str,
     );
 
     expander.show_all();
-    communities.insert(&expander, -1);
+
+    screen.model().widgets.communities.insert(&expander, -1);
 }
 
 pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
@@ -160,11 +161,6 @@ pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
     };
 
     let screen = Screen::new(main, model);
-
-    for i in 1..=5 {
-        push_community(screen.clone(), &screen.model().widgets.communities, &format!("Community {}", i), &["General", "Off Topic"]);
-    }
-
     bind_events(&screen);
 
     screen
@@ -197,13 +193,27 @@ fn bind_events(screen: &Screen<Model>) {
 
     widgets.add_community_button.connect_button_press_event(
         screen.connector()
-            .do_sync(|screen, (_button, _event)| {
-                let model = screen.model();
+            .do_sync(|screen, _| show_add_community(screen))
+            .build_widget_event()
+    );
+}
 
-                let builder = gtk::Builder::new_from_string(ADD_COMMUNITY_SRC);
-                let main: gtk::Box = builder.get_object("main").unwrap();
+fn show_add_community(screen: Screen<Model>) {
+    let model = screen.model();
 
-                screen::show_dialog(&model.widgets.main, main);
+    let builder = gtk::Builder::new_from_string(ADD_COMMUNITY_SRC);
+    let main: gtk::Box = builder.get_object("main").unwrap();
+
+    let create_community_button: gtk::Button = builder.get_object("create_community_button").unwrap();
+    let join_community_button: gtk::Button = builder.get_object("join_community_button").unwrap();
+
+    let dialog = screen::show_dialog(&model.widgets.main, main);
+
+    create_community_button.connect_button_press_event(
+        screen.connector()
+            .do_sync(move |screen, _| {
+                push_community(screen, "Community", &["General", "Off Topic"]);
+                dialog.close();
             })
             .build_widget_event()
     );

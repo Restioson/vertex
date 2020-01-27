@@ -23,20 +23,44 @@ pub fn dialog_bg() -> gtk::Widget {
         .upcast()
 }
 
-pub fn show_dialog<W: glib::IsA<gtk::Widget>>(overlay: &gtk::Overlay, dialog: W) {
-    let dialog_bg = dialog_bg();
+pub fn show_dialog<W: glib::IsA<gtk::Widget>>(overlay: &gtk::Overlay, dialog: W) -> Dialog {
+    let background = dialog_bg();
 
+    let dialog = dialog.upcast();
     dialog.get_style_context().add_class("dialog");
 
-    overlay.add_overlay(&dialog_bg);
+    overlay.add_overlay(&background);
     overlay.add_overlay(&dialog);
 
-    let overlay = overlay.clone();
-    dialog_bg.connect_button_release_event(move |dialog_bg, _| {
-        overlay.remove(&dialog);
-        overlay.remove(dialog_bg);
-        gtk::Inhibit(false)
+    let dialog = Dialog {
+        overlay: overlay.clone(),
+        background: background.clone(),
+        dialog: dialog.clone(),
+    };
+
+    background.connect_button_release_event({
+        let dialog = dialog.clone();
+        move |_, _| {
+            dialog.close();
+            gtk::Inhibit(false)
+        }
     });
+
+    dialog
+}
+
+#[derive(Clone)]
+pub struct Dialog {
+    overlay: gtk::Overlay,
+    background: gtk::Widget,
+    dialog: gtk::Widget,
+}
+
+impl Dialog {
+    pub fn close(&self) {
+        self.overlay.remove(&self.background);
+        self.overlay.remove(&self.dialog);
+    }
 }
 
 // TODO: Ideally don't have to use an enum and can rather use a Box with dyn type
