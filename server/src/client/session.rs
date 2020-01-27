@@ -163,7 +163,7 @@ impl ClientWsSession {
                 }
             };
 
-            let response = self.handle_message(ctx, msg.request).await;
+            let response = self.handle_request(ctx, msg.request).await;
             self.send(ServerMessage::Response { id: msg.id, result: response }).await?;
         } else if message.is_close() {
             ctx.stop();
@@ -174,7 +174,7 @@ impl ClientWsSession {
         Ok(())
     }
 
-    async fn handle_message(&mut self, ctx: &mut Context<Self>, request: ClientRequest) -> ResponseResult {
+    async fn handle_request(&mut self, ctx: &mut Context<Self>, request: ClientRequest) -> ResponseResult {
         match request {
             ClientRequest::CreateToken { credentials, options } => {
                 self.create_token(credentials, options).await
@@ -187,11 +187,11 @@ impl ClientWsSession {
             }
             request => match &mut self.state {
                 State::Unauthenticated => {
-                    Unauthenticated { client: self, ctx }.handle_message(request).await
+                    Unauthenticated { client: self, ctx }.handle_request(request).await
                 }
                 State::Authenticated { user, device, perms } => {
                     let (user, device, perms) = (*user, *device, *perms);
-                    Authenticated { client: self, ctx, user, device, perms }.handle_message(request).await
+                    Authenticated { client: self, ctx, user, device, perms }.handle_request(request).await
                 }
             },
         }
@@ -288,7 +288,7 @@ struct Unauthenticated<'a> {
 }
 
 impl<'a> Unauthenticated<'a> {
-    async fn handle_message(&mut self, request: ClientRequest) -> ResponseResult {
+    async fn handle_request(&mut self, request: ClientRequest) -> ResponseResult {
         match request {
             ClientRequest::Login { device, token } => self.login(device, token).await,
             _ => Err(ErrResponse::NotLoggedIn),
@@ -367,7 +367,7 @@ struct Authenticated<'a> {
 }
 
 impl<'a> Authenticated<'a> {
-    async fn handle_message(self, request: ClientRequest) -> ResponseResult {
+    async fn handle_request(self, request: ClientRequest) -> ResponseResult {
         match request {
             ClientRequest::SendMessage(message) => self.send_message(message).await,
             ClientRequest::EditMessage(edit) => self.edit_message(edit).await,
