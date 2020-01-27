@@ -36,8 +36,8 @@ impl AuthClient {
         AuthClient { net }
     }
 
-    pub async fn register(&self, username: String, display_name: String, password: String) -> Result<UserId> {
-        let request = ClientRequest::CreateUser { username, display_name, password };
+    pub async fn register(&self, credentials: UserCredentials, display_name: String) -> Result<UserId> {
+        let request = ClientRequest::CreateUser { credentials, display_name };
         let request = self.net.request(request).await?;
 
         match request.response().await? {
@@ -46,14 +46,15 @@ impl AuthClient {
         }
     }
 
-    pub async fn authenticate(&self, username: String, password: String) -> Result<(DeviceId, AuthToken)> {
-        // TODO allow user to configure these parameters?
+    pub async fn authenticate(&self, credentials: UserCredentials) -> Result<(DeviceId, AuthToken)> {
         let request = ClientRequest::CreateToken {
-            username,
-            password,
-            device_name: None,
-            expiration_date: None,
-            permission_flags: TokenPermissionFlags::ALL,
+            credentials,
+            // TODO: allow user to configure?
+            options: TokenCreationOptions {
+                device_name: None,
+                expiration_date: None,
+                permission_flags: TokenPermissionFlags::ALL,
+            },
         };
         let request = self.net.request(request).await?;
 
@@ -113,25 +114,24 @@ impl Client {
         Ok(())
     }
 
-    pub async fn refresh_token(&self, to_refresh: DeviceId, username: String, password: String) -> Result<()> {
-        let request = ClientRequest::RefreshToken { device: to_refresh, username, password };
+    pub async fn refresh_token(&self, credentials: UserCredentials, to_refresh: DeviceId) -> Result<()> {
+        let request = ClientRequest::RefreshToken { credentials, device: to_refresh };
         let request = self.net.request(request).await?;
         request.response().await?;
 
         Ok(())
     }
 
-    pub async fn revoke_token(&self, to_revoke: DeviceId, password: String) -> Result<()> {
-        let request = ClientRequest::RevokeToken { device: to_revoke, password: Some(password) };
+    pub async fn revoke_foreign_token(&self, to_revoke: DeviceId, password: String) -> Result<()> {
+        let request = ClientRequest::RevokeForeignToken { device: to_revoke, password };
         let request = self.net.request(request).await?;
         request.response().await?;
 
         Ok(())
     }
 
-    pub async fn revoke_current_token(&self) -> Result<()> {
-        let request = ClientRequest::RevokeToken { device: self.device, password: None };
-        let request = self.net.request(request).await?;
+    pub async fn revoke_token(&self) -> Result<()> {
+        let request = self.net.request(ClientRequest::RevokeToken).await?;
         request.response().await?;
         Ok(())
     }
