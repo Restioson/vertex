@@ -7,7 +7,9 @@ use vertex_client_backend as vertex;
 use crate::screen::{self, Screen, DynamicScreen, TryGetText};
 
 const SCREEN_SRC: &str = include_str!("glade/active/active.glade");
+
 const ADD_COMMUNITY_SRC: &str = include_str!("glade/active/add_community.glade");
+const CREATE_COMMUNITY_SRC: &str = include_str!("glade/active/create_community.glade");
 
 pub struct Widgets {
     main: gtk::Overlay,
@@ -199,20 +201,39 @@ fn bind_events(screen: &Screen<Model>) {
 }
 
 fn show_add_community(screen: Screen<Model>) {
-    let model = screen.model();
-
     let builder = gtk::Builder::new_from_string(ADD_COMMUNITY_SRC);
     let main: gtk::Box = builder.get_object("main").unwrap();
 
     let create_community_button: gtk::Button = builder.get_object("create_community_button").unwrap();
     let join_community_button: gtk::Button = builder.get_object("join_community_button").unwrap();
 
-    let dialog = screen::show_dialog(&model.widgets.main, main);
+    let dialog = screen::show_dialog(&screen.model().widgets.main, main);
 
     create_community_button.connect_button_press_event(
         screen.connector()
             .do_sync(move |screen, _| {
-                push_community(screen, "Community", &["General", "Off Topic"]);
+                dialog.close();
+                show_create_community(screen);
+            })
+            .build_widget_event()
+    );
+}
+
+fn show_create_community(screen: Screen<Model>) {
+    let builder = gtk::Builder::new_from_string(CREATE_COMMUNITY_SRC);
+    let main: gtk::Box = builder.get_object("main").unwrap();
+
+    let name_entry: gtk::Entry = builder.get_object("name_entry").unwrap();
+    let create_button: gtk::Button = builder.get_object("create_button").unwrap();
+
+    let dialog = screen::show_dialog(&screen.model().widgets.main, main);
+
+    create_button.connect_button_press_event(
+        screen.connector()
+            .do_sync(move |screen, _| {
+                if let Ok(name) = name_entry.try_get_text() {
+                    push_community(screen, &name, &["General", "Off Topic"]);
+                }
                 dialog.close();
             })
             .build_widget_event()
