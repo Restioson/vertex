@@ -337,8 +337,7 @@ impl<'a> Unauthenticated<'a> {
             return Err(ErrResponse::InvalidToken);
         }
 
-        let addr = self.ctx.address().unwrap();
-        let mut inserted = false;
+        let session = (device, self.ctx.address().unwrap());
 
         if let Some(mut user_sessions) = USERS.get_mut(&user) {
             let existing_session = user_sessions.sessions.iter()
@@ -346,10 +345,9 @@ impl<'a> Unauthenticated<'a> {
             if existing_session.is_some() {
                 return Err(ErrResponse::TokenInUse);
             }
-            user_sessions.sessions.push((device, addr));
+            user_sessions.sessions.push(session);
         } else {
-            let user_sessions = UserSessions::new((device, self.ctx.address().unwrap()));
-            USERS.insert(user, user_sessions);
+            USERS.insert(user, UserSessions::new(session));
         }
 
         self.client.state = State::Authenticated { user, device, perms: permission_flags };
@@ -395,7 +393,7 @@ impl<'a> Authenticated<'a> {
         }
     }
 
-    async fn send_message(mut self, message: ClientSentMessage) -> ResponseResult {
+    async fn send_message(self, message: ClientSentMessage) -> ResponseResult {
         if !self.perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
             return Err(ErrResponse::AccessDenied);
         }
@@ -414,7 +412,7 @@ impl<'a> Authenticated<'a> {
         }
     }
 
-    async fn edit_message(mut self, edit: Edit) -> ResponseResult {
+    async fn edit_message(self, edit: Edit) -> ResponseResult {
         if !self.perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
             return Err(ErrResponse::AccessDenied);
         }
@@ -431,7 +429,7 @@ impl<'a> Authenticated<'a> {
         }
     }
 
-    async fn revoke_token(mut self) -> ResponseResult {
+    async fn revoke_token(self) -> ResponseResult {
         if !self.client.database.send(RevokeToken(self.device)).await.unwrap()? {
             return Err(ErrResponse::DeviceDoesNotExist);
         }
@@ -450,7 +448,7 @@ impl<'a> Authenticated<'a> {
         Ok(OkResponse::NoData)
     }
 
-    async fn change_username(mut self, new_username: String) -> ResponseResult {
+    async fn change_username(self, new_username: String) -> ResponseResult {
         if !self.perms.has_perms(TokenPermissionFlags::CHANGE_USERNAME) {
             return Err(ErrResponse::AccessDenied);
         }
@@ -467,7 +465,7 @@ impl<'a> Authenticated<'a> {
         }
     }
 
-    async fn change_display_name(mut self, new_display_name: String) -> ResponseResult {
+    async fn change_display_name(self, new_display_name: String) -> ResponseResult {
         if !self.perms.has_perms(TokenPermissionFlags::CHANGE_DISPLAY_NAME) {
             return Err(ErrResponse::AccessDenied);
         }
