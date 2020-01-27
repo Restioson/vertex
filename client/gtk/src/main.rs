@@ -121,7 +121,7 @@ impl App {
         for child in self.window.get_children() {
             self.window.remove(&child);
         }
-        self.window.add(screen.viewport());
+        self.window.add(screen.widget());
 
         self.window.show_all();
 

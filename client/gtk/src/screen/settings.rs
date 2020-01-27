@@ -6,7 +6,7 @@ use vertex_client_backend as vertex;
 
 use crate::screen::{self, Screen, DynamicScreen};
 
-const GLADE_SRC: &str = include_str!("glade/settings.glade");
+const SCREEN_SRC: &str = include_str!("glade/settings/settings.glade");
 
 pub struct Widgets {
     category_list: gtk::ListBox,
@@ -20,9 +20,9 @@ pub struct Model {
 }
 
 pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
-    let builder = gtk::Builder::new_from_string(GLADE_SRC);
+    let builder = gtk::Builder::new_from_string(SCREEN_SRC);
 
-    let viewport = builder.get_object("viewport").unwrap();
+    let viewport: gtk::Viewport = builder.get_object("viewport").unwrap();
 
     let model = Model {
         app,

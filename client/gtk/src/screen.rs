@@ -3,6 +3,8 @@ use std::cell::{self, RefCell};
 use std::future::Future;
 use std::pin::Pin;
 
+use gtk::prelude::*;
+
 pub mod active;
 pub mod login;
 pub mod register;
@@ -10,6 +12,32 @@ pub mod settings;
 pub mod loading;
 
 mod connect;
+
+pub fn dialog_bg() -> gtk::Widget {
+    gtk::EventBoxBuilder::new()
+        .name("dialog_bg")
+        .visible(true)
+        .halign(gtk::Align::Fill)
+        .valign(gtk::Align::Fill)
+        .build()
+        .upcast()
+}
+
+pub fn show_dialog<W: glib::IsA<gtk::Widget>>(overlay: &gtk::Overlay, dialog: W) {
+    let dialog_bg = dialog_bg();
+
+    dialog.get_style_context().add_class("dialog");
+
+    overlay.add_overlay(&dialog_bg);
+    overlay.add_overlay(&dialog);
+
+    let overlay = overlay.clone();
+    dialog_bg.connect_button_release_event(move |dialog_bg, _| {
+        overlay.remove(&dialog);
+        overlay.remove(dialog_bg);
+        gtk::Inhibit(false)
+    });
+}
 
 // TODO: Ideally don't have to use an enum and can rather use a Box with dyn type
 pub enum DynamicScreen {
@@ -22,35 +50,35 @@ pub enum DynamicScreen {
 
 impl DynamicScreen {
     #[inline]
-    pub fn viewport(&self) -> &gtk::Viewport {
+    pub fn widget(&self) -> &gtk::Widget {
         match self {
-            DynamicScreen::Active(screen) => screen.viewport(),
-            DynamicScreen::Login(screen) => screen.viewport(),
-            DynamicScreen::Register(screen) => screen.viewport(),
-            DynamicScreen::Settings(screen) => screen.viewport(),
-            DynamicScreen::Loading(screen) => screen.viewport(),
+            DynamicScreen::Active(screen) => screen.widget(),
+            DynamicScreen::Login(screen) => screen.widget(),
+            DynamicScreen::Register(screen) => screen.widget(),
+            DynamicScreen::Settings(screen) => screen.widget(),
+            DynamicScreen::Loading(screen) => screen.widget(),
         }
     }
 }
 
 pub struct Screen<M> {
-    viewport: gtk::Viewport,
+    widget: gtk::Widget,
     model: Rc<RefCell<M>>,
 }
 
 impl<M> Clone for Screen<M> {
     fn clone(&self) -> Self {
         Screen {
-            viewport: self.viewport.clone(),
+            widget: self.widget.clone(),
             model: self.model.clone(),
         }
     }
 }
 
 impl<M> Screen<M> {
-    pub fn new(viewport: gtk::Viewport, model: M) -> Screen<M> {
+    pub fn new<W: glib::IsA<gtk::Widget>>(widget: W, model: M) -> Screen<M> {
         Screen {
-            viewport,
+            widget: widget.upcast(),
             model: Rc::new(RefCell::new(model)),
         }
     }
@@ -67,7 +95,7 @@ impl<M> Screen<M> {
     pub fn model_mut(&self) -> cell::RefMut<M> { self.model.borrow_mut() }
 
     #[inline]
-    pub fn viewport(&self) -> &gtk::Viewport { &self.viewport }
+    pub fn widget(&self) -> &gtk::Widget { &self.widget }
 }
 
 pub trait TryGetText {

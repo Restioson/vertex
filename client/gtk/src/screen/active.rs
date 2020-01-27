@@ -6,13 +6,16 @@ use vertex_client_backend as vertex;
 
 use crate::screen::{self, Screen, DynamicScreen, TryGetText};
 
-const GLADE_SRC: &str = include_str!("glade/active.glade");
+const SCREEN_SRC: &str = include_str!("glade/active/active.glade");
+const ADD_COMMUNITY_SRC: &str = include_str!("glade/active/add_community.glade");
 
 pub struct Widgets {
+    main: gtk::Overlay,
     communities: gtk::ListBox,
     messages: gtk::ListBox,
     message_entry: gtk::Entry,
     settings_button: gtk::Button,
+    add_community_button: gtk::Button,
 }
 
 pub struct Model {
@@ -138,23 +141,25 @@ fn push_community(screen: Screen<Model>, communities: &gtk::ListBox, name: &str,
 }
 
 pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
-    let builder = gtk::Builder::new_from_string(GLADE_SRC);
+    let builder = gtk::Builder::new_from_string(SCREEN_SRC);
 
-    let viewport = builder.get_object("viewport").unwrap();
+    let main: gtk::Overlay = builder.get_object("main").unwrap();
 
     let model = Model {
         app: app.clone(),
         client,
         widgets: Widgets {
+            main: main.clone(),
             communities: builder.get_object("communities").unwrap(),
             messages: builder.get_object("messages").unwrap(),
             message_entry: builder.get_object("message_entry").unwrap(),
             settings_button: builder.get_object("settings_button").unwrap(),
+            add_community_button: builder.get_object("add_community_button").unwrap(),
         },
         selected_community_widget: None,
     };
 
-    let screen = Screen::new(viewport, model);
+    let screen = Screen::new(main, model);
 
     for i in 1..=5 {
         push_community(screen.clone(), &screen.model().widgets.communities, &format!("Community {}", i), &["General", "Off Topic"]);
@@ -186,6 +191,19 @@ fn bind_events(screen: &Screen<Model>) {
                 let model = screen.model();
                 let settings = screen::settings::build(model.app.clone(), model.client.clone());
                 model.app.set_screen(DynamicScreen::Settings(settings));
+            })
+            .build_widget_event()
+    );
+
+    widgets.add_community_button.connect_button_press_event(
+        screen.connector()
+            .do_sync(|screen, (_button, _event)| {
+                let model = screen.model();
+
+                let builder = gtk::Builder::new_from_string(ADD_COMMUNITY_SRC);
+                let main: gtk::Box = builder.get_object("main").unwrap();
+
+                screen::show_dialog(&model.widgets.main, main);
             })
             .build_widget_event()
     );

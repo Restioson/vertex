@@ -3,6 +3,8 @@
 @define-color upper_bar_bg_color #3D3D3D;
 @define-color lower_bar_bg_color #2D2D2D;
 
+@define-color dialog_bg_color #313131;
+
 @define-color room_list_bg_color #2D2D2D;
 @define-color room_hover_color #323232;
 @define-color room_selected_color #383838;
@@ -260,6 +262,21 @@ spinner:checked {
   background: shade(@upper_bar_bg_color, 1.2);
 }
 
+#active #add_community {
+  min-width: 180px;
+  min-height: 100px;
+}
+
+#active #add_community #title {
+  font-size: 16px;
+}
+
+#active #add_community button {
+  min-width: 80px;
+  min-height: 40px;
+  margin: 10px;
+}
+
 #login, #register {
   background: shade(@content_bg_color, 0.85);
 }
@@ -326,4 +343,17 @@ spinner:checked {
 #loading spinner {
   min-width: 25px;
   min-height: 25px;
+}
+
+#dialog_bg {
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.dialog {
+  background: @dialog_bg_color;
+  min-width: 100px;
+  min-height: 100px;
+  padding: 20px;
+  border-radius: 20px;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.5);
 }

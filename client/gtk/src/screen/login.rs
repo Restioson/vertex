@@ -9,7 +9,7 @@ use crate::screen::{self, Screen, DynamicScreen, TryGetText};
 
 use std::fmt;
 
-const GLADE_SRC: &str = include_str!("glade/login.glade");
+const SCREEN_SRC: &str = include_str!("glade/login/login.glade");
 
 pub struct Widgets {
     username_entry: gtk::Entry,
@@ -27,9 +27,9 @@ pub struct Model {
 }
 
 pub fn build(app: Rc<crate::App>) -> Screen<Model> {
-    let builder = gtk::Builder::new_from_string(GLADE_SRC);
+    let builder = gtk::Builder::new_from_string(SCREEN_SRC);
 
-    let viewport = builder.get_object("viewport").unwrap();
+    let viewport: gtk::Viewport = builder.get_object("viewport").unwrap();
 
     let model = Model {
         app: app.clone(),
