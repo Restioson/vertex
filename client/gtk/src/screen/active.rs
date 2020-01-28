@@ -5,6 +5,7 @@ use std::rc::Rc;
 use vertex_client_backend as vertex;
 
 use crate::screen::{self, Screen, DynamicScreen, TryGetText};
+use std::fmt;
 
 const SCREEN_SRC: &str = include_str!("glade/active/active.glade");
 
@@ -14,55 +15,84 @@ const CREATE_COMMUNITY_SRC: &str = include_str!("glade/active/create_community.g
 pub struct Widgets {
     main: gtk::Overlay,
     communities: gtk::ListBox,
-    messages: gtk::ListBox,
+    messages: MessageList<String>,
     message_entry: gtk::Entry,
     settings_button: gtk::Button,
     add_community_button: gtk::Button,
 }
 
-pub struct Model {
-    app: Rc<crate::App>,
-    client: Rc<vertex::Client>,
-    widgets: Widgets,
-    selected_community_widget: Option<gtk::Expander>,
+struct MessageList<Author: Eq + fmt::Display> {
+    list: gtk::ListBox,
+    last_widget: Option<MessageWidget<Author>>,
 }
 
-fn push_message(messages: &gtk::ListBox, author: &str, content: &str) {
-    let outer_box = gtk::BoxBuilder::new()
-        .name("message")
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(8)
-        .build();
+impl<Author: Eq + fmt::Display> MessageList<Author> {
+    fn new(list: gtk::ListBox) -> MessageList<Author> {
+        MessageList { list, last_widget: None }
+    }
 
-    outer_box.add(&gtk::FrameBuilder::new()
-        .name("author_icon")
-        .build()
-    );
+    fn push(&mut self, author: Author, message: &str) {
+        if self.last_widget.is_none() {
+            let widget = MessageWidget::build(author);
+            self.list.insert(&widget.widget, -1);
+            self.last_widget = Some(widget);
+        }
 
-    let message_inner = gtk::BoxBuilder::new()
-        .name("message_inner")
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(4)
-        .build();
+        if let Some(widget) = &mut self.last_widget {
+            widget.push_content(message.trim());
+        }
+    }
+}
 
-    message_inner.add(&gtk::LabelBuilder::new()
-        .name("author_name")
-        .label(author)
-        .halign(gtk::Align::Start)
-        .build()
-    );
+struct MessageWidget<Author: fmt::Display> {
+    author: Author,
+    widget: gtk::Box,
+    inner: gtk::Box,
+}
 
-    message_inner.add(&gtk::LabelBuilder::new()
-        .name("message_content")
-        .label(content)
-        .halign(gtk::Align::Start)
-        .build()
-    );
+impl<Author: fmt::Display> MessageWidget<Author> {
+    fn build(author: Author) -> MessageWidget<Author> {
+        let widget = gtk::BoxBuilder::new()
+            .name("message")
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(8)
+            .build();
 
-    outer_box.add(&message_inner);
+        widget.add(&gtk::FrameBuilder::new()
+            .name("author_icon")
+            .halign(gtk::Align::Start)
+            .valign(gtk::Align::Start)
+            .build()
+        );
 
-    outer_box.show_all();
-    messages.insert(&outer_box, -1);
+        let inner = gtk::BoxBuilder::new()
+            .name("message_inner")
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(4)
+            .build();
+
+        inner.add(&gtk::LabelBuilder::new()
+            .name("author_name")
+            .label(&format!("{}", author))
+            .halign(gtk::Align::Start)
+            .build()
+        );
+
+        widget.add(&inner);
+        widget.show_all();
+
+        MessageWidget { author, widget, inner }
+    }
+
+    fn push_content(&mut self, content: &str) {
+        self.inner.add(&gtk::LabelBuilder::new()
+            .name("message_content")
+            .label(content)
+            .halign(gtk::Align::Start)
+            .build()
+        );
+        self.widget.show_all();
+    }
 }
 
 fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
@@ -143,6 +173,13 @@ fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
     screen.model().widgets.communities.insert(&expander, -1);
 }
 
+pub struct Model {
+    app: Rc<crate::App>,
+    client: Rc<vertex::Client>,
+    widgets: Widgets,
+    selected_community_widget: Option<gtk::Expander>,
+}
+
 pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
     let builder = gtk::Builder::new_from_string(SCREEN_SRC);
 
@@ -154,7 +191,7 @@ pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
         widgets: Widgets {
             main: main.clone(),
             communities: builder.get_object("communities").unwrap(),
-            messages: builder.get_object("messages").unwrap(),
+            messages: MessageList::new(builder.get_object("messages").unwrap()),
             message_entry: builder.get_object("message_entry").unwrap(),
             settings_button: builder.get_object("settings_button").unwrap(),
             add_community_button: builder.get_object("add_community_button").unwrap(),
@@ -175,10 +212,10 @@ fn bind_events(screen: &Screen<Model>) {
     widgets.message_entry.connect_activate(
         screen.connector()
             .do_sync(|screen, entry: gtk::Entry| {
-                let message = entry.try_get_text().unwrap_or_default();
+                let content = entry.try_get_text().unwrap_or_default();
                 entry.set_text("");
 
-                push_message(&screen.model().widgets.messages, "You", message.trim());
+                screen.model_mut().widgets.messages.push("You".to_owned(), &content);
             })
             .build_cloned_consumer()
     );
