@@ -267,11 +267,18 @@ fn show_create_community(screen: Screen<Model>) {
 
     create_button.connect_button_press_event(
         screen.connector()
-            .do_sync(move |screen, _| {
-                if let Ok(name) = name_entry.try_get_text() {
-                    push_community(screen, &name, &["General", "Off Topic"]);
+            .do_async(move |screen, _| {
+                let dialog = dialog.clone();
+                let name_entry = name_entry.clone();
+                async move {
+                    if let Ok(name) = name_entry.try_get_text() {
+                        let result = screen.model().client.create_community(name.clone()).await;
+                        if let Ok(id) = result {
+                            push_community(screen, &name, &["General", "Off Topic"]);
+                        }
+                    }
+                    dialog.close();
                 }
-                dialog.close();
             })
             .build_widget_event()
     );

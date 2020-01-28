@@ -218,7 +218,14 @@ pub enum ServerAction {
     Edit(Edit),
     Delete(Delete),
     SessionLoggedOut,
-    LeftCommunity(LeftCommunityReason),
+    AddCommunity {
+        id: CommunityId,
+        name: String,
+    },
+    RemoveCommunity {
+        id: CommunityId,
+        reason: RemoveCommunityReason
+    },
 }
 
 impl Into<Bytes> for ServerMessage {
@@ -234,7 +241,7 @@ impl Into<Vec<u8>> for ServerMessage {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum LeftCommunityReason {
+pub enum RemoveCommunityReason {
     /// The community was deleted
     Deleted,
 }

@@ -17,6 +17,8 @@ pub fn action_stream(receiver: net::Receiver) -> impl Stream<Item=Action> {
         match action {
             Ok(ServerAction::Message(message)) => Some(Action::AddMessage(message.into())),
             Ok(ServerAction::SessionLoggedOut) => Some(Action::LoggedOut),
+            Ok(ServerAction::AddCommunity { id, name }) => Some(Action::AddCommunity { id, name }),
+            Ok(ServerAction::RemoveCommunity { id, .. }) => Some(Action::RemoveCommunity { id }),
             Err(e) => Some(Action::Error(e)),
             _ => None,
         }
@@ -161,6 +163,15 @@ impl Client {
         Ok(())
     }
 
+    pub async fn create_community(&self, name: String) -> Result<CommunityId> {
+        let request = self.net.request(ClientRequest::CreateCommunity { name }).await?;
+
+        match request.response().await? {
+            OkResponse::Community { id } => Ok(id),
+            _ => Err(Error::MalformedResponse),
+        }
+    }
+
     pub async fn join_community(&self, community: CommunityId) -> Result<()> {
         let request = self.net.request(ClientRequest::JoinCommunity(community)).await?;
         request.response().await?;
@@ -194,6 +205,8 @@ impl From<ForwardedMessage> for Message {
 #[derive(Debug)]
 pub enum Action {
     AddMessage(Message),
+    AddCommunity { id: CommunityId, name: String },
+    RemoveCommunity { id: CommunityId },
     LoggedOut,
     Error(Error),
 }

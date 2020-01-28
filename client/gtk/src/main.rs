@@ -99,11 +99,6 @@ impl App {
                 let mut stream = vertex::action_stream(receiver);
                 while let Some(action) = stream.next().await {
                     let action: vertex::Action = action;
-                    match action {
-                        vertex::Action::AddMessage(_) => {}
-                        vertex::Action::LoggedOut => {}
-                        vertex::Action::Error(_) => {}
-                    }
                     println!("{:?}", action);
                 }
             },

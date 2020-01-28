@@ -107,6 +107,7 @@ impl Handler<LogoutThisSession> for ClientWsSession {
     }
 }
 
+// TODO: Error Handling: should not .unwrap() on `xtra::Disconnected` and `warp::Error`
 impl ClientWsSession {
     pub fn new(sender: SplitSink<WebSocket, ws::Message>, database: Address<DatabaseServer>, config: Arc<Config>) -> Self {
         ClientWsSession {
@@ -493,10 +494,21 @@ impl<'a> Authenticated<'a> {
     }
 
     async fn create_community(self, name: String) -> ResponseResult {
-        unimplemented!() // TODO(implement)
+        let community: CommunityRecord = self.client.database.send(CreateCommunity { name }).await.unwrap()?;
+        self.join_community(community.id).await?;
+
+        Ok(OkResponse::Community { id: community.id })
     }
 
-    async fn join_community(self, community: CommunityId) -> ResponseResult {
-        unimplemented!() // TODO(implement)
+    async fn join_community(self, id: CommunityId) -> ResponseResult {
+        self.client.database.send(AddToCommunity { community: id, user: self.user }).await.unwrap()?;
+
+        let community = self.client.database.send(GetCommunityMetadata(id)).await.unwrap()?.unwrap();
+        self.client.send(ServerMessage::Action(ServerAction::AddCommunity {
+            id: community.id,
+            name: community.name,
+        })).await.unwrap();
+
+        Ok(OkResponse::NoData)
     }
 }
