@@ -215,6 +215,6 @@ struct EnqueuedRequest(oneshot::Sender<RequestResult>);
 
 impl EnqueuedRequest {
     fn handle(self, result: RequestResult) {
-        self.0.send(result).expect("channel closed")
+        let _ = self.0.send(result); // We don't care if the channel has closed
     }
 }

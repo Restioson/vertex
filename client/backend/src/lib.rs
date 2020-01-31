@@ -17,12 +17,28 @@ pub fn action_stream(receiver: net::Receiver) -> impl Stream<Item=Action> {
         match action {
             Ok(ServerAction::Message(message)) => Some(Action::AddMessage(message.into())),
             Ok(ServerAction::SessionLoggedOut) => Some(Action::LoggedOut),
-            Ok(ServerAction::AddCommunity { id, name }) => Some(Action::AddCommunity { id, name }),
+            Ok(ServerAction::AddCommunity { id, name }) => {
+                // TODO community rooms
+                Some(Action::AddCommunity(Community { id, name, rooms: Vec::new() }))
+            },
             Ok(ServerAction::RemoveCommunity { id, .. }) => Some(Action::RemoveCommunity { id }),
             Err(e) => Some(Action::Error(e)),
             _ => None,
         }
     ))
+}
+
+#[derive(Debug)]
+pub struct Community {
+    pub id: CommunityId,
+    pub name: String,
+    pub rooms: Vec<Room>,
+}
+
+#[derive(Debug)]
+pub struct Room {
+    pub id: RoomId,
+    pub name: String,
 }
 
 pub struct Config {
@@ -205,7 +221,7 @@ impl From<ForwardedMessage> for Message {
 #[derive(Debug)]
 pub enum Action {
     AddMessage(Message),
-    AddCommunity { id: CommunityId, name: String },
+    AddCommunity(Community),
     RemoveCommunity { id: CommunityId },
     LoggedOut,
     Error(Error),

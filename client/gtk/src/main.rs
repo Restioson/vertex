@@ -99,7 +99,16 @@ impl App {
                 let mut stream = vertex::action_stream(receiver);
                 while let Some(action) = stream.next().await {
                     let action: vertex::Action = action;
-                    println!("{:?}", action);
+                    if let vertex::Action::AddCommunity(community) = action {
+                        match self.screen.borrow().as_ref().unwrap() {
+                            DynamicScreen::Active(screen) => {
+                                screen.model().communities.lock().unwrap().push(community);
+                            },
+                            _ => unimplemented!(), // TODO(implement)
+                        }
+                    } else {
+                        println!("unimplemented action: {:?}", action); // TODO(implement)
+                    }
                 }
             },
             async {

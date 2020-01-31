@@ -23,6 +23,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use vertex_common::*;
 use warp::Filter;
+use xtra::Disconnected;
 
 #[derive(Debug, Clone)]
 pub struct SendMessage<T: Debug>(T);
@@ -56,6 +57,13 @@ where
     T::Result: 'static,
 {
     type Result = Result<T::Result, ErrResponse>;
+}
+
+fn handle_disconnected(actor_name: &'static str) -> impl Fn(Disconnected) -> ErrResponse {
+    move |_| {
+        log::warn!("{} actor disconnected. This may be a timing anomaly.", actor_name);
+        ErrResponse::Internal
+    }
 }
 
 fn create_files_directories(config: &Config) {

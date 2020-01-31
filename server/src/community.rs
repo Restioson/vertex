@@ -1,11 +1,15 @@
-use crate::client::ClientWsSession;
-use crate::{IdentifiedMessage, SendMessage};
+use crate::client::{ClientWsSession, LogoutThisSession};
+use crate::{IdentifiedMessage, SendMessage, handle_disconnected};
 use dashmap::DashMap;
 use lazy_static::lazy_static;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, BTreeSet};
 use uuid::Uuid;
 use vertex_common::*;
 use xtra::prelude::*;
+use crate::database::{AddToCommunityError, DbResult, Database};
+use futures::Future;
+use crate::client::USERS;
+use xtra::Disconnected;
 
 lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Address<CommunityActor>> = DashMap::new();
@@ -25,25 +29,41 @@ impl Message for Connect {
 
 pub struct Join {
     pub user: UserId,
+    pub device_id: DeviceId,
+    pub session: Address<ClientWsSession>,
 }
 
 impl Message for Join {
-    type Result = Result<bool, ErrResponse>;
+    type Result = DbResult<Result<(), AddToCommunityError>>;
+}
+
+pub struct CreateRoom {
+    pub creator: DeviceId,
+    pub name: String,
+}
+
+impl Message for CreateRoom {
+    type Result = RoomId;
 }
 
 /// A community is a collection (or "house", if you will) of rooms, as well as some metadata.
 /// It is similar to a "server" in Discord.
 pub struct CommunityActor {
+    id: CommunityId,
+    database: Database,
     rooms: HashMap<RoomId, Room>,
-    online_members: HashMap<UserId, OnlineMember>,
+    /// BTreeSet gives us efficient iteration and checking, compared to HashSet which has O(capacity)
+    /// iteration.
+    online_members: BTreeSet<UserId>,
 }
 
 impl Actor for CommunityActor {}
 
 impl CommunityActor {
-    fn new(
+    pub fn new(
+        id: CommunityId,
+        database: Database,
         creator: UserId,
-        online_devices: Vec<(DeviceId, Address<ClientWsSession>)>,
     ) -> CommunityActor {
         let mut rooms = HashMap::new();
         rooms.insert(
@@ -53,32 +73,40 @@ impl CommunityActor {
             },
         );
 
-        let mut online_members = HashMap::new();
-        online_members.insert(
-            creator,
-            OnlineMember {
-                devices: online_devices,
-            },
-        );
+        let mut online_members = BTreeSet::new();
+        online_members.insert(creator);
 
         CommunityActor {
+            id,
+            database,
             rooms,
             online_members,
+        }
+    }
+
+    fn for_each_online_device_skip<F>(&mut self, mut f: F, skip: Option<DeviceId>)
+        where F: FnMut(&Address<ClientWsSession>) -> Result<(), Disconnected>
+    {
+        for member in self.online_members.iter() {
+            if let Some(user) = USERS.get(&member) {
+                for (device, session) in user.sessions.iter() {
+                    match skip {
+                        Some(skip_device) if skip_device != *device => {
+                            if let Err(d) = f(session) {
+                                handle_disconnected("ClientWsSession")(d);
+                            }
+                        },
+                        _ => (),
+                    }
+                }
+            }
         }
     }
 }
 
 impl SyncHandler<Connect> for CommunityActor {
     fn handle(&mut self, connect: Connect, _: &mut Context<Self>) {
-        let user = connect.user;
-        let device = connect.device;
-        let session = connect.session;
-        let session_cloned = session.clone();
-
-        self.online_members
-            .entry(user)
-            .and_modify(move |member| member.devices.push((device, session_cloned)))
-            .or_insert_with(|| OnlineMember::new(session, device));
+        self.online_members.insert(connect.user); // TODO(connect)
     }
 }
 
@@ -92,11 +120,10 @@ impl SyncHandler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
         let fwd = ForwardedMessage::from_message_author_device(m.message, m.user, m.device);
         let send = SendMessage(ServerMessage::Action(ServerAction::Message(fwd)));
 
-        self.online_members
-            .values()
-            .flat_map(|member| member.devices.iter())
-            .filter(|(device, _)| *device != from_device)
-            .for_each(|(_, addr)| addr.do_send(send.clone()).unwrap());
+        self.for_each_online_device_skip(
+            |addr| addr.do_send(send.clone()),
+            Some(from_device)
+        );
 
         Ok(MessageId(Uuid::new_v4()))
     }
@@ -111,33 +138,54 @@ impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
         let from_device = m.device;
         let send = SendMessage(ServerMessage::Action(ServerAction::Edit(m.message)));
 
-        self.online_members
-            .values()
-            .flat_map(|member| member.devices.iter())
-            .filter(|(device, _)| *device != from_device)
-            .for_each(|(_, addr)| addr.do_send(send.clone()).unwrap());
+        self.for_each_online_device_skip(
+            |addr| addr.do_send(send.clone()),
+            Some(from_device)
+        );
 
         Ok(())
     }
 }
 
-impl SyncHandler<Join> for CommunityActor {
-    fn handle(&mut self, join: Join, _: &mut Context<Self>) -> Result<bool, ErrResponse> {
-        // TODO(implement)
-        unimplemented!()
+impl Handler<Join> for CommunityActor {
+    type Responder<'a> = impl Future<Output = DbResult<Result<(), AddToCommunityError>>>;
+
+    fn handle(&mut self, join: Join, _: &mut Context<Self>) -> Self::Responder<'_> {
+        async move {
+            let res = self.database.add_to_community(self.id, join.user).await?;
+
+            match res {
+                Err(e) => return Ok(Err(e)),
+                _ => (),
+            }
+
+            let community = match self.database.get_community_metadata(self.id).await? {
+                Some(community) => community,
+                None => return Ok(Err(AddToCommunityError::InvalidCommunity)),
+            };
+
+            self.online_members.insert(join.user);
+
+            Ok(Ok(()))
+        }
     }
 }
 
-/// A member and all their online devices
-struct OnlineMember {
-    pub devices: Vec<(DeviceId, Address<ClientWsSession>)>,
-}
+impl SyncHandler<CreateRoom> for CommunityActor {
+    fn handle(&mut self, create: CreateRoom, _: &mut Context<Self>) -> RoomId {
+        let id = RoomId(Uuid::new_v4());
+        self.rooms.insert(id, Room { name: create.name.clone() });
 
-impl OnlineMember {
-    fn new(session: Address<ClientWsSession>, device: DeviceId) -> OnlineMember {
-        OnlineMember {
-            devices: vec![(device, session)],
-        }
+        let send = SendMessage(ServerMessage::Action(ServerAction::AddRoom {
+            id,
+            name: create.name.clone(),
+        }));
+
+        self.for_each_online_device_skip(
+            |addr| addr.do_send(send.clone()),
+            Some(create.creator),
+        );
+        id
     }
 }
 

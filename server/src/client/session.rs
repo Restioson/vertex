@@ -1,8 +1,8 @@
 use super::*;
-use crate::community::COMMUNITIES;
+use crate::community::{COMMUNITIES, Join, CreateRoom, CommunityActor};
 use crate::config::Config;
 use crate::database::*;
-use crate::{auth, IdentifiedMessage, SendMessage};
+use crate::{auth, IdentifiedMessage, SendMessage, handle_disconnected};
 use chrono::Utc;
 use futures::stream::SplitSink;
 use futures::{Future, SinkExt};
@@ -14,6 +14,7 @@ use vertex_common::*;
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
+use xtra::Disconnected;
 
 pub struct WebSocketMessage(pub(crate) Result<ws::Message, warp::Error>);
 
@@ -454,7 +455,11 @@ impl<'a> Authenticated<'a> {
                 old_password,
                 new_password,
             } => self.change_password(old_password, new_password).await,
-            _ => Err(ErrResponse::AlreadyLoggedIn),
+            ClientRequest::Login { .. } => Err(ErrResponse::AlreadyLoggedIn),
+            ClientRequest::CreateRoom { name, community } => {
+                self.create_room(name, community).await
+            }
+            _ => unimplemented!()
         }
     }
 
@@ -480,17 +485,20 @@ impl<'a> Authenticated<'a> {
             return Err(ErrResponse::InvalidCommunity);
         }
 
-        if let Some(community) = COMMUNITIES.get(&message.to_community) {
-            let message = IdentifiedMessage {
-                user: self.user,
-                device: self.device,
-                message,
-            };
-            let id = community.send(message).await.unwrap()?;
+        match COMMUNITIES.get(&message.to_community) {
+            Some(community) => {
+                let message = IdentifiedMessage {
+                    user: self.user,
+                    device: self.device,
+                    message,
+                };
+                let id = community.send(message).await.map_err(handle_disconnected("Community"))??;
 
-            Ok(OkResponse::MessageId { id })
-        } else {
-            Err(ErrResponse::InvalidCommunity)
+                Ok(OkResponse::MessageId { id })
+            }
+            _ => {
+                Err(ErrResponse::InvalidCommunity)
+            }
         }
     }
 
@@ -509,11 +517,8 @@ impl<'a> Authenticated<'a> {
                 device: self.device,
                 message: edit,
             };
-            community
-                .send(message)
-                .await
-                .unwrap()
-                .map(|_| OkResponse::NoData)
+            community.send(message).await.map_err(handle_disconnected("Community"))??;
+            Ok(OkResponse::NoData)
         } else {
             Err(ErrResponse::InvalidCommunity)
         }
@@ -612,35 +617,69 @@ impl<'a> Authenticated<'a> {
     }
 
     async fn create_community(self, name: String) -> ResponseResult {
+        if !self.perms.has_perms(TokenPermissionFlags::CREATE_COMMUNITIES) {
+            return Err(ErrResponse::AccessDenied);
+        }
+
         let id = self.client.database.create_community(name).await?;
+        let addr = CommunityActor::new(id, self.client.database.clone(), self.user).spawn();
+        COMMUNITIES.insert(id, addr);
         self.join_community(id).await?;
 
         Ok(OkResponse::Community { id })
     }
 
     async fn join_community(self, id: CommunityId) -> ResponseResult {
-        let res = self.client.database.add_to_community(id, self.user).await?;
-
-        match res {
-            Err(AddToCommunityError::InvalidUser) => {
-                self.ctx.stop(); // The user did not exist at the time of request
-                return Err(ErrResponse::UserDeleted)
-            },
-            Err(AddToCommunityError::InvalidCommunity) => return Err(ErrResponse::InvalidCommunity),
-            Err(AddToCommunityError::AlreadyInCommunity) => return Err(ErrResponse::AlreadyInCommunity),
-            _ => (),
+        if !self.perms.has_perms(TokenPermissionFlags::JOIN_COMMUNITIES) {
+            return Err(ErrResponse::AccessDenied);
         }
 
-        let community = match self.client.database.get_community_metadata(id).await? {
-            Some(community) => community,
-            None => return Err(ErrResponse::InvalidCommunity),
-        };
+        if let Some(community) = COMMUNITIES.get(&id) {
+            let join = Join {
+                user: self.user,
+                device_id: self.device,
+                session: self.ctx.address().unwrap(),
+            };
 
-        self.client.send(ServerMessage::Action(ServerAction::AddCommunity {
-            id: community.id,
-            name: community.name,
-        })).await.unwrap();
+            let res = community.send(join).await.map_err(handle_disconnected("Community"))??;
 
-        Ok(OkResponse::NoData)
+            match res {
+                Ok(()) => {
+                    self.client.communities.push(id);
+                    Ok(OkResponse::NoData)
+                },
+                Err(AddToCommunityError::AlreadyInCommunity) => return Err(ErrResponse::AlreadyInCommunity),
+                Err(AddToCommunityError::InvalidCommunity) => {
+                    return Err(ErrResponse::InvalidCommunity)
+                },
+                Err(AddToCommunityError::InvalidUser) => return Err(ErrResponse::InvalidUser),
+            }
+        } else {
+            Err(ErrResponse::InvalidCommunity)
+        }
+    }
+
+    async fn create_room(mut self, name: String, id: CommunityId) -> ResponseResult {
+        if !self.perms.has_perms(TokenPermissionFlags::CREATE_ROOMS) {
+            return Err(ErrResponse::AccessDenied);
+        }
+
+        if !self.client.communities.contains(&id) {
+            return Err(ErrResponse::InvalidCommunity);
+        }
+
+        if let Some(community) = COMMUNITIES.get(&id) {
+            let create = CreateRoom { creator: self.device, name: name.clone() };
+            let id = community.send(create).await.map_err(handle_disconnected("Community"))?;
+
+            self.client.send(ServerMessage::Action(ServerAction::AddRoom {
+                id,
+                name,
+            })).await.unwrap();
+
+            Ok(OkResponse::Room { id })
+        } else {
+            Err(ErrResponse::InvalidCommunity)
+        }
     }
 }
