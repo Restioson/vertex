@@ -2,8 +2,7 @@ use gtk::prelude::*;
 
 use std::rc::Rc;
 
-use vertex_client_backend as vertex;
-
+use crate::net;
 use crate::screen::{self, Screen, DynamicScreen};
 
 const SCREEN_SRC: &str = include_str!("glade/settings/settings.glade");
@@ -15,11 +14,11 @@ pub struct Widgets {
 
 pub struct Model {
     app: Rc<crate::App>,
-    client: Rc<vertex::Client>,
+    client: Rc<vertex_client::Client<net::Sender>>,
     widgets: Widgets,
 }
 
-pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
+pub fn build(app: Rc<crate::App>, client: Rc<vertex_client::Client<net::Sender>>) -> Screen<Model> {
     let builder = gtk::Builder::new_from_string(SCREEN_SRC);
 
     let viewport: gtk::Viewport = builder.get_object("viewport").unwrap();

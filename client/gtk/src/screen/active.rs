@@ -1,14 +1,11 @@
 use gtk::prelude::*;
 
-use std::rc::Rc;
-
-use vertex_client_backend as vertex;
-
+use crate::net;
 use crate::screen::{self, Screen, DynamicScreen, TryGetText};
+
 use std::fmt;
-use vertex_common::{ClientMessage, ClientRequest, ClientSentMessage};
-use vertex_client_backend::{Community, Room};
-use gtk::{ListBox, ListBoxRow, ListBoxRowExt, Container, Widget};
+
+use std::rc::Rc;
 use std::sync::Mutex;
 use std::cell::RefCell;
 
@@ -183,13 +180,13 @@ fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
 
 pub struct Model {
     app: Rc<crate::App>,
-    client: Rc<vertex::Client>,
+    client: Rc<vertex_client::Client<net::Sender>>,
     widgets: Widgets,
     selected_community_widget: Option<(gtk::Expander, usize)>,
-    pub(crate) communities: Mutex<Vec<Community>>, // TODO better solution
+    pub(crate) communities: Mutex<Vec<vertex_client::Community>>, // TODO better solution
 }
 
-pub fn build(app: Rc<crate::App>, client: Rc<vertex::Client>) -> Screen<Model> {
+pub fn build(app: Rc<crate::App>, client: Rc<vertex_client::Client<net::Sender>>) -> Screen<Model> {
     let builder = gtk::Builder::new_from_string(SCREEN_SRC);
 
     let main: gtk::Overlay = builder.get_object("main").unwrap();
@@ -219,6 +216,7 @@ fn bind_events(screen: &Screen<Model>) {
     let model = screen.model();
     let widgets = &model.widgets;
 
+    // TODO: see if it would be viable for the connector to pass &mut Model instead of the screen
     widgets.message_entry.connect_activate(
         screen.connector()
             .do_async(|screen, entry: gtk::Entry| async move {
@@ -228,20 +226,20 @@ fn bind_events(screen: &Screen<Model>) {
                 // TODO handle error
                 let (expander, idx) = screen.model().selected_community_widget.clone().unwrap();
                 let model = screen.model();
-                let communities =  model.communities.lock();
+                let communities = model.communities.lock();
                 let community = &communities.unwrap()[idx];
 
-                let list = expander.get_child().unwrap().downcast::<ListBox>().unwrap();
+                let list = expander.get_child().unwrap().downcast::<gtk::ListBox>().unwrap();
                 let row = list.get_selected_row().unwrap();
                 let room = &community.rooms[row.get_index() as usize];
 
-                let req = ClientRequest::SendMessage(ClientSentMessage {
+                let req = vertex::ClientRequest::SendMessage(vertex::ClientSentMessage {
                     to_community: community.id,
                     to_room: room.id,
                     content: content.clone(),
                 });
 
-                screen.model().app.net.as_ref().unwrap().request(req).await.unwrap(); // TODO handle error?
+                screen.model().app.request_sender().request(req).await.unwrap(); // TODO handle error?
                 screen.model().widgets.messages.borrow_mut().push("You".to_owned(), &content);
             })
             .build_cloned_consumer()
@@ -311,17 +309,17 @@ fn show_create_community(screen: Screen<Model>) {
                                     )
                                 };
 
-                                screen.model.borrow().communities.lock().unwrap().push(Community {
+                                screen.model.borrow().communities.lock().unwrap().push(vertex_client::Community {
                                     id,
                                     name: name.clone(),
                                     rooms: vec![
-                                        Room { id: general, name: "General".into() },
-                                        Room { id: off_topic, name: "Off Topic".into() },
+                                        vertex_client::Room { id: general, name: "General".into() },
+                                        vertex_client::Room { id: off_topic, name: "Off Topic".into() },
                                     ],
                                 });
 
                                 push_community(screen, &name, &["General", "Off Topic"]);
-                            },
+                            }
                             Err(e) => panic!("{:?}", e),
                         }
                     }

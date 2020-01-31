@@ -1,22 +1,12 @@
 [package]
-name = "vertex_client_backend"
+name = "vertex_client"
 version = "0.1.0"
 authors = ["Restioson <restiosondev@gmail.com>", "gegy1000 <gegy1000@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-uuid = { version = "^0.7", features = ["serde", "v4"] }
-serde = "^1"
-serde_cbor = "^0.10"
-vertex_common = { path = "../../common/" }
-url = "^2.1"
-chrono = { version = "^0.4", features = ["serde"] }
+vertex = { path = "../../common/" }
 
-tokio = { version = "0.2.9", features = ["full"] }
 futures = "0.3"
 
-tungstenite = "0.9"
-tokio-tungstenite = { git = "https://github.com/snapview/tokio-tungstenite.git", features = ["tls"] }
-
-native-tls = "0.2"
-tokio-tls = "0.3"
+async-trait = "0.1"

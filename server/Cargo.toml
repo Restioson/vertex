@@ -28,7 +28,7 @@ unicode-normalization = "^0.1"
 log = "^0.4"
 fern = "^0.5"
 dashmap = "^3"
-vertex_common = { path = "../common/" }
+vertex = { path = "../common/" }
 
 [profile.dev.package.rust-argon2] # Otherwise, login is painfully slow on dev
 opt-level = 3

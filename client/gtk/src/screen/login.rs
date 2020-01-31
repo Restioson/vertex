@@ -2,9 +2,7 @@ use gtk::prelude::*;
 
 use std::rc::Rc;
 
-use vertex_common::*;
-use vertex_client_backend as vertex;
-
+use crate::net;
 use crate::screen::{self, Screen, DynamicScreen, TryGetText};
 
 use std::fmt;
@@ -93,12 +91,12 @@ fn bind_events(screen: &Screen<Model>) {
     );
 }
 
-async fn login(app: &crate::App, username: String, password: String) -> Result<vertex::Client, LoginError> {
-    let client = vertex::AuthClient::new(app.net());
+async fn login(app: &crate::App, username: String, password: String) -> Result<vertex_client::Client<net::Sender>, LoginError> {
+    let client = vertex_client::auth::Client::new(app.request_sender());
 
     let (device, token) = match app.token_store.get_stored_token() {
         Some(token) => token,
-        None => client.authenticate(UserCredentials::new(username, password)).await?,
+        None => client.authenticate(vertex::UserCredentials::new(username, password)).await?,
     };
 
     Ok(client.login(device, token).await?)
@@ -123,21 +121,22 @@ impl fmt::Display for LoginError {
     }
 }
 
-impl From<vertex::Error> for LoginError {
-    fn from(err: vertex::Error) -> Self {
+impl From<vertex_client::Error> for LoginError {
+    fn from(err: vertex_client::Error) -> Self {
         match err {
-            vertex::Error::ErrResponse(err) => err.into(),
-            vertex::Error::WebSocketError(_) => LoginError::NetworkError,
+            vertex_client::Error::Net(_) => LoginError::NetworkError,
+            vertex_client::Error::Response(err) => err.into(),
             _ => LoginError::UnknownError,
         }
     }
 }
 
-impl From<ErrResponse> for LoginError {
-    fn from(err: ErrResponse) -> Self {
+impl From<vertex::ErrResponse> for LoginError {
+    fn from(err: vertex::ErrResponse) -> Self {
         match err {
-            ErrResponse::Internal => LoginError::InternalServerError,
-            ErrResponse::IncorrectUsernameOrPassword | ErrResponse::InvalidUser => LoginError::InvalidUsernameOrPassword,
+            vertex::ErrResponse::Internal => LoginError::InternalServerError,
+            vertex::ErrResponse::IncorrectUsernameOrPassword |
+            vertex::ErrResponse::InvalidUser => LoginError::InvalidUsernameOrPassword,
 
             _ => LoginError::UnknownError,
         }

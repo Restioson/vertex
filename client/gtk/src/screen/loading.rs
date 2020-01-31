@@ -1,10 +1,6 @@
 use gtk::prelude::*;
 
-use std::rc::Rc;
-
-use vertex_client_backend as vertex;
-
-use crate::screen::{self, Screen, DynamicScreen};
+use crate::screen::Screen;
 
 const SCREEN_SRC: &str = include_str!("glade/loading/loading.glade");
 

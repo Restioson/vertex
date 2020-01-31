@@ -3,9 +3,7 @@ use gtk::prelude::*;
 use std::rc::Rc;
 use std::fmt;
 
-use vertex_client_backend as vertex;
-use vertex_common::*;
-
+use crate::net;
 use crate::screen::{self, Screen, DynamicScreen, TryGetText};
 
 const SCREEN_SRC: &str = include_str!("glade/register/register.glade");
@@ -95,16 +93,15 @@ fn bind_events(screen: &Screen<Model>) {
     );
 }
 
-async fn register(app: &crate::App, username: String, password_1: String, password_2: String) -> Result<vertex::Client, RegisterError> {
+async fn register(app: &crate::App, username: String, password_1: String, password_2: String) -> Result<vertex_client::Client<net::Sender>, RegisterError> {
     if password_1 != password_2 {
         return Err(RegisterError::PasswordsDoNotMatch);
     }
 
     let password = password_1;
 
-    let client = vertex::AuthClient::new(app.net());
-
-    let credentials = UserCredentials::new(username.clone(), password);
+    let client = vertex_client::auth::Client::new(app.request_sender());
+    let credentials = vertex::UserCredentials::new(username.clone(), password);
 
     let _ = client.register(credentials.clone(), username.clone()).await?;
     let (device, token) = client.authenticate(credentials).await?;
@@ -137,23 +134,23 @@ impl fmt::Display for RegisterError {
     }
 }
 
-impl From<vertex::Error> for RegisterError {
-    fn from(err: vertex::Error) -> Self {
+impl From<vertex_client::Error> for RegisterError {
+    fn from(err: vertex_client::Error) -> Self {
         match err {
-            vertex::Error::ErrResponse(err) => err.into(),
-            vertex::Error::WebSocketError(_) => RegisterError::NetworkError,
+            vertex_client::Error::Net(_) => RegisterError::NetworkError,
+            vertex_client::Error::Response(err) => err.into(),
             _ => RegisterError::UnknownError,
         }
     }
 }
 
-impl From<ErrResponse> for RegisterError {
-    fn from(err: ErrResponse) -> Self {
+impl From<vertex::ErrResponse> for RegisterError {
+    fn from(err: vertex::ErrResponse) -> Self {
         match err {
-            ErrResponse::Internal => RegisterError::InternalServerError,
-            ErrResponse::InvalidUsername => RegisterError::InvalidUsername,
-            ErrResponse::InvalidPassword => RegisterError::InvalidPassword,
-            ErrResponse::UsernameAlreadyExists => RegisterError::UsernameAlreadyExists,
+            vertex::ErrResponse::Internal => RegisterError::InternalServerError,
+            vertex::ErrResponse::InvalidUsername => RegisterError::InvalidUsername,
+            vertex::ErrResponse::InvalidPassword => RegisterError::InvalidPassword,
+            vertex::ErrResponse::UsernameAlreadyExists => RegisterError::UsernameAlreadyExists,
             _ => RegisterError::UnknownError,
         }
     }

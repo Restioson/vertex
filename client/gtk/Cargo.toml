@@ -14,12 +14,22 @@ clap = "2.33"
 url = "2.1"
 uuid = { version = "^0.8", features = ["serde", "v4"] }
 keyring = "^0.7"
+
 serde = "^1"
 serde_derive = "^1"
 serde_json = "^1"
+serde_cbor = "0.11"
 
 futures = "0.3"
-tokio = "0.2"
+tokio = { version = "0.2.9", features = ["full"] }
 
-vertex_client_backend = { path = "../backend/" }
-vertex_common = { path = "../../common" }
+tungstenite = "0.9"
+tokio-tungstenite = { git = "https://github.com/snapview/tokio-tungstenite.git", features = ["tls"] }
+
+native-tls = "0.2"
+tokio-tls = "0.3"
+
+async-trait = "0.1"
+
+vertex_client = { path = "../backend/" }
+vertex = { path = "../../common" }

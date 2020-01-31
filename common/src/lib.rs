@@ -209,7 +209,6 @@ pub enum ServerMessage {
         id: RequestId,
         result: ResponseResult,
     },
-    MalformedMessage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

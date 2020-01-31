@@ -1715,7 +1715,7 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "vertex_common"
+name = "vertex"
 version = "0.1.0"
 dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1752,7 +1752,7 @@ dependencies = [
  "unicode-normalization 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "url 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uuid 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "vertex_common 0.1.0",
+ "vertex 0.1.0",
  "warp 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "xtra 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
