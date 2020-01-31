@@ -109,7 +109,7 @@ impl Database {
         &self,
         community: CommunityId,
         user: UserId,
-    ) -> Result<Result<(), AddToCommunityError>, DatabaseError> {
+    ) -> DbResult<Result<(), AddToCommunityError>> {
         use AddToCommunitySource::*;
 
         let conn = self.pool.connection().await?;

@@ -67,13 +67,16 @@ impl TryFrom<Row> for UserRecord {
     }
 }
 
+pub struct UsernameConflict;
+pub struct NonexistentUser;
+
 pub enum ChangeUsernameError {
     NonexistentUser,
     UsernameConflict,
 }
 
 impl Database {
-    pub async fn get_user_by_id(&self, id: UserId) -> Result<Option<UserRecord>, DatabaseError> {
+    pub async fn get_user_by_id(&self, id: UserId) -> DbResult<Option<UserRecord>> {
         let conn = self.pool.connection().await?;
         let query = conn
             .client
@@ -91,7 +94,7 @@ impl Database {
     pub async fn get_user_by_name(
         &self,
         name: String,
-    ) -> Result<Option<UserRecord>, DatabaseError> {
+    ) -> DbResult<Option<UserRecord>> {
         let conn = self.pool.connection().await?;
         let query = conn
             .client
@@ -108,7 +111,7 @@ impl Database {
 
     /// Creates a user, returning whether it was successful (i.e, if there were no conflicts with
     /// respect to the ID and username).
-    pub async fn create_user(&self, user: UserRecord) -> Result<bool, DatabaseError> {
+    pub async fn create_user(&self, user: UserRecord) -> DbResult<Result<(), UsernameConflict>> {
         const STMT: &'static str = "
             INSERT INTO users
                 (
@@ -139,14 +142,18 @@ impl Database {
 
         let ret = conn.client.execute(&stmt, args).await?;
 
-        Ok(ret == 1) // Return true if 1 item was inserted (insert was successful)
+        Ok(if ret == 1 { // 1 item was inserted (insert was successful)
+            Ok(())
+        } else {
+            Err(UsernameConflict)
+        })
     }
 
     pub async fn change_username(
         &self,
         user: UserId,
         new_username: String,
-    ) -> Result<Result<(), ChangeUsernameError>, DatabaseError> {
+    ) -> DbResult<Result<(), ChangeUsernameError>> {
         let conn = self.pool.connection().await?;
         let stmt = conn
             .client
@@ -179,7 +186,7 @@ impl Database {
         &self,
         user: UserId,
         new_display_name: String,
-    ) -> Result<bool, DatabaseError> {
+    ) -> DbResult<Result<(), NonexistentUser>> {
         let conn = self.pool.connection().await?;
         let stmt = conn
             .client
@@ -189,7 +196,11 @@ impl Database {
             .client
             .execute(&stmt, &[&new_display_name, &user.0])
             .await?;
-        Ok(res == 1)
+        Ok(if res == 1 {
+            Ok(())
+        } else {
+            Err(NonexistentUser)
+        })
     }
 
     /// Changes the password of a user, returning whether the user existed at all.
@@ -198,7 +209,7 @@ impl Database {
         user: UserId,
         new_password_hash: String,
         hash_scheme_version: HashSchemeVersion,
-    ) -> Result<bool, DatabaseError> {
+    ) -> DbResult<Result<(), NonexistentUser>> {
         const STMT: &'static str = "
             UPDATE users SET
                 password_hash = $1, hash_scheme_version = $2, compromised = $3
@@ -214,6 +225,10 @@ impl Database {
         ];
 
         let res = conn.client.execute(&stmt, args).await?;
-        Ok(res == 1)
+        Ok(if res == 1 {
+            Ok(())
+        } else {
+            Err(NonexistentUser)
+        })
     }
 }

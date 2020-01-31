@@ -1,4 +1,4 @@
-use crate::database::{Database, DatabaseError};
+use crate::database::{Database, DatabaseError, DbResult};
 use futures::Future;
 use std::convert::TryFrom;
 use tokio_postgres::Row;
@@ -34,7 +34,7 @@ impl Database {
     pub async fn get_community_metadata(
         &self,
         id: CommunityId,
-    ) -> Result<Option<CommunityRecord>, DatabaseError> {
+    ) -> DbResult<Option<CommunityRecord>> {
         let conn = self.pool.connection().await?;
         let query = conn
             .client
@@ -49,7 +49,7 @@ impl Database {
         }
     }
 
-    pub async fn create_community(&self, name: String) -> Result<CommunityId, DatabaseError> {
+    pub async fn create_community(&self, name: String) -> DbResult<CommunityId> {
         const STMT: &'static str = "INSERT INTO communities (id, name) VALUES ($1, $2)";
         let id = Uuid::new_v4();
         let conn = self.pool.connection().await?;

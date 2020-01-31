@@ -266,10 +266,9 @@ impl ClientWsSession {
         let user = UserRecord::new(username, display_name, hash, hash_version);
         let id = user.id;
 
-        if self.database.create_user(user).await? {
-            Ok(OkResponse::User { id })
-        } else {
-            Err(ErrResponse::UsernameAlreadyExists)
+        match self.database.create_user(user).await? {
+            Ok(()) => Ok(OkResponse::User { id }),
+            Err(UsernameConflict) => Err(ErrResponse::UsernameAlreadyExists),
         }
     }
 
@@ -300,7 +299,12 @@ impl ClientWsSession {
             permission_flags: options.permission_flags,
         };
 
-        self.database.create_token(token).await?;
+        if let Err(DeviceIdConflict) = self.database.create_token(token).await? {
+            // The chances of a UUID conflict is so abysmally low that we can only assume that a
+            // conflict is due to a programming error
+
+            panic!("Newly generated UUID conflicts with another!");
+        }
 
         Ok(OkResponse::Token {
             device,
@@ -315,10 +319,9 @@ impl ClientWsSession {
     ) -> ResponseResult {
         self.verify_credentials(credentials).await?;
 
-        if self.database.refresh_token(to_refresh).await? {
-            Ok(OkResponse::NoData)
-        } else {
-            Err(ErrResponse::DeviceDoesNotExist) // Token didn't exist
+        match self.database.refresh_token(to_refresh).await? {
+            Ok(()) => Ok(OkResponse::NoData),
+            Err(NonexistentDevice) => Err(ErrResponse::DeviceDoesNotExist),
         }
     }
 
@@ -396,7 +399,7 @@ impl<'a> Unauthenticated<'a> {
             return Err(ErrResponse::InvalidToken);
         }
 
-        if !self.client.database.refresh_token(device).await? {
+        if let Err(NonexistentDevice) = self.client.database.refresh_token(device).await? {
             return Err(ErrResponse::InvalidToken);
         }
 
@@ -517,7 +520,7 @@ impl<'a> Authenticated<'a> {
     }
 
     async fn revoke_token(self) -> ResponseResult {
-        if !self.client.database.revoke_token(self.device).await? {
+        if let Err(NonexistentDevice) = self.client.database.revoke_token(self.device).await? {
             return Err(ErrResponse::DeviceDoesNotExist);
         }
 
@@ -532,7 +535,7 @@ impl<'a> Authenticated<'a> {
         password: String,
     ) -> ResponseResult {
         self.verify_password(password).await?;
-        if !self.client.database.revoke_token(to_revoke).await? {
+        if let Err(NonexistentDevice) = self.client.database.revoke_token(to_revoke).await? {
             return Err(ErrResponse::DeviceDoesNotExist);
         }
 
@@ -576,16 +579,12 @@ impl<'a> Authenticated<'a> {
             return Err(ErrResponse::InvalidDisplayName);
         }
 
-        if self
-            .client
-            .database
-            .change_display_name(self.user, new_display_name)
-            .await?
-        {
-            self.ctx.stop(); // The user did not exist at the time of request
-            Err(ErrResponse::UserDeleted)
-        } else {
-            Ok(OkResponse::NoData)
+        match self.client.database.change_display_name(self.user, new_display_name).await? {
+            Ok(()) => Ok(OkResponse::NoData),
+            Err(NonexistentUser) => {
+                self.ctx.stop(); // The user did not exist at the time of request
+                Err(ErrResponse::UserDeleted)
+            }
         }
     }
 
@@ -601,30 +600,42 @@ impl<'a> Authenticated<'a> {
         self.verify_password(old_password).await?;
 
         let (new_password_hash, hash_version) = auth::hash(new_password).await;
-        if !self
-            .client
-            .database
-            .change_password(self.user, new_password_hash, hash_version)
-            .await?
-        {
-            self.ctx.stop(); // The user did not exist at the time of request
-            Err(ErrResponse::UserDeleted)
-        } else {
-            Ok(OkResponse::NoData)
+        let res = self.client.database.change_password(self.user, new_password_hash, hash_version).await?;
+
+        match res {
+            Ok(()) => Ok(OkResponse::NoData),
+            Err(NonexistentUser) => {
+                self.ctx.stop(); // The user did not exist at the time of request
+                Err(ErrResponse::UserDeleted)
+            }
         }
     }
 
     async fn create_community(self, name: String) -> ResponseResult {
-        let community: CommunityRecord = self.client.database.send(CreateCommunity { name }).await.unwrap()?;
-        self.join_community(community.id).await?;
+        let id = self.client.database.create_community(name).await?;
+        self.join_community(id).await?;
 
-        Ok(OkResponse::Community { id: community.id })
+        Ok(OkResponse::Community { id })
     }
 
     async fn join_community(self, id: CommunityId) -> ResponseResult {
-        self.client.database.send(AddToCommunity { community: id, user: self.user }).await.unwrap()?;
+        let res = self.client.database.add_to_community(id, self.user).await?;
 
-        let community = self.client.database.send(GetCommunityMetadata(id)).await.unwrap()?.unwrap();
+        match res {
+            Err(AddToCommunityError::InvalidUser) => {
+                self.ctx.stop(); // The user did not exist at the time of request
+                return Err(ErrResponse::UserDeleted)
+            },
+            Err(AddToCommunityError::InvalidCommunity) => return Err(ErrResponse::InvalidCommunity),
+            Err(AddToCommunityError::AlreadyInCommunity) => return Err(ErrResponse::AlreadyInCommunity),
+            _ => (),
+        }
+
+        let community = match self.client.database.get_community_metadata(id).await? {
+            Some(community) => community,
+            None => return Err(ErrResponse::InvalidCommunity),
+        };
+
         self.client.send(ServerMessage::Action(ServerAction::AddCommunity {
             id: community.id,
             name: community.name,

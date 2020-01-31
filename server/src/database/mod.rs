@@ -22,6 +22,8 @@ use xtra::prelude::*;
 pub use token::*;
 pub use user::*;
 
+pub type DbResult<T> = Result<T, DatabaseError>;
+
 #[derive(Debug)]
 pub struct DatabaseError(l337::Error<tokio_postgres::Error>);
 
@@ -58,7 +60,7 @@ pub struct Database {
 }
 
 impl Database {
-    pub async fn new() -> Result<Self, DatabaseError> {
+    pub async fn new() -> DbResult<Self> {
         let mgr = PostgresConnectionManager::new(
             fs::read_to_string("db.conf") // TODO use config dirs
                 .expect("db.conf not found")
@@ -76,7 +78,7 @@ impl Database {
         Ok(db)
     }
 
-    async fn create_tables(&self) -> Result<(), DatabaseError> {
+    async fn create_tables(&self) -> DbResult<()> {
         let conn = self.pool.connection().await?;
         let cmds = [
             CREATE_USERS_TABLE,
@@ -123,7 +125,7 @@ impl Database {
     async fn expired_tokens(
         &self,
         token_expiry_days: u16,
-    ) -> Result<Vec<(UserId, DeviceId)>, DatabaseError> {
+    ) -> DbResult<Vec<(UserId, DeviceId)>> {
         const QUERY: &'static str = "
             DELETE FROM login_tokens
                 WHERE expiration_date < NOW()::timestamp OR
