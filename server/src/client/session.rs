@@ -7,13 +7,13 @@ use chrono::Utc;
 use futures::stream::SplitSink;
 use futures::{Future, SinkExt};
 use rand::RngCore;
+use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 use vertex_common::*;
-use xtra::prelude::*;
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
-use std::sync::Arc;
+use xtra::prelude::*;
 
 pub struct WebSocketMessage(pub(crate) Result<ws::Message, warp::Error>);
 
@@ -38,11 +38,28 @@ enum State {
 
 pub struct ClientWsSession {
     sender: SplitSink<WebSocket, ws::Message>,
-    database: Address<DatabaseServer>,
+    database: Database,
     state: State,
     heartbeat: Instant,
     config: Arc<Config>,
     communities: Vec<CommunityId>,
+}
+
+impl ClientWsSession {
+    pub fn new(
+        sender: SplitSink<WebSocket, ws::Message>,
+        database: Database,
+        config: Arc<Config>,
+    ) -> Self {
+        ClientWsSession {
+            sender,
+            database,
+            state: State::Unauthenticated,
+            heartbeat: Instant::now(),
+            config,
+            communities: Vec::new(),
+        }
+    }
 }
 
 impl Actor for ClientWsSession {
@@ -56,7 +73,7 @@ impl Actor for ClientWsSession {
 }
 
 impl Handler<CheckHeartbeat> for ClientWsSession {
-    type Responder<'a> = impl Future<Output=()> + 'a;
+    type Responder<'a> = impl Future<Output = ()> + 'a;
 
     fn handle(&mut self, _: CheckHeartbeat, ctx: &mut Context<Self>) -> Self::Responder<'_> {
         if Instant::now().duration_since(self.heartbeat) > HEARTBEAT_TIMEOUT {
@@ -68,7 +85,7 @@ impl Handler<CheckHeartbeat> for ClientWsSession {
 }
 
 impl Handler<WebSocketMessage> for ClientWsSession {
-    type Responder<'a> = impl Future<Output=()> + 'a;
+    type Responder<'a> = impl Future<Output = ()> + 'a;
 
     fn handle<'a>(
         &'a mut self,
@@ -85,9 +102,13 @@ impl Handler<WebSocketMessage> for ClientWsSession {
 }
 
 impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
-    type Responder<'a> = impl Future<Output=()> + 'a;
+    type Responder<'a> = impl Future<Output = ()> + 'a;
 
-    fn handle<'a>(&'a mut self, msg: SendMessage<ServerMessage>, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
+    fn handle<'a>(
+        &'a mut self,
+        msg: SendMessage<ServerMessage>,
+        ctx: &'a mut Context<Self>,
+    ) -> Self::Responder<'a> {
         async move {
             if let Err(_) = self.send(msg.0).await {
                 ctx.stop()
@@ -97,11 +118,13 @@ impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
 }
 
 impl Handler<LogoutThisSession> for ClientWsSession {
-    type Responder<'a> = impl Future<Output=()> + 'a;
+    type Responder<'a> = impl Future<Output = ()> + 'a;
 
     fn handle(&mut self, _: LogoutThisSession, _: &mut Context<Self>) -> Self::Responder<'_> {
         async move {
-            let _ = self.send(ServerMessage::Action(ServerAction::SessionLoggedOut)).await;
+            let _ = self
+                .send(ServerMessage::Action(ServerAction::SessionLoggedOut))
+                .await;
             self.log_out();
         }
     }
@@ -109,17 +132,6 @@ impl Handler<LogoutThisSession> for ClientWsSession {
 
 // TODO: Error Handling: should not .unwrap() on `xtra::Disconnected` and `warp::Error`
 impl ClientWsSession {
-    pub fn new(sender: SplitSink<WebSocket, ws::Message>, database: Address<DatabaseServer>, config: Arc<Config>) -> Self {
-        ClientWsSession {
-            sender,
-            database,
-            state: State::Unauthenticated,
-            heartbeat: Instant::now(),
-            config,
-            communities: Vec::new(),
-        }
-    }
-
     #[inline]
     async fn send<M: Into<Vec<u8>>>(&mut self, msg: M) -> Result<(), warp::Error> {
         self.sender.send(ws::Message::binary(msg)).await
@@ -130,7 +142,11 @@ impl ClientWsSession {
         use std::mem;
 
         match mem::replace(&mut self.state, State::Unauthenticated) {
-            State::Authenticated { user: user_id, device, .. } => {
+            State::Authenticated {
+                user: user_id,
+                device,
+                ..
+            } => {
                 if let Some(mut user) = USERS.get_mut(&user_id) {
                     // Remove the device
                     let devices = &mut user.sessions;
@@ -149,7 +165,11 @@ impl ClientWsSession {
         }
     }
 
-    async fn handle_ws_message(&mut self, message: WebSocketMessage, ctx: &mut Context<Self>) -> Result<(), warp::Error> {
+    async fn handle_ws_message(
+        &mut self,
+        message: WebSocketMessage,
+        ctx: &mut Context<Self>,
+    ) -> Result<(), warp::Error> {
         let message = message.0?;
 
         if message.is_ping() {
@@ -165,7 +185,11 @@ impl ClientWsSession {
             };
 
             let response = self.handle_request(ctx, msg.request).await;
-            self.send(ServerMessage::Response { id: msg.id, result: response }).await?;
+            self.send(ServerMessage::Response {
+                id: msg.id,
+                result: response,
+            })
+            .await?;
         } else if message.is_close() {
             ctx.stop();
         } else {
@@ -175,30 +199,55 @@ impl ClientWsSession {
         Ok(())
     }
 
-    async fn handle_request(&mut self, ctx: &mut Context<Self>, request: ClientRequest) -> ResponseResult {
+    async fn handle_request(
+        &mut self,
+        ctx: &mut Context<Self>,
+        request: ClientRequest,
+    ) -> ResponseResult {
         match request {
-            ClientRequest::CreateToken { credentials, options } => {
-                self.create_token(credentials, options).await
-            }
-            ClientRequest::CreateUser { credentials, display_name } => {
-                self.create_user(credentials, display_name).await
-            }
-            ClientRequest::RefreshToken { credentials, device } => {
-                self.refresh_token(credentials, device).await
-            }
+            ClientRequest::CreateToken {
+                credentials,
+                options,
+            } => self.create_token(credentials, options).await,
+            ClientRequest::CreateUser {
+                credentials,
+                display_name,
+            } => self.create_user(credentials, display_name).await,
+            ClientRequest::RefreshToken {
+                credentials,
+                device,
+            } => self.refresh_token(credentials, device).await,
             request => match &mut self.state {
                 State::Unauthenticated => {
-                    Unauthenticated { client: self, ctx }.handle_request(request).await
+                    Unauthenticated { client: self, ctx }
+                        .handle_request(request)
+                        .await
                 }
-                State::Authenticated { user, device, perms } => {
+                State::Authenticated {
+                    user,
+                    device,
+                    perms,
+                } => {
                     let (user, device, perms) = (*user, *device, *perms);
-                    Authenticated { client: self, ctx, user, device, perms }.handle_request(request).await
+                    Authenticated {
+                        client: self,
+                        ctx,
+                        user,
+                        device,
+                        perms,
+                    }
+                    .handle_request(request)
+                    .await
                 }
             },
         }
     }
 
-    async fn create_user(&mut self, credentials: UserCredentials, display_name: String) -> ResponseResult {
+    async fn create_user(
+        &mut self,
+        credentials: UserCredentials,
+        display_name: String,
+    ) -> ResponseResult {
         if !auth::valid_password(&credentials.password, &self.config) {
             return Err(ErrResponse::InvalidPassword);
         }
@@ -217,14 +266,18 @@ impl ClientWsSession {
         let user = UserRecord::new(username, display_name, hash, hash_version);
         let id = user.id;
 
-        if self.database.send(CreateUser(user)).await.unwrap()? {
+        if self.database.create_user(user).await? {
             Ok(OkResponse::User { id })
         } else {
             Err(ErrResponse::UsernameAlreadyExists)
         }
     }
 
-    async fn create_token(&mut self, credentials: UserCredentials, options: TokenCreationOptions) -> ResponseResult {
+    async fn create_token(
+        &mut self,
+        credentials: UserCredentials,
+        options: TokenCreationOptions,
+    ) -> ResponseResult {
         let user = self.verify_credentials(credentials).await?;
 
         let mut token_bytes: [u8; 32] = [0; 32]; // 256 bits
@@ -247,7 +300,7 @@ impl ClientWsSession {
             permission_flags: options.permission_flags,
         };
 
-        self.database.send(CreateToken(token)).await.unwrap()?;
+        self.database.create_token(token).await?;
 
         Ok(OkResponse::Token {
             device,
@@ -255,21 +308,28 @@ impl ClientWsSession {
         })
     }
 
-    async fn refresh_token(&mut self, credentials: UserCredentials, to_refresh: DeviceId) -> ResponseResult {
+    async fn refresh_token(
+        &mut self,
+        credentials: UserCredentials,
+        to_refresh: DeviceId,
+    ) -> ResponseResult {
         self.verify_credentials(credentials).await?;
 
-        if self.database.send(RefreshToken(to_refresh)).await.unwrap()? {
+        if self.database.refresh_token(to_refresh).await? {
             Ok(OkResponse::NoData)
         } else {
-            Err(ErrResponse::DeviceDoesNotExist)
+            Err(ErrResponse::DeviceDoesNotExist) // Token didn't exist
         }
     }
 
-    async fn verify_credentials(&mut self, credentials: UserCredentials) -> Result<UserId, ErrResponse> {
+    async fn verify_credentials(
+        &mut self,
+        credentials: UserCredentials,
+    ) -> Result<UserId, ErrResponse> {
         let username = auth::normalize_username(&credentials.username, &self.config);
         let password = credentials.password;
 
-        let user = match self.database.send(GetUserByName(username)).await.unwrap()? {
+        let user = match self.database.get_user_by_name(username).await? {
             Some(user) => user,
             None => return Err(ErrResponse::InvalidUser),
         };
@@ -297,12 +357,12 @@ impl<'a> Unauthenticated<'a> {
     }
 
     async fn login(&mut self, device: DeviceId, pass: AuthToken) -> ResponseResult {
-        let token = match self.client.database.send(GetToken { device }).await.unwrap()? {
+        let token = match self.client.database.get_token(device).await? {
             Some(token) => token,
             None => return Err(ErrResponse::InvalidToken),
         };
 
-        let user = match self.client.database.send(GetUserById(token.user)).await.unwrap()? {
+        let user = match self.client.database.get_user_by_id(token.user).await? {
             Some(user) => user,
             None => return Err(ErrResponse::InvalidUser),
         };
@@ -314,7 +374,9 @@ impl<'a> Unauthenticated<'a> {
             return Err(ErrResponse::UserBanned);
         } else if user.compromised {
             return Err(ErrResponse::UserCompromised);
-        } else if (Utc::now() - token.last_used).num_days() > self.client.config.token_stale_days as i64 {
+        } else if (Utc::now() - token.last_used).num_days()
+            > self.client.config.token_stale_days as i64
+        {
             return Err(ErrResponse::StaleToken);
         }
 
@@ -334,15 +396,14 @@ impl<'a> Unauthenticated<'a> {
             return Err(ErrResponse::InvalidToken);
         }
 
-        if !self.client.database.send(RefreshToken(device)).await.unwrap()? {
+        if !self.client.database.refresh_token(device).await? {
             return Err(ErrResponse::InvalidToken);
         }
 
         let session = (device, self.ctx.address().unwrap());
 
         if let Some(mut user_sessions) = USERS.get_mut(&user) {
-            let existing_session = user_sessions.sessions.iter()
-                .find(|(id, _)| *id == device);
+            let existing_session = user_sessions.sessions.iter().find(|(id, _)| *id == device);
             if existing_session.is_some() {
                 return Err(ErrResponse::TokenInUse);
             }
@@ -351,7 +412,11 @@ impl<'a> Unauthenticated<'a> {
             USERS.insert(user, UserSessions::new(session));
         }
 
-        self.client.state = State::Authenticated { user, device, perms: permission_flags };
+        self.client.state = State::Authenticated {
+            user,
+            device,
+            perms: permission_flags,
+        };
 
         Ok(OkResponse::User { id: user })
     }
@@ -373,16 +438,25 @@ impl<'a> Authenticated<'a> {
             ClientRequest::JoinCommunity(community) => self.join_community(community).await,
             ClientRequest::CreateCommunity { name } => self.create_community(name).await,
             ClientRequest::RevokeToken => self.revoke_token().await,
-            ClientRequest::RevokeForeignToken { device, password } => self.revoke_foreign_token(device, password).await,
-            ClientRequest::ChangeUsername { new_username } => self.change_username(new_username).await,
-            ClientRequest::ChangeDisplayName { new_display_name } => self.change_display_name(new_display_name).await,
-            ClientRequest::ChangePassword { old_password, new_password } => self.change_password(old_password, new_password).await,
+            ClientRequest::RevokeForeignToken { device, password } => {
+                self.revoke_foreign_token(device, password).await
+            }
+            ClientRequest::ChangeUsername { new_username } => {
+                self.change_username(new_username).await
+            }
+            ClientRequest::ChangeDisplayName { new_display_name } => {
+                self.change_display_name(new_display_name).await
+            }
+            ClientRequest::ChangePassword {
+                old_password,
+                new_password,
+            } => self.change_password(old_password, new_password).await,
             _ => Err(ErrResponse::AlreadyLoggedIn),
         }
     }
 
     async fn verify_password(&mut self, password: String) -> Result<(), ErrResponse> {
-        let user = match self.client.database.send(GetUserById(self.user)).await.unwrap()? {
+        let user = match self.client.database.get_user_by_id(self.user).await? {
             Some(user) => user,
             None => return Err(ErrResponse::InvalidUser),
         };
@@ -404,7 +478,11 @@ impl<'a> Authenticated<'a> {
         }
 
         if let Some(community) = COMMUNITIES.get(&message.to_community) {
-            let message = IdentifiedMessage { user: self.user, device: self.device, message };
+            let message = IdentifiedMessage {
+                user: self.user,
+                device: self.device,
+                message,
+            };
             let id = community.send(message).await.unwrap()?;
 
             Ok(OkResponse::MessageId { id })
@@ -423,15 +501,23 @@ impl<'a> Authenticated<'a> {
         }
 
         if let Some(community) = COMMUNITIES.get(&edit.community) {
-            let message = IdentifiedMessage { user: self.user, device: self.device, message: edit };
-            community.send(message).await.unwrap().map(|_| OkResponse::NoData)
+            let message = IdentifiedMessage {
+                user: self.user,
+                device: self.device,
+                message: edit,
+            };
+            community
+                .send(message)
+                .await
+                .unwrap()
+                .map(|_| OkResponse::NoData)
         } else {
             Err(ErrResponse::InvalidCommunity)
         }
     }
 
     async fn revoke_token(self) -> ResponseResult {
-        if !self.client.database.send(RevokeToken(self.device)).await.unwrap()? {
+        if !self.client.database.revoke_token(self.device).await? {
             return Err(ErrResponse::DeviceDoesNotExist);
         }
 
@@ -440,9 +526,13 @@ impl<'a> Authenticated<'a> {
         Ok(OkResponse::NoData)
     }
 
-    async fn revoke_foreign_token(mut self, to_revoke: DeviceId, password: String) -> ResponseResult {
+    async fn revoke_foreign_token(
+        mut self,
+        to_revoke: DeviceId,
+        password: String,
+    ) -> ResponseResult {
         self.verify_password(password).await?;
-        if !self.client.database.send(RevokeToken(to_revoke)).await.unwrap()? {
+        if !self.client.database.revoke_token(to_revoke).await? {
             return Err(ErrResponse::DeviceDoesNotExist);
         }
 
@@ -459,15 +549,26 @@ impl<'a> Authenticated<'a> {
             Err(auth::TooShort) => return Err(ErrResponse::InvalidUsername),
         };
 
-        if self.client.database.send(ChangeUsername { user: self.user, new_username }).await.unwrap()? {
-            Ok(OkResponse::NoData)
-        } else {
-            Err(ErrResponse::UsernameAlreadyExists)
+        match self
+            .client
+            .database
+            .change_username(self.user, new_username)
+            .await?
+        {
+            Ok(()) => Ok(OkResponse::NoData),
+            Err(ChangeUsernameError::UsernameConflict) => Err(ErrResponse::UsernameAlreadyExists),
+            Err(ChangeUsernameError::NonexistentUser) => {
+                self.ctx.stop(); // The user did not exist at the time of request
+                Err(ErrResponse::UserDeleted)
+            }
         }
     }
 
     async fn change_display_name(self, new_display_name: String) -> ResponseResult {
-        if !self.perms.has_perms(TokenPermissionFlags::CHANGE_DISPLAY_NAME) {
+        if !self
+            .perms
+            .has_perms(TokenPermissionFlags::CHANGE_DISPLAY_NAME)
+        {
             return Err(ErrResponse::AccessDenied);
         }
 
@@ -475,12 +576,24 @@ impl<'a> Authenticated<'a> {
             return Err(ErrResponse::InvalidDisplayName);
         }
 
-        self.client.database.send(ChangeDisplayName { user: self.user, new_display_name }).await.unwrap()?;
-
-        Ok(OkResponse::NoData)
+        if self
+            .client
+            .database
+            .change_display_name(self.user, new_display_name)
+            .await?
+        {
+            self.ctx.stop(); // The user did not exist at the time of request
+            Err(ErrResponse::UserDeleted)
+        } else {
+            Ok(OkResponse::NoData)
+        }
     }
 
-    async fn change_password(mut self, old_password: String, new_password: String) -> ResponseResult {
+    async fn change_password(
+        mut self,
+        old_password: String,
+        new_password: String,
+    ) -> ResponseResult {
         if !auth::valid_password(&new_password, &self.client.config) {
             return Err(ErrResponse::InvalidPassword);
         }
@@ -488,9 +601,17 @@ impl<'a> Authenticated<'a> {
         self.verify_password(old_password).await?;
 
         let (new_password_hash, hash_version) = auth::hash(new_password).await;
-        self.client.database.send(ChangePassword { user: self.user, new_password_hash, hash_version }).await.unwrap()?;
-
-        Ok(OkResponse::NoData)
+        if !self
+            .client
+            .database
+            .change_password(self.user, new_password_hash, hash_version)
+            .await?
+        {
+            self.ctx.stop(); // The user did not exist at the time of request
+            Err(ErrResponse::UserDeleted)
+        } else {
+            Ok(OkResponse::NoData)
+        }
     }
 
     async fn create_community(self, name: String) -> ResponseResult {

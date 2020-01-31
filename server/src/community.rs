@@ -103,7 +103,11 @@ impl SyncHandler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
 }
 
 impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
-    fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) -> Result<(), ErrResponse> {
+    fn handle(
+        &mut self,
+        m: IdentifiedMessage<Edit>,
+        _: &mut Context<Self>,
+    ) -> Result<(), ErrResponse> {
         let from_device = m.device;
         let send = SendMessage(ServerMessage::Action(ServerAction::Edit(m.message)));
 

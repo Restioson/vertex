@@ -1,10 +1,10 @@
-use crate::database::{handle_error, handle_error_psql, DatabaseServer};
+use crate::database::{Database, DatabaseError};
+use futures::Future;
 use std::convert::TryFrom;
 use tokio_postgres::Row;
 use uuid::Uuid;
 use vertex_common::{CommunityId, ErrResponse};
 use xtra::prelude::*;
-use futures::Future;
 
 pub(super) const CREATE_COMMUNITIES_TABLE: &'static str = "
 CREATE TABLE IF NOT EXISTS communities (
@@ -29,67 +29,32 @@ impl TryFrom<Row> for CommunityRecord {
     }
 }
 
-pub struct GetCommunityMetadata(CommunityId);
+impl Database {
+    // TODO(room_persistence): load at boot
+    pub async fn get_community_metadata(
+        &self,
+        id: CommunityId,
+    ) -> Result<Option<CommunityRecord>, DatabaseError> {
+        let conn = self.pool.connection().await?;
+        let query = conn
+            .client
+            .prepare("SELECT * FROM communities WHERE id=$1")
+            .await?;
+        let opt = conn.client.query_opt(&query, &[&id.0]).await?;
 
-impl Message for GetCommunityMetadata {
-    type Result = Result<Option<CommunityRecord>, ErrResponse>;
-}
-
-pub struct CreateCommunity {
-    pub name: String,
-}
-
-impl Message for CreateCommunity {
-    type Result = Result<CommunityRecord, ErrResponse>;
-}
-
-// TODO(room_persistence): load at boot
-impl Handler<GetCommunityMetadata> for DatabaseServer {
-    type Responder<'a> = impl Future<Output = Result<Option<CommunityRecord>, ErrResponse>> + 'a;
-
-    fn handle(&mut self, get: GetCommunityMetadata, _: &mut Context<Self>) -> Self::Responder<'_> {
-        async move {
-            let conn = self.pool.connection().await.map_err(handle_error)?;
-            let query = conn
-                .client
-                .prepare("SELECT * FROM communities WHERE id=$1")
-                .await
-                .map_err(handle_error_psql)?;
-            let opt = conn
-                .client
-                .query_opt(&query, &[&(get.0).0])
-                .await
-                .map_err(handle_error_psql)?;
-
-            if let Some(row) = opt {
-                Ok(Some(
-                    CommunityRecord::try_from(row).map_err(handle_error_psql)?,
-                ))
-            } else {
-                Ok(None)
-            }
+        if let Some(row) = opt {
+            Ok(Some(CommunityRecord::try_from(row)?))
+        } else {
+            Ok(None)
         }
     }
-}
 
-impl Handler<CreateCommunity> for DatabaseServer {
-    type Responder<'a> = impl Future<Output = Result<CommunityRecord, ErrResponse>> + 'a;
-
-    fn handle(&mut self, create: CreateCommunity, _: &mut Context<Self>) -> Self::Responder<'_> {
-        async move {
-            let id = Uuid::new_v4();
-            let conn = self.pool.connection().await.map_err(handle_error)?;
-            let query = conn
-                .client
-                .prepare("INSERT INTO communities (id, name) VALUES ($1, $2) RETURNING *")
-                .await
-                .map_err(handle_error_psql)?;
-            let row = conn
-                .client
-                .query_one(&query, &[&id, &create.name])
-                .await
-                .map_err(handle_error_psql)?;
-            CommunityRecord::try_from(row).map_err(handle_error_psql)
-        }
+    pub async fn create_community(&self, name: String) -> Result<CommunityId, DatabaseError> {
+        const STMT: &'static str = "INSERT INTO communities (id, name) VALUES ($1, $2)";
+        let id = Uuid::new_v4();
+        let conn = self.pool.connection().await?;
+        let stmt = conn.client.prepare(STMT).await?;
+        conn.client.execute(&stmt, &[&id, &name]).await?;
+        Ok(CommunityId(id))
     }
 }

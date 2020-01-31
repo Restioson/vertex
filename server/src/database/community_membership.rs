@@ -59,30 +59,23 @@ impl TryFrom<&Row> for RoomMember {
     }
 }
 
-pub struct AddToCommunity {
-    pub community: CommunityId,
-    pub user: UserId,
-}
-
-impl Message for AddToCommunity {
-    type Result = Result<(), ErrResponse>;
-}
-
+/// How the user was (or wasn't) added to a community. This is needed for the complicated (
+/// but resilient) SQL query.
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
-enum AddToRoomSource {
+enum AddToCommunitySource {
     Insert,
     Select,
     Update,
 }
 
-impl TryFrom<&Row> for AddToRoomSource {
+impl TryFrom<&Row> for AddToCommunitySource {
     type Error = tokio_postgres::Error;
 
-    fn try_from(row: &Row) -> Result<AddToRoomSource, tokio_postgres::Error> {
+    fn try_from(row: &Row) -> Result<AddToCommunitySource, tokio_postgres::Error> {
         Ok(match row.try_get::<&str, i8>("source")? as u8 {
-            b'i' => AddToRoomSource::Insert,
-            b's' => AddToRoomSource::Select,
-            b'u' => AddToRoomSource::Update,
+            b'i' => AddToCommunitySource::Insert,
+            b's' => AddToCommunitySource::Select,
+            b'u' => AddToCommunitySource::Update,
             _ => panic!("Invalid AddToRoomSource type!"),
         })
     }
@@ -90,7 +83,7 @@ impl TryFrom<&Row> for AddToRoomSource {
 
 struct AddToRoomResult {
     /// How the data was obtained - insert, select, or (nop) update? See the query for more.
-    source: AddToRoomSource,
+    source: AddToCommunitySource,
     member: RoomMember,
 }
 
@@ -99,64 +92,66 @@ impl TryFrom<&Row> for AddToRoomResult {
 
     fn try_from(row: &Row) -> Result<AddToRoomResult, tokio_postgres::Error> {
         Ok(AddToRoomResult {
-            source: AddToRoomSource::try_from(row)?,
+            source: AddToCommunitySource::try_from(row)?,
             member: RoomMember::try_from(row)?,
         })
     }
 }
 
-impl Handler<AddToCommunity> for DatabaseServer {
-    type Responder<'a> = impl Future<Output = Result<(), ErrResponse>> + 'a;
+pub enum AddToCommunityError {
+    InvalidUser,
+    InvalidCommunity,
+    AlreadyInCommunity,
+}
 
-    fn handle(&mut self, add: AddToCommunity, _: &mut Context<Self>) -> Self::Responder<'_> {
-        use AddToRoomSource::*;
+impl Database {
+    pub async fn add_to_community(
+        &self,
+        community: CommunityId,
+        user: UserId,
+    ) -> Result<Result<(), AddToCommunityError>, DatabaseError> {
+        use AddToCommunitySource::*;
 
-        async move {
-            let conn = self.pool.connection().await.map_err(handle_error)?;
-            let query = conn
-                .client
-                .prepare(ADD_TO_ROOM)
-                .await
-                .map_err(handle_error_psql)?;
-            let res = conn
-                .client
-                .query_opt(&query, &[&(add.community).0, &(add.user.0)])
-                .await;
+        let conn = self.pool.connection().await?;
+        let query = conn.client.prepare(ADD_TO_ROOM).await?;
+        let res = conn
+            .client
+            .query_opt(&query, &[&community.0, &user.0])
+            .await;
 
-            match res {
-                Ok(Some(row)) => {
-                    let res = AddToRoomResult::try_from(&row).map_err(handle_error_psql)?;
+        match res {
+            Ok(Some(row)) => {
+                let res = AddToRoomResult::try_from(&row)?;
 
-                    match res.source {
-                        // Row did not exist - user has been successfully added
-                        Insert => Ok(()),
+                match res.source {
+                    // Membership row did not exist - user has been successfully added
+                    Insert => Ok(Ok(())),
 
-                        // Row already existed - conflict of some sort
-                        Select | Update => {
-                            Err(ErrResponse::AlreadyInCommunity) // TODO(room_persistence): banning
-                        }
+                    // Membership row already existed - conflict of some sort
+                    Select | Update => {
+                        Ok(Err(AddToCommunityError::AlreadyInCommunity)) // TODO(room_persistence): banning
                     }
                 }
-                Ok(None) => panic!("db error: add to room query did not return anything"),
-                Err(err) => {
-                    let err = if err.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {
-                        let constraint = err
-                            .source()
-                            .and_then(|e| e.downcast_ref::<DbError>())
-                            .and_then(|e| e.constraint());
+            }
+            Ok(None) => panic!("db error: add to room query did not return anything"),
+            Err(err) => {
+                if err.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {
+                    let constraint = err
+                        .source()
+                        .and_then(|e| e.downcast_ref::<DbError>())
+                        .and_then(|e| e.constraint());
 
-                        match constraint {
-                            Some("community_membership_community_fkey") => {
-                                ErrResponse::InvalidCommunity
-                            }
-                            Some("community_membership_user_fkey") => ErrResponse::InvalidUser,
-                            Some(_) | None => handle_error(l337::Error::External(err)),
+                    match constraint {
+                        Some("community_membership_community_fkey") => {
+                            Ok(Err(AddToCommunityError::InvalidCommunity))
                         }
-                    } else {
-                        handle_error(l337::Error::External(err))
-                    };
-
-                    Err(err)
+                        Some("community_membership_user_fkey") => {
+                            Ok(Err(AddToCommunityError::InvalidUser))
+                        }
+                        Some(_) | None => Err(err.into()),
+                    }
+                } else {
+                    Err(err.into())
                 }
             }
         }

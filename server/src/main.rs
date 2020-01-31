@@ -9,19 +9,20 @@ mod community;
 mod config;
 mod database;
 
+use crate::client::WebSocketMessage;
 use crate::config::Config;
 use client::ClientWsSession;
-use database::DatabaseServer;
+use database::Database;
 use directories::ProjectDirs;
+use futures::StreamExt;
 use log::{info, LevelFilter};
 use std::fs::OpenOptions;
-use std::str::FromStr;
-use vertex_common::*;
-use std::sync::Arc;
-use warp::Filter;
-use crate::client::WebSocketMessage;
-use futures::StreamExt;
 use std::net::SocketAddr;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Duration;
+use vertex_common::*;
+use warp::Filter;
 
 #[derive(Debug, Clone)]
 pub struct SendMessage<T: Debug>(T);
@@ -122,19 +123,23 @@ async fn main() {
     create_files_directories(&config);
 
     let (cert_path, key_path) = config::ssl_config();
-    let db_server = Actor::spawn(DatabaseServer::new(&config).await);
+    let db = Database::new().await.expect("Error in database setup");
+    tokio::spawn(db.clone().sweep_loop(
+        config.token_expiry_days,
+        Duration::from_secs(config.tokens_sweep_interval_secs),
+    ));
     let config = Arc::new(config);
 
     let routes = warp::path("client")
         .and(warp::ws())
         .map(move |ws: warp::ws::Ws| {
-            let db_server = db_server.clone();
+            let db = db.clone();
             let config = config.clone();
 
             ws.on_upgrade({
                 move |websocket| {
                     let (tx, rx) = websocket.split();
-                    let addr = ClientWsSession::new(tx, db_server.clone(), config.clone()).spawn();
+                    let addr = ClientWsSession::new(tx, db, config.clone()).spawn();
                     addr.attach_stream(rx.map(|res| WebSocketMessage(res)));
                     async {}
                 }
@@ -146,5 +151,6 @@ async fn main() {
         .tls()
         .cert_path(cert_path)
         .key_path(key_path)
-        .run(addr.parse::<SocketAddr>().unwrap()).await;
+        .run(addr.parse::<SocketAddr>().unwrap())
+        .await;
 }

@@ -272,6 +272,8 @@ pub enum ErrResponse {
     UserCompromised,
     UserLocked,
     UserBanned,
+    /// Returned when the user that is sending a message is deleted while processing the message
+    UserDeleted,
     DeviceDoesNotExist,
     InvalidPassword,
     IncorrectUsernameOrPassword,
