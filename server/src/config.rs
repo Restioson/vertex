@@ -88,20 +88,26 @@ pub fn load_config() -> Config {
     let config_str = match res {
         Ok(s) => s,
         Err(ref e) if e.kind() == ErrorKind::NotFound => {
-            fs::create_dir_all(config_dir).unwrap_or_else(|_| panic!(
-                "Error creating config dirs ({})",
-                config_dir.to_string_lossy(),
-            ));
+            fs::create_dir_all(config_dir).unwrap_or_else(|_| {
+                panic!(
+                    "Error creating config dirs ({})",
+                    config_dir.to_string_lossy(),
+                )
+            });
 
-            File::create(&config_file).unwrap_or_else(|_| panic!(
-                "Error creating config file ({})",
-                config_file.to_string_lossy(),
-            ));
+            File::create(&config_file).unwrap_or_else(|_| {
+                panic!(
+                    "Error creating config file ({})",
+                    config_file.to_string_lossy(),
+                )
+            });
 
-            fs::read_to_string(&config_file).unwrap_or_else(|_| panic!(
-                "Error reading config file ({}). Error",
-                config_file.to_string_lossy(),
-            ))
+            fs::read_to_string(&config_file).unwrap_or_else(|_| {
+                panic!(
+                    "Error reading config file ({}). Error",
+                    config_file.to_string_lossy(),
+                )
+            })
         }
         Err(e) => panic!(
             "Error reading config file. It is expected to be here: {}. Error: {:?}",

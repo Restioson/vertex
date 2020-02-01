@@ -58,23 +58,12 @@ fn bind_events(screen: &Screen<Model>) {
             .do_async(|screen, (_button, _event)| {
                 async move {
                     let model = screen.model();
+                    let widgets = &model.widgets;
+                    let username = widgets.username_entry.try_get_text().unwrap_or_default();
+                    let password = widgets.password_entry.try_get_text().unwrap_or_default();
 
-                    let username = model
-                        .widgets
-                        .username_entry
-                        .try_get_text()
-                        .unwrap_or_default();
-                    let password = model
-                        .widgets
-                        .password_entry
-                        .try_get_text()
-                        .unwrap_or_default();
-
-                    model
-                        .widgets
-                        .status_stack
-                        .set_visible_child(&model.widgets.spinner);
-                    model.widgets.error_label.set_text("");
+                    widgets.status_stack.set_visible_child(&widgets.spinner);
+                    widgets.error_label.set_text("");
 
                     match login(&screen.model().app, username, password).await {
                         Ok(client) => {
@@ -89,10 +78,7 @@ fn bind_events(screen: &Screen<Model>) {
                         Err(err) => model.widgets.error_label.set_text(&format!("{}", err)),
                     }
 
-                    model
-                        .widgets
-                        .status_stack
-                        .set_visible_child(&model.widgets.error_label);
+                    widgets.status_stack.set_visible_child(&widgets.error_label);
                 }
             })
             .build_widget_event(),
@@ -167,7 +153,6 @@ impl From<vertex::ErrResponse> for LoginError {
             vertex::ErrResponse::IncorrectUsernameOrPassword | vertex::ErrResponse::InvalidUser => {
                 LoginError::InvalidUsernameOrPassword
             }
-
             _ => LoginError::UnknownError,
         }
     }

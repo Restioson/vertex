@@ -16,10 +16,10 @@ pub use communities::*;
 pub use community_membership::*;
 use xtra::prelude::*;
 
-pub use token::*;
-pub use user::*;
-use tokio_postgres::types::ToSql;
 use futures::{Stream, TryStreamExt};
+pub use token::*;
+use tokio_postgres::types::ToSql;
+pub use user::*;
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 
@@ -94,11 +94,7 @@ impl Database {
         Ok(())
     }
 
-    pub async fn sweep_loop(
-        self,
-        token_expiry_days: u16,
-        interval: Duration,
-    ) {
+    pub async fn sweep_loop(self, token_expiry_days: u16, interval: Duration) {
         let mut timer = tokio::time::interval(interval);
 
         loop {
@@ -135,7 +131,7 @@ impl Database {
 
     async fn expired_tokens(
         &self,
-        token_expiry_days: u16
+        token_expiry_days: u16,
     ) -> DbResult<impl Stream<Item = DbResult<(UserId, DeviceId)>>> {
         const QUERY: &str = "
             DELETE FROM login_tokens
@@ -149,14 +145,17 @@ impl Database {
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(QUERY).await?;
 
-        let stream = conn.client
+        let stream = conn
+            .client
             .query_raw(&stmt, args)
             .await?
-            .and_then(|row| async move {
-                Ok((
-                    UserId(row.try_get("user_id")?),
-                    DeviceId(row.try_get("device")?),
-                ))
+            .and_then(|row| {
+                async move {
+                    Ok((
+                        UserId(row.try_get("user_id")?),
+                        DeviceId(row.try_get("device")?),
+                    ))
+                }
             })
             .map_err(|e| e.into());
         Ok(stream)

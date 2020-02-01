@@ -166,17 +166,17 @@ fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
         screen
             .connector()
             .do_sync(|_screen, _expander: gtk::Expander| {
-//                if expander.get_expanded() {
-//                    let last_expanded = screen.model_mut().selected_community_widget.take();
-//                    if let Some((expander, _)) = last_expanded {
-//                        expander.set_expanded(false);
-//                    }
-//
-//                    // TODO@gegy1000: help it needs to set the selected widget *with index* here
-//                } else {
-//                    // TODO@gegy1000 testing porpoises
-//                    screen.model_mut().selected_community_widget = None;
-//                }
+                //                if expander.get_expanded() {
+                //                    let last_expanded = screen.model_mut().selected_community_widget.take();
+                //                    if let Some((expander, _)) = last_expanded {
+                //                        expander.set_expanded(false);
+                //                    }
+                //
+                //                    // TODO@gegy1000: help it needs to set the selected widget *with index* here
+                //                } else {
+                //                    // TODO@gegy1000 testing porpoises
+                //                    screen.model_mut().selected_community_widget = None;
+                //                }
             })
             .build_cloned_consumer(),
     );

@@ -142,7 +142,12 @@ impl ClientWsSession {
         use std::mem;
 
         let state = mem::replace(&mut self.state, State::Unauthenticated);
-        if let State::Authenticated { user: user_id, device, .. } = state {
+        if let State::Authenticated {
+            user: user_id,
+            device,
+            ..
+        } = state
+        {
             if let Some(mut user) = USERS.get_mut(&user_id) {
                 // Remove the device
                 let devices = &mut user.sessions;

@@ -73,10 +73,8 @@ fn create_files_directories(config: &Config) {
     let dirs = [config.profile_pictures.clone()];
 
     for dir in &dirs {
-        fs::create_dir_all(dir).unwrap_or_else(|_| panic!(
-            "Error creating directory {}",
-            dir.to_string_lossy()
-        ));
+        fs::create_dir_all(dir)
+            .unwrap_or_else(|_| panic!("Error creating directory {}", dir.to_string_lossy()));
     }
 }
 
@@ -85,10 +83,8 @@ fn setup_logging(config: &Config) {
         .expect("Error getting project directories");
     let dir = dirs.data_dir().join("logs");
 
-    fs::create_dir_all(&dir).unwrap_or_else(|_| panic!(
-        "Error creating log dirs ({})",
-        dir.to_string_lossy(),
-    ));
+    fs::create_dir_all(&dir)
+        .unwrap_or_else(|_| panic!("Error creating log dirs ({})", dir.to_string_lossy(),));
 
     fern::Dispatch::new()
         .format(|out, message, record| {
@@ -129,7 +125,10 @@ async fn main() {
     setup_logging(&config);
 
     let args = env::args().collect::<Vec<_>>();
-    let addr = args.get(1).cloned().unwrap_or_else(|| "127.0.0.1:8080".to_string());
+    let addr = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
 
     create_files_directories(&config);
 

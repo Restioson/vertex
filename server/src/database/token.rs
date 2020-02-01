@@ -135,8 +135,7 @@ impl Database {
         &self,
         device_id: DeviceId,
     ) -> DbResult<Result<(), NonexistentDevice>> {
-        const STMT: &str =
-            "UPDATE login_tokens SET last_used=NOW()::timestamp WHERE device = $1";
+        const STMT: &str = "UPDATE login_tokens SET last_used=NOW()::timestamp WHERE device = $1";
 
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(STMT).await?;
