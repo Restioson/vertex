@@ -149,13 +149,11 @@ impl Database {
             .client
             .query_raw(&stmt, args)
             .await?
-            .and_then(|row| {
-                async move {
-                    Ok((
-                        UserId(row.try_get("user_id")?),
-                        DeviceId(row.try_get("device")?),
-                    ))
-                }
+            .and_then(|row| async move {
+                Ok((
+                    UserId(row.try_get("user_id")?),
+                    DeviceId(row.try_get("device")?),
+                ))
             })
             .map_err(|e| e.into());
         Ok(stream)

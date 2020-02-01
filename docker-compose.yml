@@ -12,8 +12,8 @@ services:
       - "net.gegy1000.vertex=server"
     volumes:
       - ./server/docker/logs:/.local/share/vertex_server/logs
-    environment:
-      - VERTEX_SERVER_KEY_PASS=${VERTEX_SERVER_KEY_PASS}
+    env_file:
+      - ./docker_env.env
     links:
       - db:db
     depends_on:

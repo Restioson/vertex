@@ -11,8 +11,10 @@ Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, feder
 3. Install the openssl development package
 
 ### Server - Docker
-To install the server via Docker, you will require Docker and Docker Compose. Once they are
-installed, simply run `docker-compose up` in the main directory (`vertex/`). Add `--build` to rebuild for new changes.
+To install the server via Docker, you will require Docker and Docker Compose. Once they are installed, you will need to
+copy your certificate and key files to `server/docker/` (named `cert.pem` and `key.pem` respectively). Then, simply run
+`docker-compose up` in the main directory `vertex/` (if this does not work, try `sudo docker-compose up`). Add `--build`
+to the end to rebuild for new changes. To change the environment variables passed in, edit the values in `vertex/.docker_env.env`
 
 **Warning:** *First time* compilation may take very long for the server (~10min). Grab a cup of coffee ;).
 Luckily, you only need to do this once, except *if* the dependencies change *and* you are using Docker.

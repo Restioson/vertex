@@ -1,20 +1,19 @@
-FROM rust:slim as build
+FROM rustlang/rust:nightly-slim as build
 
 WORKDIR /vertex/server
-RUN apt-get update && apt-get install libssl-dev pkg-config -y
 COPY server/Cargo.* .
 COPY common/ ../common/
 
 # Build deps except for vertex_common
 RUN mkdir src/ && rustc --version && echo "fn main() {}" > src/main.rs \
-    && sed -i 's/vertex_common/#vertex_common/g' Cargo.toml && cargo build --release
+    && sed -i 's/vertex_common/#vertex_common/g' Cargo.toml && cargo +nightly  build --release
 
 # Build vertex_common
-RUN sed -i 's/#vertex_common/vertex_common/g' Cargo.toml && cargo build --release && rm src/main.rs
+RUN sed -i 's/#vertex_common/vertex_common/g' Cargo.toml && cargo +nightly  build --release && rm src/main.rs
 
 # Build project
 COPY server/src src
-RUN touch src/main.rs && cargo build --release
+RUN touch src/main.rs && cargo +nightly build --release
 
 # Run
 FROM debian:stretch
@@ -32,4 +31,4 @@ COPY server/docker/.dummy.ignore server/docker/config.tom[l] /root/.config/verte
 
 COPY wait-for-postgres.sh .
 EXPOSE 8080/tcp
-CMD ["./wait-for-postgres.sh", "db", "5342", "./vertex_server", "0.0.0.0:8080"]
+CMD ["./wait-for-postgres.sh", "db", "5342", "./vertex_server", $VERTEX_SERVER_IP]
