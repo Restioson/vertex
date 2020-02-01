@@ -1,8 +1,8 @@
 use super::*;
-use crate::community::{COMMUNITIES, Join, CreateRoom, CommunityActor};
+use crate::community::{CommunityActor, CreateRoom, Join, COMMUNITIES};
 use crate::config::Config;
 use crate::database::*;
-use crate::{auth, IdentifiedMessage, SendMessage, handle_disconnected};
+use crate::{auth, handle_disconnected, IdentifiedMessage, SendMessage};
 use chrono::Utc;
 use futures::stream::SplitSink;
 use futures::{Future, SinkExt};
@@ -10,11 +10,10 @@ use rand::RngCore;
 use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
-use vertex_common::*;
+use vertex::*;
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
-use xtra::Disconnected;
 
 pub struct WebSocketMessage(pub(crate) Result<ws::Message, warp::Error>);
 
@@ -111,7 +110,7 @@ impl Handler<SendMessage<ServerMessage>> for ClientWsSession {
         ctx: &'a mut Context<Self>,
     ) -> Self::Responder<'a> {
         async move {
-            if let Err(_) = self.send(msg.0).await {
+            if self.send(msg.0).await.is_err() {
                 ctx.stop()
             }
         }
@@ -142,27 +141,21 @@ impl ClientWsSession {
     fn log_out(&mut self) {
         use std::mem;
 
-        match mem::replace(&mut self.state, State::Unauthenticated) {
-            State::Authenticated {
-                user: user_id,
-                device,
-                ..
-            } => {
-                if let Some(mut user) = USERS.get_mut(&user_id) {
-                    // Remove the device
-                    let devices = &mut user.sessions;
-                    if let Some(idx) = devices.iter().position(|(id, _)| *id == device) {
-                        devices.remove(idx);
+        let state = mem::replace(&mut self.state, State::Unauthenticated);
+        if let State::Authenticated { user: user_id, device, .. } = state {
+            if let Some(mut user) = USERS.get_mut(&user_id) {
+                // Remove the device
+                let devices = &mut user.sessions;
+                if let Some(idx) = devices.iter().position(|(id, _)| *id == device) {
+                    devices.remove(idx);
 
-                        // Remove the entire user entry if they are no longer online
-                        if devices.len() == 0 {
-                            drop(user); // Prevent double lock on USERS
-                            USERS.remove(&user_id);
-                        }
+                    // Remove the entire user entry if they are no longer online
+                    if devices.is_empty() {
+                        drop(user); // Prevent double lock on USERS
+                        USERS.remove(&user_id);
                     }
                 }
             }
-            _ => {}
         }
     }
 
@@ -459,7 +452,7 @@ impl<'a> Authenticated<'a> {
             ClientRequest::CreateRoom { name, community } => {
                 self.create_room(name, community).await
             }
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 
@@ -492,13 +485,14 @@ impl<'a> Authenticated<'a> {
                     device: self.device,
                     message,
                 };
-                let id = community.send(message).await.map_err(handle_disconnected("Community"))??;
+                let id = community
+                    .send(message)
+                    .await
+                    .map_err(handle_disconnected("Community"))??;
 
                 Ok(OkResponse::MessageId { id })
             }
-            _ => {
-                Err(ErrResponse::InvalidCommunity)
-            }
+            _ => Err(ErrResponse::InvalidCommunity),
         }
     }
 
@@ -517,7 +511,10 @@ impl<'a> Authenticated<'a> {
                 device: self.device,
                 message: edit,
             };
-            community.send(message).await.map_err(handle_disconnected("Community"))??;
+            community
+                .send(message)
+                .await
+                .map_err(handle_disconnected("Community"))??;
             Ok(OkResponse::NoData)
         } else {
             Err(ErrResponse::InvalidCommunity)
@@ -584,7 +581,12 @@ impl<'a> Authenticated<'a> {
             return Err(ErrResponse::InvalidDisplayName);
         }
 
-        match self.client.database.change_display_name(self.user, new_display_name).await? {
+        match self
+            .client
+            .database
+            .change_display_name(self.user, new_display_name)
+            .await?
+        {
             Ok(()) => Ok(OkResponse::NoData),
             Err(NonexistentUser) => {
                 self.ctx.stop(); // The user did not exist at the time of request
@@ -605,7 +607,11 @@ impl<'a> Authenticated<'a> {
         self.verify_password(old_password).await?;
 
         let (new_password_hash, hash_version) = auth::hash(new_password).await;
-        let res = self.client.database.change_password(self.user, new_password_hash, hash_version).await?;
+        let res = self
+            .client
+            .database
+            .change_password(self.user, new_password_hash, hash_version)
+            .await?;
 
         match res {
             Ok(()) => Ok(OkResponse::NoData),
@@ -617,13 +623,15 @@ impl<'a> Authenticated<'a> {
     }
 
     async fn create_community(self, name: String) -> ResponseResult {
-        if !self.perms.has_perms(TokenPermissionFlags::CREATE_COMMUNITIES) {
+        if !self
+            .perms
+            .has_perms(TokenPermissionFlags::CREATE_COMMUNITIES)
+        {
             return Err(ErrResponse::AccessDenied);
         }
 
         let id = self.client.database.create_community(name).await?;
-        let addr = CommunityActor::new(id, self.client.database.clone(), self.user).spawn();
-        COMMUNITIES.insert(id, addr);
+        CommunityActor::create_and_spawn(id, self.client.database.clone(), self.user);
         self.join_community(id).await?;
 
         Ok(OkResponse::Community { id })
@@ -641,25 +649,28 @@ impl<'a> Authenticated<'a> {
                 session: self.ctx.address().unwrap(),
             };
 
-            let res = community.send(join).await.map_err(handle_disconnected("Community"))??;
+            let res = community
+                .send(join)
+                .await
+                .map_err(handle_disconnected("Community"))??;
 
             match res {
                 Ok(()) => {
                     self.client.communities.push(id);
                     Ok(OkResponse::NoData)
-                },
-                Err(AddToCommunityError::AlreadyInCommunity) => return Err(ErrResponse::AlreadyInCommunity),
-                Err(AddToCommunityError::InvalidCommunity) => {
-                    return Err(ErrResponse::InvalidCommunity)
-                },
-                Err(AddToCommunityError::InvalidUser) => return Err(ErrResponse::InvalidUser),
+                }
+                Err(AddToCommunityError::AlreadyInCommunity) => {
+                    Err(ErrResponse::AlreadyInCommunity)
+                }
+                Err(AddToCommunityError::InvalidCommunity) => Err(ErrResponse::InvalidCommunity),
+                Err(AddToCommunityError::InvalidUser) => Err(ErrResponse::InvalidUser),
             }
         } else {
             Err(ErrResponse::InvalidCommunity)
         }
     }
 
-    async fn create_room(mut self, name: String, id: CommunityId) -> ResponseResult {
+    async fn create_room(self, name: String, id: CommunityId) -> ResponseResult {
         if !self.perms.has_perms(TokenPermissionFlags::CREATE_ROOMS) {
             return Err(ErrResponse::AccessDenied);
         }
@@ -669,13 +680,19 @@ impl<'a> Authenticated<'a> {
         }
 
         if let Some(community) = COMMUNITIES.get(&id) {
-            let create = CreateRoom { creator: self.device, name: name.clone() };
-            let id = community.send(create).await.map_err(handle_disconnected("Community"))?;
+            let create = CreateRoom {
+                creator: self.device,
+                name: name.clone(),
+            };
+            let id = community
+                .send(create)
+                .await
+                .map_err(handle_disconnected("Community"))?;
 
-            self.client.send(ServerMessage::Action(ServerAction::AddRoom {
-                id,
-                name,
-            })).await.unwrap();
+            self.client
+                .send(ServerMessage::Action(ServerAction::AddRoom { id, name }))
+                .await
+                .unwrap();
 
             Ok(OkResponse::Room { id })
         } else {

@@ -1,8 +1,8 @@
 use crate::client::{ClientWsSession, LogoutThisSession};
 use dashmap::DashMap;
 use lazy_static::lazy_static;
-use vertex_common::DeviceId;
-use vertex_common::UserId;
+use vertex::DeviceId;
+use vertex::UserId;
 use xtra::prelude::*;
 
 lazy_static! {

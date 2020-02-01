@@ -1,9 +1,12 @@
 use super::*;
 
+type SyncFn<Model, Args> = Box<dyn Fn(Screen<Model>, Args)>;
+type AsyncFn<Model, Args> = Box<dyn Fn(Screen<Model>, Args) -> Pin<Box<dyn Future<Output = ()>>>>;
+
 pub struct Connector<Model, Args: Clone> {
     screen: Screen<Model>,
-    do_async: Vec<Box<dyn Fn(Screen<Model>, Args) -> Pin<Box<dyn Future<Output=()>>>>>,
-    do_sync: Vec<Box<dyn Fn(Screen<Model>, Args)>>,
+    do_async: Vec<AsyncFn<Model, Args>>,
+    do_sync: Vec<SyncFn<Model, Args>>,
     inhibit: bool,
 }
 
@@ -19,8 +22,9 @@ impl<Model, Args: Clone> Connector<Model, Args> {
 
     #[inline]
     pub fn do_async<F, Fut>(mut self, f: F) -> Self
-        where F: Fn(Screen<Model>, Args) -> Fut + 'static,
-              Fut: Future<Output=()> + 'static,
+    where
+        F: Fn(Screen<Model>, Args) -> Fut + 'static,
+        Fut: Future<Output = ()> + 'static,
     {
         self.do_async.push(Box::new(move |screen, args| {
             let future = f(screen, args);
@@ -31,7 +35,8 @@ impl<Model, Args: Clone> Connector<Model, Args> {
 
     #[inline]
     pub fn do_sync<F>(mut self, f: F) -> Self
-        where F: Fn(Screen<Model>, Args) + 'static
+    where
+        F: Fn(Screen<Model>, Args) + 'static,
     {
         self.do_sync.push(Box::new(f));
         self
@@ -52,7 +57,9 @@ impl<Model, Args: Clone> Connector<Model, Args> {
 
     #[inline]
     fn execute_async(&self, args: &Args) {
-        if self.do_async.is_empty() { return; }
+        if self.do_async.is_empty() {
+            return;
+        }
 
         let context = glib::MainContext::ref_thread_default();
         for do_async in &self.do_async {
@@ -70,23 +77,25 @@ impl<Model, Args: Clone> Connector<Model, Args> {
 
     #[inline]
     pub fn build(self) -> impl Fn(Args) {
-        move |args| { self.execute(args); }
+        move |args| {
+            self.execute(args);
+        }
     }
 }
 
 impl<Model, Arg: Clone> Connector<Model, Arg> {
     #[inline]
     pub fn build_cloned_consumer(self) -> impl Fn(&Arg) {
-        move |arg| { self.execute(arg.clone()); }
+        move |arg| {
+            self.execute(arg.clone());
+        }
     }
 }
 
 impl<Model, Widget: Clone, Event: Clone> Connector<Model, (Widget, Event)> {
     #[inline]
     pub fn build_widget_event(self) -> impl Fn(&Widget, &Event) -> gtk::Inhibit {
-        move |widget, event| {
-            self.execute((widget.clone(), event.clone()))
-        }
+        move |widget, event| self.execute((widget.clone(), event.clone()))
     }
 }
 

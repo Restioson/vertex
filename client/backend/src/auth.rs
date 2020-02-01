@@ -1,4 +1,3 @@
-use vertex::*;
 use super::*;
 
 pub struct Client<Net: net::Sender> {
@@ -7,11 +6,20 @@ pub struct Client<Net: net::Sender> {
 
 impl<Net: net::Sender> Client<Net> {
     pub fn new(request_sender: net::RequestSender<Net>) -> Self {
-        Client { sender: request_sender }
+        Client {
+            sender: request_sender,
+        }
     }
 
-    pub async fn register(&self, credentials: UserCredentials, display_name: String) -> Result<UserId> {
-        let request = ClientRequest::CreateUser { credentials, display_name };
+    pub async fn register(
+        &self,
+        credentials: UserCredentials,
+        display_name: String,
+    ) -> Result<UserId> {
+        let request = ClientRequest::CreateUser {
+            credentials,
+            display_name,
+        };
         let request = self.sender.request(request).await?;
 
         match request.response().await? {
@@ -20,7 +28,10 @@ impl<Net: net::Sender> Client<Net> {
         }
     }
 
-    pub async fn authenticate(&self, credentials: UserCredentials) -> Result<(DeviceId, AuthToken)> {
+    pub async fn authenticate(
+        &self,
+        credentials: UserCredentials,
+    ) -> Result<(DeviceId, AuthToken)> {
         let request = ClientRequest::CreateToken {
             credentials,
             // TODO: allow user to configure?
@@ -39,18 +50,19 @@ impl<Net: net::Sender> Client<Net> {
     }
 
     pub async fn login(self, device: DeviceId, token: AuthToken) -> Result<crate::Client<Net>> {
-        let request = ClientRequest::Login { device, token: token.clone() };
+        let request = ClientRequest::Login {
+            device,
+            token: token.clone(),
+        };
         let request = self.sender.request(request).await?;
 
         match request.response().await? {
-            OkResponse::User { id: user_id } => {
-                Ok(crate::Client {
-                    sender: self.sender,
-                    user: user_id,
-                    device,
-                    token,
-                })
-            }
+            OkResponse::User { id: user_id } => Ok(crate::Client {
+                sender: self.sender,
+                user: user_id,
+                device,
+                token,
+            }),
             _ => Err(Error::UnexpectedResponse),
         }
     }

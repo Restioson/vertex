@@ -2,8 +2,8 @@ use vertex::*;
 
 use std::time::Duration;
 
-pub mod net;
 pub mod auth;
+pub mod net;
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
 
@@ -45,15 +45,25 @@ impl<Net: net::Sender> Client<Net> {
     }
 
     pub async fn change_password(&self, old_password: String, new_password: String) -> Result<()> {
-        let request = ClientRequest::ChangePassword { old_password, new_password };
+        let request = ClientRequest::ChangePassword {
+            old_password,
+            new_password,
+        };
         let request = self.sender.request(request).await?;
         request.response().await?;
 
         Ok(())
     }
 
-    pub async fn refresh_token(&self, credentials: UserCredentials, to_refresh: DeviceId) -> Result<()> {
-        let request = ClientRequest::RefreshToken { credentials, device: to_refresh };
+    pub async fn refresh_token(
+        &self,
+        credentials: UserCredentials,
+        to_refresh: DeviceId,
+    ) -> Result<()> {
+        let request = ClientRequest::RefreshToken {
+            credentials,
+            device: to_refresh,
+        };
         let request = self.sender.request(request).await?;
         request.response().await?;
 
@@ -61,7 +71,10 @@ impl<Net: net::Sender> Client<Net> {
     }
 
     pub async fn revoke_foreign_token(&self, to_revoke: DeviceId, password: String) -> Result<()> {
-        let request = ClientRequest::RevokeForeignToken { device: to_revoke, password };
+        let request = ClientRequest::RevokeForeignToken {
+            device: to_revoke,
+            password,
+        };
         let request = self.sender.request(request).await?;
         request.response().await?;
 
@@ -85,7 +98,12 @@ impl<Net: net::Sender> Client<Net> {
         }
     }
 
-    pub async fn send_message(&self, content: String, to_community: CommunityId, to_room: RoomId) -> Result<()> {
+    pub async fn send_message(
+        &self,
+        content: String,
+        to_community: CommunityId,
+        to_room: RoomId,
+    ) -> Result<()> {
         let request = ClientRequest::SendMessage(ClientSentMessage {
             to_community,
             to_room,
@@ -130,9 +148,13 @@ pub enum Error {
 }
 
 impl From<net::Error> for Error {
-    fn from(net: net::Error) -> Self { Error::Net(net) }
+    fn from(net: net::Error) -> Self {
+        Error::Net(net)
+    }
 }
 
 impl From<ErrResponse> for Error {
-    fn from(response: ErrResponse) -> Self { Error::Response(response) }
+    fn from(response: ErrResponse) -> Self {
+        Error::Response(response)
+    }
 }

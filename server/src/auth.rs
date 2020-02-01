@@ -4,7 +4,6 @@ use futures::Future;
 use futures::FutureExt;
 use rand::RngCore;
 use unicode_normalization::UnicodeNormalization;
-use vertex_common::{ErrResponse, UserId};
 
 pub const MAX_TOKEN_LENGTH: usize = 45;
 
@@ -18,7 +17,7 @@ impl From<i16> for HashSchemeVersion {
     fn from(v: i16) -> Self {
         match v {
             1 => HashSchemeVersion::Argon2V1,
-            _ => panic!("Invalid hash scheme version {}"),
+            invalid_version => panic!("Invalid hash scheme version {}", invalid_version),
         }
     }
 }

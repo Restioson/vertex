@@ -1,14 +1,14 @@
 use vertex::*;
 
+use futures::channel::oneshot;
 use futures::FutureExt;
 use futures::{Stream, StreamExt};
-use futures::channel::oneshot;
 
 use std::collections::HashMap;
 
-use std::rc::Rc;
 use std::cell::RefCell;
 use std::io;
+use std::rc::Rc;
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -20,7 +20,9 @@ struct RequestIdGenerator {
 
 impl RequestIdGenerator {
     fn new() -> RequestIdGenerator {
-        RequestIdGenerator { next_request_id: AtomicU32::new(0) }
+        RequestIdGenerator {
+            next_request_id: AtomicU32::new(0),
+        }
     }
 
     fn next(&self) -> RequestId {
@@ -34,7 +36,9 @@ struct RequestTracker {
 
 impl RequestTracker {
     fn new() -> RequestTracker {
-        RequestTracker { pending_requests: RefCell::new(HashMap::new()) }
+        RequestTracker {
+            pending_requests: RefCell::new(HashMap::new()),
+        }
     }
 
     fn enqueue(&self, id: RequestId) -> Option<oneshot::Receiver<ResponseResult>> {
@@ -46,11 +50,13 @@ impl RequestTracker {
         let (send, recv) = oneshot::channel();
         pending_requests.insert(id, EnqueuedRequest(send));
 
-        return Some(recv);
+        Some(recv)
     }
 
     fn complete(&self, id: RequestId, result: ResponseResult) {
-        self.pending_requests.borrow_mut().remove(&id).map(|request| request.handle(result));
+        if let Some(request) = self.pending_requests.borrow_mut().remove(&id) {
+            request.handle(result);
+        }
     }
 }
 
@@ -65,6 +71,12 @@ impl EnqueuedRequest {
 pub struct RequestManager {
     tracker: Rc<RequestTracker>,
     id_gen: Rc<RequestIdGenerator>,
+}
+
+impl Default for RequestManager {
+    fn default() -> Self {
+        RequestManager::new()
+    }
 }
 
 impl RequestManager {
@@ -83,11 +95,11 @@ impl RequestManager {
         }
     }
 
-    pub fn receive_from<R: Receiver>(&self, net: R) -> impl Stream<Item=Result<ServerAction>> {
+    pub fn receive_from<R: Receiver>(&self, net: R) -> impl Stream<Item = Result<ServerAction>> {
         let tracker = Rc::downgrade(&self.tracker);
 
-        net.stream().filter_map(move |result| futures::future::ready(
-            match result {
+        net.stream().filter_map(move |result| {
+            futures::future::ready(match result {
                 Ok(ServerMessage::Action(action)) => Some(Ok(action)),
                 Ok(ServerMessage::Response { result, id }) => {
                     if let Some(tracker) = tracker.upgrade() {
@@ -95,9 +107,10 @@ impl RequestManager {
                     }
                     None
                 }
+                Ok(ServerMessage::MalformedMessage) => panic!("Malformed message"),
                 Err(e) => Some(Err(e)),
-            }
-        ))
+            })
+        })
     }
 }
 
@@ -129,8 +142,7 @@ impl<S: Sender> RequestSender<S> {
     pub async fn request(&self, request: ClientRequest) -> Result<Request> {
         let id = self.id_gen.next();
 
-        let receiver = self.tracker.enqueue(id)
-            .expect("unable to enqueue message");
+        let receiver = self.tracker.enqueue(id).expect("unable to enqueue message");
 
         let message = ClientMessage { id, request };
         self.send(message).await?;
@@ -149,7 +161,9 @@ impl<S: Sender> RequestSender<S> {
     }
 
     #[inline]
-    pub fn net(&self) -> &S { &self.net }
+    pub fn net(&self) -> &S {
+        &self.net
+    }
 }
 
 #[async_trait(? Send)]
@@ -160,7 +174,7 @@ pub trait Sender {
 }
 
 pub trait Receiver {
-    type Stream: Stream<Item=Result<ServerMessage>>;
+    type Stream: Stream<Item = Result<ServerMessage>>;
 
     fn stream(self) -> Self::Stream;
 }

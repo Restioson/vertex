@@ -3,7 +3,7 @@ use gtk::prelude::*;
 use std::rc::Rc;
 
 use crate::net;
-use crate::screen::{self, Screen, DynamicScreen};
+use crate::screen::{self, DynamicScreen, Screen};
 
 const SCREEN_SRC: &str = include_str!("glade/settings/settings.glade");
 
@@ -43,32 +43,41 @@ fn bind_events(screen: &Screen<Model>) {
     let widgets = &model.widgets;
 
     widgets.category_list.connect_row_selected(
-        screen.connector()
-            .do_async(|screen, (_list, row)| async move {
-                if let Some(row) = row {
-                    let row: gtk::ListBoxRow = row;
-                    let name = row.get_widget_name()
-                        .map(|s| s.as_str().to_owned())
-                        .unwrap_or_default();
+        screen
+            .connector()
+            .do_async(|screen, (_list, row)| {
+                async move {
+                    if let Some(row) = row {
+                        let row: gtk::ListBoxRow = row;
+                        let name = row
+                            .get_widget_name()
+                            .map(|s| s.as_str().to_owned())
+                            .unwrap_or_default();
 
-                    let model = screen.model();
+                        let model = screen.model();
 
-                    match name.as_str() {
-                        "log_out" => {
-                            model.app.token_store.forget_token();
-                            model.client.revoke_token().await.expect("failed to revoke token");
+                        match name.as_str() {
+                            "log_out" => {
+                                model.app.token_store.forget_token();
+                                model
+                                    .client
+                                    .revoke_token()
+                                    .await
+                                    .expect("failed to revoke token");
 
-                            let login = screen::login::build(model.app.clone());
-                            model.app.set_screen(DynamicScreen::Login(login));
+                                let login = screen::login::build(model.app.clone());
+                                model.app.set_screen(DynamicScreen::Login(login));
+                            }
+                            "close" => {
+                                let active =
+                                    screen::active::build(model.app.clone(), model.client.clone());
+                                model.app.set_screen(DynamicScreen::Active(active));
+                            }
+                            _ => (),
                         }
-                        "close" => {
-                            let active = screen::active::build(model.app.clone(), model.client.clone());
-                            model.app.set_screen(DynamicScreen::Active(active));
-                        }
-                        _ => ()
                     }
                 }
             })
-            .build_widget_and_option_consumer()
+            .build_widget_and_option_consumer(),
     );
 }

@@ -21,7 +21,7 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use vertex_common::*;
+use vertex::*;
 use warp::Filter;
 use xtra::Disconnected;
 
@@ -61,7 +61,10 @@ where
 
 fn handle_disconnected(actor_name: &'static str) -> impl Fn(Disconnected) -> ErrResponse {
     move |_| {
-        log::warn!("{} actor disconnected. This may be a timing anomaly.", actor_name);
+        log::warn!(
+            "{} actor disconnected. This may be a timing anomaly.",
+            actor_name
+        );
         ErrResponse::Internal
     }
 }
@@ -70,7 +73,7 @@ fn create_files_directories(config: &Config) {
     let dirs = [config.profile_pictures.clone()];
 
     for dir in &dirs {
-        fs::create_dir_all(dir).expect(&format!(
+        fs::create_dir_all(dir).unwrap_or_else(|_| panic!(
             "Error creating directory {}",
             dir.to_string_lossy()
         ));
@@ -82,7 +85,7 @@ fn setup_logging(config: &Config) {
         .expect("Error getting project directories");
     let dir = dirs.data_dir().join("logs");
 
-    fs::create_dir_all(&dir).expect(&format!(
+    fs::create_dir_all(&dir).unwrap_or_else(|_| panic!(
         "Error creating log dirs ({})",
         dir.to_string_lossy(),
     ));
@@ -126,7 +129,7 @@ async fn main() {
     setup_logging(&config);
 
     let args = env::args().collect::<Vec<_>>();
-    let addr = args.get(1).cloned().unwrap_or("127.0.0.1:8080".to_string());
+    let addr = args.get(1).cloned().unwrap_or_else(|| "127.0.0.1:8080".to_string());
 
     create_files_directories(&config);
 
@@ -148,7 +151,7 @@ async fn main() {
                 move |websocket| {
                     let (tx, rx) = websocket.split();
                     let addr = ClientWsSession::new(tx, db, config.clone()).spawn();
-                    addr.attach_stream(rx.map(|res| WebSocketMessage(res)));
+                    addr.attach_stream(rx.map(WebSocketMessage));
                     async {}
                 }
             })

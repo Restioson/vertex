@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json;
 
 use vertex::*;
@@ -28,18 +28,24 @@ impl TokenStore {
             device,
             token: token.0,
         };
-        let serialized_token = serde_json::to_string(&stored_token).expect("unable to serialize token");
-        self.keyring.set_password(&serialized_token)
+        let serialized_token =
+            serde_json::to_string(&stored_token).expect("unable to serialize token");
+        self.keyring
+            .set_password(&serialized_token)
             .expect("unable to store token");
     }
 
     pub fn get_stored_token(&self) -> Option<(DeviceId, AuthToken)> {
-        self.keyring.get_password().ok()
+        self.keyring
+            .get_password()
+            .ok()
             .and_then(|token_str| serde_json::from_str::<StoredToken>(&token_str).ok())
             .map(|stored| (stored.device, AuthToken(stored.token)))
     }
 
     pub fn forget_token(&self) {
-        self.keyring.delete_password().expect("unable to forget token");
+        self.keyring
+            .delete_password()
+            .expect("unable to forget token");
     }
 }

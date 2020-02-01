@@ -1,15 +1,15 @@
-use std::rc::Rc;
 use std::cell::{self, RefCell};
 use std::future::Future;
 use std::pin::Pin;
+use std::rc::Rc;
 
 use gtk::prelude::*;
 
 pub mod active;
+pub mod loading;
 pub mod login;
 pub mod register;
 pub mod settings;
-pub mod loading;
 
 mod connect;
 
@@ -35,7 +35,7 @@ pub fn show_dialog<W: glib::IsA<gtk::Widget>>(overlay: &gtk::Overlay, dialog: W)
     let dialog = Dialog {
         overlay: overlay.clone(),
         background: background.clone(),
-        dialog: dialog.clone(),
+        dialog,
     };
 
     background.connect_button_release_event({
@@ -113,13 +113,19 @@ impl<M> Screen<M> {
     }
 
     #[inline]
-    pub fn model(&self) -> cell::Ref<M> { self.model.borrow() }
+    pub fn model(&self) -> cell::Ref<M> {
+        self.model.borrow()
+    }
 
     #[inline]
-    pub fn model_mut(&self) -> cell::RefMut<M> { self.model.borrow_mut() }
+    pub fn model_mut(&self) -> cell::RefMut<M> {
+        self.model.borrow_mut()
+    }
 
     #[inline]
-    pub fn widget(&self) -> &gtk::Widget { &self.widget }
+    pub fn widget(&self) -> &gtk::Widget {
+        &self.widget
+    }
 }
 
 pub trait TryGetText {

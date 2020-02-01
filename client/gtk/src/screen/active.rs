@@ -1,13 +1,13 @@
 use gtk::prelude::*;
 
 use crate::net;
-use crate::screen::{self, Screen, DynamicScreen, TryGetText};
+use crate::screen::{self, DynamicScreen, Screen, TryGetText};
 
 use std::fmt;
 
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Mutex;
-use std::cell::RefCell;
 
 const SCREEN_SRC: &str = include_str!("glade/active/active.glade");
 
@@ -30,7 +30,10 @@ struct MessageList<Author: Eq + fmt::Display> {
 
 impl<Author: Eq + fmt::Display> MessageList<Author> {
     fn new(list: gtk::ListBox) -> MessageList<Author> {
-        MessageList { list, last_widget: None }
+        MessageList {
+            list,
+            last_widget: None,
+        }
     }
 
     fn push(&mut self, author: Author, message: &str) {
@@ -60,11 +63,12 @@ impl<Author: fmt::Display> MessageWidget<Author> {
             .spacing(8)
             .build();
 
-        widget.add(&gtk::FrameBuilder::new()
-            .name("author_icon")
-            .halign(gtk::Align::Start)
-            .valign(gtk::Align::Start)
-            .build()
+        widget.add(
+            &gtk::FrameBuilder::new()
+                .name("author_icon")
+                .halign(gtk::Align::Start)
+                .valign(gtk::Align::Start)
+                .build(),
         );
 
         let inner = gtk::BoxBuilder::new()
@@ -73,25 +77,31 @@ impl<Author: fmt::Display> MessageWidget<Author> {
             .spacing(4)
             .build();
 
-        inner.add(&gtk::LabelBuilder::new()
-            .name("author_name")
-            .label(&format!("{}", author))
-            .halign(gtk::Align::Start)
-            .build()
+        inner.add(
+            &gtk::LabelBuilder::new()
+                .name("author_name")
+                .label(&format!("{}", author))
+                .halign(gtk::Align::Start)
+                .build(),
         );
 
         widget.add(&inner);
         widget.show_all();
 
-        MessageWidget { author, widget, inner }
+        MessageWidget {
+            author,
+            widget,
+            inner,
+        }
     }
 
     fn push_content(&mut self, content: &str) {
-        self.inner.add(&gtk::LabelBuilder::new()
-            .name("message_content")
-            .label(content)
-            .halign(gtk::Align::Start)
-            .build()
+        self.inner.add(
+            &gtk::LabelBuilder::new()
+                .name("message_content")
+                .label(content)
+                .halign(gtk::Align::Start)
+                .build(),
         );
         self.widget.show_all();
     }
@@ -104,10 +114,7 @@ fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
         .spacing(8)
         .build();
 
-    community_header.add(&gtk::FrameBuilder::new()
-        .name("community_icon")
-        .build()
-    );
+    community_header.add(&gtk::FrameBuilder::new().name("community_icon").build());
 
     let community_description = gtk::BoxBuilder::new()
         .name("community_description")
@@ -115,18 +122,20 @@ fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
         .spacing(2)
         .build();
 
-    community_description.add(&gtk::LabelBuilder::new()
-        .name("community_name")
-        .label(name)
-        .halign(gtk::Align::Start)
-        .build()
+    community_description.add(
+        &gtk::LabelBuilder::new()
+            .name("community_name")
+            .label(name)
+            .halign(gtk::Align::Start)
+            .build(),
     );
 
-    community_description.add(&gtk::LabelBuilder::new()
-        .name("community_motd")
-        .label("Message of the day!")
-        .halign(gtk::Align::Start)
-        .build()
+    community_description.add(
+        &gtk::LabelBuilder::new()
+            .name("community_motd")
+            .label("Message of the day!")
+            .halign(gtk::Align::Start)
+            .build(),
     );
 
     community_header.add(&community_description);
@@ -136,9 +145,7 @@ fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
         .label_widget(&community_header)
         .build();
 
-    let rooms_list = gtk::ListBoxBuilder::new()
-        .name("room_list")
-        .build();
+    let rooms_list = gtk::ListBoxBuilder::new().name("room_list").build();
 
     for &room in rooms {
         let room_label = gtk::LabelBuilder::new()
@@ -156,21 +163,22 @@ fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
     expander.add(&rooms_list);
 
     expander.connect_property_expanded_notify(
-        screen.connector()
-            .do_sync(|screen, expander: gtk::Expander| {
-                if expander.get_expanded() {
+        screen
+            .connector()
+            .do_sync(|_screen, _expander: gtk::Expander| {
+//                if expander.get_expanded() {
 //                    let last_expanded = screen.model_mut().selected_community_widget.take();
 //                    if let Some((expander, _)) = last_expanded {
 //                        expander.set_expanded(false);
 //                    }
-
-                    // TODO@gegy1000: help it needs to set the selected widget *with index* here
-                } else {
-                    // TODO@gegy1000 testing porpoises
+//
+//                    // TODO@gegy1000: help it needs to set the selected widget *with index* here
+//                } else {
+//                    // TODO@gegy1000 testing porpoises
 //                    screen.model_mut().selected_community_widget = None;
-                }
+//                }
             })
-            .build_cloned_consumer()
+            .build_cloned_consumer(),
     );
 
     expander.show_all();
@@ -192,7 +200,7 @@ pub fn build(app: Rc<crate::App>, client: Rc<vertex_client::Client<net::Sender>>
     let main: gtk::Overlay = builder.get_object("main").unwrap();
 
     let model = Model {
-        app: app.clone(),
+        app,
         client,
         widgets: Widgets {
             main: main.clone(),
@@ -218,47 +226,67 @@ fn bind_events(screen: &Screen<Model>) {
 
     // TODO: see if it would be viable for the connector to pass &mut Model instead of the screen
     widgets.message_entry.connect_activate(
-        screen.connector()
-            .do_async(|screen, entry: gtk::Entry| async move {
-                let content = entry.try_get_text().unwrap_or_default();
-                entry.set_text("");
+        screen
+            .connector()
+            .do_async(|screen, entry: gtk::Entry| {
+                async move {
+                    let content = entry.try_get_text().unwrap_or_default();
+                    entry.set_text("");
 
-                // TODO handle error
-                let (expander, idx) = screen.model().selected_community_widget.clone().unwrap();
-                let model = screen.model();
-                let communities = model.communities.lock();
-                let community = &communities.unwrap()[idx];
+                    // TODO handle error
+                    let (expander, idx) = screen.model().selected_community_widget.clone().unwrap();
+                    let model = screen.model();
+                    let communities = model.communities.lock();
+                    let community = &communities.unwrap()[idx];
 
-                let list = expander.get_child().unwrap().downcast::<gtk::ListBox>().unwrap();
-                let row = list.get_selected_row().unwrap();
-                let room = &community.rooms[row.get_index() as usize];
+                    let list = expander
+                        .get_child()
+                        .unwrap()
+                        .downcast::<gtk::ListBox>()
+                        .unwrap();
+                    let row = list.get_selected_row().unwrap();
+                    let room = &community.rooms[row.get_index() as usize];
 
-                let req = vertex::ClientRequest::SendMessage(vertex::ClientSentMessage {
-                    to_community: community.id,
-                    to_room: room.id,
-                    content: content.clone(),
-                });
+                    let req = vertex::ClientRequest::SendMessage(vertex::ClientSentMessage {
+                        to_community: community.id,
+                        to_room: room.id,
+                        content: content.clone(),
+                    });
 
-                screen.model().app.request_sender().request(req).await.unwrap(); // TODO handle error?
-                screen.model().widgets.messages.borrow_mut().push("You".to_owned(), &content);
+                    screen
+                        .model()
+                        .app
+                        .request_sender()
+                        .request(req)
+                        .await
+                        .unwrap(); // TODO handle error?
+                    screen
+                        .model()
+                        .widgets
+                        .messages
+                        .borrow_mut()
+                        .push("You".to_owned(), &content);
+                }
             })
-            .build_cloned_consumer()
+            .build_cloned_consumer(),
     );
 
     widgets.settings_button.connect_button_press_event(
-        screen.connector()
+        screen
+            .connector()
             .do_sync(|screen, (_button, _event)| {
                 let model = screen.model();
                 let settings = screen::settings::build(model.app.clone(), model.client.clone());
                 model.app.set_screen(DynamicScreen::Settings(settings));
             })
-            .build_widget_event()
+            .build_widget_event(),
     );
 
     widgets.add_community_button.connect_button_press_event(
-        screen.connector()
+        screen
+            .connector()
             .do_sync(|screen, _| show_add_community(screen))
-            .build_widget_event()
+            .build_widget_event(),
     );
 }
 
@@ -266,18 +294,20 @@ fn show_add_community(screen: Screen<Model>) {
     let builder = gtk::Builder::new_from_string(ADD_COMMUNITY_SRC);
     let main: gtk::Box = builder.get_object("main").unwrap();
 
-    let create_community_button: gtk::Button = builder.get_object("create_community_button").unwrap();
-    let join_community_button: gtk::Button = builder.get_object("join_community_button").unwrap();
+    let create_community_button: gtk::Button =
+        builder.get_object("create_community_button").unwrap();
+    let _join_community_button: gtk::Button = builder.get_object("join_community_button").unwrap();
 
     let dialog = screen::show_dialog(&screen.model().widgets.main, main);
 
     create_community_button.connect_button_press_event(
-        screen.connector()
+        screen
+            .connector()
             .do_sync(move |screen, _| {
                 dialog.close();
                 show_create_community(screen);
             })
-            .build_widget_event()
+            .build_widget_event(),
     );
 }
 
@@ -291,7 +321,8 @@ fn show_create_community(screen: Screen<Model>) {
     let dialog = screen::show_dialog(&screen.model().widgets.main, main);
 
     create_button.connect_button_press_event(
-        screen.connector()
+        screen
+            .connector()
             .do_async(move |screen, _| {
                 let dialog = dialog.clone();
                 let name_entry = name_entry.clone();
@@ -309,14 +340,22 @@ fn show_create_community(screen: Screen<Model>) {
                                     )
                                 };
 
-                                screen.model.borrow().communities.lock().unwrap().push(vertex_client::Community {
-                                    id,
-                                    name: name.clone(),
-                                    rooms: vec![
-                                        vertex_client::Room { id: general, name: "General".into() },
-                                        vertex_client::Room { id: off_topic, name: "Off Topic".into() },
-                                    ],
-                                });
+                                screen.model.borrow().communities.lock().unwrap().push(
+                                    vertex_client::Community {
+                                        id,
+                                        name: name.clone(),
+                                        rooms: vec![
+                                            vertex_client::Room {
+                                                id: general,
+                                                name: "General".into(),
+                                            },
+                                            vertex_client::Room {
+                                                id: off_topic,
+                                                name: "Off Topic".into(),
+                                            },
+                                        ],
+                                    },
+                                );
 
                                 push_community(screen, &name, &["General", "Off Topic"]);
                             }
@@ -326,6 +365,6 @@ fn show_create_community(screen: Screen<Model>) {
                     dialog.close();
                 }
             })
-            .build_widget_event()
+            .build_widget_event(),
     );
 }

@@ -1,12 +1,10 @@
-use crate::database::{Database, DatabaseError, DbResult};
-use futures::Future;
+use crate::database::{Database, DbResult};
 use std::convert::TryFrom;
 use tokio_postgres::Row;
 use uuid::Uuid;
-use vertex_common::{CommunityId, ErrResponse};
-use xtra::prelude::*;
+use vertex::CommunityId;
 
-pub(super) const CREATE_COMMUNITIES_TABLE: &'static str = "
+pub(super) const CREATE_COMMUNITIES_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS communities (
     id   UUID PRIMARY KEY,
     name VARCHAR NOT NULL
@@ -50,7 +48,7 @@ impl Database {
     }
 
     pub async fn create_community(&self, name: String) -> DbResult<CommunityId> {
-        const STMT: &'static str = "INSERT INTO communities (id, name) VALUES ($1, $2)";
+        const STMT: &str = "INSERT INTO communities (id, name) VALUES ($1, $2)";
         let id = Uuid::new_v4();
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(STMT).await?;

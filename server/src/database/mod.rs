@@ -3,7 +3,7 @@ use log::{error, warn};
 use std::fs;
 use std::time::{Duration, Instant};
 use tokio_postgres::NoTls;
-use vertex_common::{DeviceId, ErrResponse, UserId};
+use vertex::{DeviceId, ErrResponse, UserId};
 
 mod communities;
 mod community_membership;
@@ -12,11 +12,8 @@ mod user;
 
 use crate::client::LogoutThisSession;
 use crate::client::USERS;
-use crate::config::Config;
 pub use communities::*;
 pub use community_membership::*;
-use futures::{Future, FutureExt, TryFutureExt};
-use std::sync::Arc;
 use xtra::prelude::*;
 
 pub use token::*;
@@ -106,7 +103,7 @@ impl Database {
                 .map_err(|e| panic!("Database error while sweeping tokens: {:#?}", e))
                 .unwrap()
                 .iter()
-                .filter_map(|(user, device)| USERS.get(user).map(|u| ((device, u))))
+                .filter_map(|(user, device)| USERS.get(user).map(|u| (device, u)))
                 .for_each(|(device, user)| {
                     user.get(device).map(|addr| addr.do_send(LogoutThisSession));
                 });
@@ -122,11 +119,8 @@ impl Database {
         }
     }
 
-    async fn expired_tokens(
-        &self,
-        token_expiry_days: u16,
-    ) -> DbResult<Vec<(UserId, DeviceId)>> {
-        const QUERY: &'static str = "
+    async fn expired_tokens(&self, token_expiry_days: u16) -> DbResult<Vec<(UserId, DeviceId)>> {
+        const QUERY: &str = "
             DELETE FROM login_tokens
                 WHERE expiration_date < NOW()::timestamp OR
                 DATE_PART('days', NOW()::timestamp - last_used) > $1

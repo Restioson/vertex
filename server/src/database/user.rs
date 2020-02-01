@@ -3,9 +3,9 @@ use crate::auth::HashSchemeVersion;
 use std::convert::TryFrom;
 use tokio_postgres::{error::SqlState, row::Row, types::ToSql};
 use uuid::Uuid;
-use vertex_common::{ErrResponse, UserId};
+use vertex::UserId;
 
-pub(super) const CREATE_USERS_TABLE: &'static str = "
+pub(super) const CREATE_USERS_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS users (
     id                   UUID PRIMARY KEY,
     username             VARCHAR NOT NULL UNIQUE,
@@ -91,10 +91,7 @@ impl Database {
         }
     }
 
-    pub async fn get_user_by_name(
-        &self,
-        name: String,
-    ) -> DbResult<Option<UserRecord>> {
+    pub async fn get_user_by_name(&self, name: String) -> DbResult<Option<UserRecord>> {
         let conn = self.pool.connection().await?;
         let query = conn
             .client
@@ -112,7 +109,7 @@ impl Database {
     /// Creates a user, returning whether it was successful (i.e, if there were no conflicts with
     /// respect to the ID and username).
     pub async fn create_user(&self, user: UserRecord) -> DbResult<Result<(), UsernameConflict>> {
-        const STMT: &'static str = "
+        const STMT: &str = "
             INSERT INTO users
                 (
                     id,
@@ -142,7 +139,8 @@ impl Database {
 
         let ret = conn.client.execute(&stmt, args).await?;
 
-        Ok(if ret == 1 { // 1 item was inserted (insert was successful)
+        Ok(if ret == 1 {
+            // 1 item was inserted (insert was successful)
             Ok(())
         } else {
             Err(UsernameConflict)
@@ -210,7 +208,7 @@ impl Database {
         new_password_hash: String,
         hash_scheme_version: HashSchemeVersion,
     ) -> DbResult<Result<(), NonexistentUser>> {
-        const STMT: &'static str = "
+        const STMT: &str = "
             UPDATE users SET
                 password_hash = $1, hash_scheme_version = $2, compromised = $3
             WHERE id = $4";

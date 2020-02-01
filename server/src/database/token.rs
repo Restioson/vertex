@@ -1,14 +1,12 @@
 use crate::auth::HashSchemeVersion;
-use crate::database::{Database, DatabaseError, DbResult};
+use crate::database::{Database, DbResult};
 use chrono::{DateTime, Utc};
-use futures::{Future, TryFutureExt};
 use std::convert::TryFrom;
 use tokio_postgres::types::ToSql;
 use tokio_postgres::Row;
-use vertex_common::{DeviceId, ErrResponse, TokenPermissionFlags, UserId};
-use xtra::prelude::*;
+use vertex::{DeviceId, TokenPermissionFlags, UserId};
 
-pub(super) const CREATE_TOKENS_TABLE: &'static str = "
+pub(super) const CREATE_TOKENS_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS login_tokens (
         device              UUID PRIMARY KEY,
         device_name          VARCHAR,
@@ -58,7 +56,7 @@ pub struct DeviceIdConflict;
 
 impl Database {
     pub async fn get_token(&self, device: DeviceId) -> DbResult<Option<Token>> {
-        const QUERY: &'static str = "SELECT * FROM login_tokens WHERE device=$1";
+        const QUERY: &str = "SELECT * FROM login_tokens WHERE device=$1";
 
         let conn = self.pool.connection().await?;
         let query = conn.client.prepare(QUERY).await?;
@@ -72,7 +70,7 @@ impl Database {
     }
 
     pub async fn create_token(&self, token: Token) -> DbResult<Result<(), DeviceIdConflict>> {
-        const STMT: &'static str = "
+        const STMT: &str = "
             INSERT INTO login_tokens
                 (
                     device,
@@ -99,16 +97,21 @@ impl Database {
             &token.permission_flags.bits(),
         ];
 
-        let res = conn.client.execute(&stmt, args).await.map(|r| if r == 1 {
-            Ok(())
-        } else {
-            Err(DeviceIdConflict)
+        let res = conn.client.execute(&stmt, args).await.map(|r| {
+            if r == 1 {
+                Ok(())
+            } else {
+                Err(DeviceIdConflict)
+            }
         });
         res.map_err(Into::into)
     }
 
     /// Returns whether any token existed with the given ID in the first place
-    pub async fn revoke_token(&self, device_id: DeviceId) -> DbResult<Result<(), NonexistentDevice>> {
+    pub async fn revoke_token(
+        &self,
+        device_id: DeviceId,
+    ) -> DbResult<Result<(), NonexistentDevice>> {
         let conn = self.pool.connection().await?;
         let stmt = conn
             .client
@@ -116,37 +119,36 @@ impl Database {
             .await?;
 
         // Result will be 1 if the token existed
-        let res = conn
-            .client
-            .execute(&stmt, &[&device_id.0])
-            .await
-            .map(|r| if r == 1 {
+        let res = conn.client.execute(&stmt, &[&device_id.0]).await.map(|r| {
+            if r == 1 {
                 Ok(())
             } else {
                 Err(NonexistentDevice)
-            });
+            }
+        });
 
         res.map_err(Into::into)
     }
 
     /// Returns whether any token existed with the given ID in the first place
-    pub async fn refresh_token(&self, device_id: DeviceId) -> DbResult<Result<(), NonexistentDevice>> {
-        const STMT: &'static str =
+    pub async fn refresh_token(
+        &self,
+        device_id: DeviceId,
+    ) -> DbResult<Result<(), NonexistentDevice>> {
+        const STMT: &str =
             "UPDATE login_tokens SET last_used=NOW()::timestamp WHERE device = $1";
 
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(STMT).await?;
 
         // Result will be 1 if the token existed
-        let res = conn
-            .client
-            .execute(&stmt, &[&device_id.0])
-            .await
-            .map(|r| if r == 1 {
+        let res = conn.client.execute(&stmt, &[&device_id.0]).await.map(|r| {
+            if r == 1 {
                 Ok(())
             } else {
                 Err(NonexistentDevice)
-            });
+            }
+        });
 
         res.map_err(Into::into)
     }

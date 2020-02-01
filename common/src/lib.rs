@@ -2,9 +2,9 @@
 use bitflags::bitflags;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -15,7 +15,9 @@ pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 pub struct RequestId(u32);
 
 impl RequestId {
-    pub const fn new(id: u32) -> Self { RequestId(id) }
+    pub const fn new(id: u32) -> Self {
+        RequestId(id)
+    }
 }
 
 #[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
@@ -61,11 +63,15 @@ impl ClientMessage {
 }
 
 impl Into<Bytes> for ClientMessage {
-    fn into(self) -> Bytes { serde_cbor::to_vec(&self).unwrap().into() }
+    fn into(self) -> Bytes {
+        serde_cbor::to_vec(&self).unwrap().into()
+    }
 }
 
 impl Into<Vec<u8>> for ClientMessage {
-    fn into(self) -> Vec<u8> { serde_cbor::to_vec(&self).unwrap() }
+    fn into(self) -> Vec<u8> {
+        serde_cbor::to_vec(&self).unwrap()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -172,7 +178,7 @@ bitflags! {
     #[derive(Serialize, Deserialize)]
     pub struct TokenPermissionFlags: i64 {
         /// All permissions. Should be used for user devices but not for service logins.
-        const ALL = 1 << 0;
+        const ALL = 1;
         /// Send messages
         const SEND_MESSAGES = 1 << 1;
         /// Edit any messages sent by this user
@@ -197,7 +203,7 @@ bitflags! {
 }
 
 impl TokenPermissionFlags {
-    pub fn has_perms(&self, perms: TokenPermissionFlags) -> bool {
+    pub fn has_perms(self, perms: TokenPermissionFlags) -> bool {
         self.contains(TokenPermissionFlags::ALL) || self.contains(perms)
     }
 }
@@ -209,6 +215,7 @@ pub enum ServerMessage {
         id: RequestId,
         result: ResponseResult,
     },
+    MalformedMessage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -227,7 +234,7 @@ pub enum ServerAction {
     },
     RemoveCommunity {
         id: CommunityId,
-        reason: RemoveCommunityReason
+        reason: RemoveCommunityReason,
     },
 }
 

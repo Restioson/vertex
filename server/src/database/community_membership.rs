@@ -3,9 +3,9 @@ use std::convert::TryFrom;
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
 use tokio_postgres::Row;
-use vertex_common::{CommunityId, ErrResponse, RoomId, UserId};
+use vertex::{CommunityId, RoomId, UserId};
 
-pub(super) const CREATE_COMMUNITY_MEMBERSHIP_TABLE: &'static str = "
+pub(super) const CREATE_COMMUNITY_MEMBERSHIP_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS community_membership (
     community UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS community_membership (
 )";
 
 /// Modified from https://stackoverflow.com/a/42217872/4871468
-const ADD_TO_ROOM: &'static str = r#"
+const ADD_TO_ROOM: &str = r#"
 WITH input_rows(community, user_id) AS (
     VALUES ($1::UUID, $2::UUID)
 ), ins AS (
@@ -48,10 +48,10 @@ pub struct RoomMember {
     user: UserId,
 }
 
-impl TryFrom<&Row> for RoomMember {
+impl TryFrom<Row> for RoomMember {
     type Error = tokio_postgres::Error;
 
-    fn try_from(row: &Row) -> Result<RoomMember, tokio_postgres::Error> {
+    fn try_from(row: Row) -> Result<RoomMember, tokio_postgres::Error> {
         Ok(RoomMember {
             community: RoomId(row.try_get("community")?),
             user: UserId(row.try_get("user_id")?),
@@ -87,12 +87,12 @@ struct AddToRoomResult {
     member: RoomMember,
 }
 
-impl TryFrom<&Row> for AddToRoomResult {
+impl TryFrom<Row> for AddToRoomResult {
     type Error = tokio_postgres::Error;
 
-    fn try_from(row: &Row) -> Result<AddToRoomResult, tokio_postgres::Error> {
+    fn try_from(row: Row) -> Result<AddToRoomResult, tokio_postgres::Error> {
         Ok(AddToRoomResult {
-            source: AddToCommunitySource::try_from(row)?,
+            source: AddToCommunitySource::try_from(&row)?,
             member: RoomMember::try_from(row)?,
         })
     }
@@ -105,6 +105,29 @@ pub enum AddToCommunityError {
 }
 
 impl Database {
+    pub async fn get_community_membership(
+        &self,
+        community: CommunityId,
+        user: UserId,
+    ) -> DbResult<Option<RoomMember>> {
+        const QUERY: &str = "
+            SELECT * from community_membership
+                WHERE community=$1 AND user_id = $2";
+        let conn = self.pool.connection().await?;
+
+        let query = conn.client.prepare(QUERY).await?;
+        let opt = conn
+            .client
+            .query_opt(&query, &[&community.0, &user.0])
+            .await?;
+
+        if let Some(row) = opt {
+            Ok(Some(RoomMember::try_from(row)?)) // Can't opt::map because of ?
+        } else {
+            Ok(None)
+        }
+    }
+
     pub async fn add_to_community(
         &self,
         community: CommunityId,
@@ -121,7 +144,7 @@ impl Database {
 
         match res {
             Ok(Some(row)) => {
-                let res = AddToRoomResult::try_from(&row)?;
+                let res = AddToRoomResult::try_from(row)?;
 
                 match res.source {
                     // Membership row did not exist - user has been successfully added

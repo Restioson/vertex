@@ -1,28 +1,28 @@
 #![feature(type_alias_impl_trait)]
 
-use gtk::prelude::*;
 use gio::prelude::*;
+use gtk::prelude::*;
 
 use url::Url;
 
-use std::rc::Rc;
 use futures::stream::StreamExt;
+use std::rc::Rc;
 
 use crate::screen::DynamicScreen;
 use crate::token_store::TokenStore;
 
 use std::cell::RefCell;
 
-use vertex_client::net::{RequestManager, RequestSender};
 use futures::Stream;
+use vertex_client::net::{RequestManager, RequestSender};
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 
+pub mod net;
 pub mod screen;
 pub mod token_store;
-pub mod net;
 
 pub struct App {
     window: gtk::ApplicationWindow,
@@ -90,7 +90,8 @@ impl App {
     }
 
     async fn run<S>(&self, stream: S)
-        where S: Stream<Item=net::Result<vertex::ServerAction>> + Unpin
+    where
+        S: Stream<Item = net::Result<vertex::ServerAction>> + Unpin,
     {
         futures::future::join(
             async move {
@@ -102,11 +103,16 @@ impl App {
             async {
                 let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(2));
                 loop {
-                    self.request_sender().net().ping().await.expect("failed to dispatch heartbeat");
+                    self.request_sender()
+                        .net()
+                        .ping()
+                        .await
+                        .expect("failed to dispatch heartbeat");
                     ticker.tick().await;
                 }
             },
-        ).await;
+        )
+        .await;
     }
 
     pub fn set_screen(&self, screen: DynamicScreen) {
@@ -124,15 +130,23 @@ impl App {
         self.request_sender.clone().unwrap()
     }
 
-    pub fn token_store(&self) -> &TokenStore { &self.token_store }
+    pub fn token_store(&self) -> &TokenStore {
+        &self.token_store
+    }
 }
 
 fn setup_gtk_style() {
     let screen = gdk::Screen::get_default().expect("unable to get screen");
     let css_provider = gtk::CssProvider::new();
-    css_provider.load_from_path("res/style.css").expect("unable to load css");
+    css_provider
+        .load_from_path("res/style.css")
+        .expect("unable to load css");
 
-    gtk::StyleContext::add_provider_for_screen(&screen, &css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    gtk::StyleContext::add_provider_for_screen(
+        &screen,
+        &css_provider,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
 }
 
 // TODO: can we get rid of need for this? (do we need to use tokio-tungstenite or can we just use tungstenite?)
@@ -151,14 +165,15 @@ async fn main() {
         )
         .get_matches();
 
-    let ip = matches.value_of("ip")
+    let ip = matches
+        .value_of("ip")
         .map(|ip| ip.to_string())
-        .unwrap_or("localhost:8080".to_string());
+        .unwrap_or_else(|| "localhost:8080".to_string());
 
     let url = Url::parse(&format!("wss://{}/client/", ip)).unwrap();
 
-    let application = gtk::Application::new(None, Default::default())
-        .expect("failed to create application");
+    let application =
+        gtk::Application::new(None, Default::default()).expect("failed to create application");
 
     setup_gtk_style();
 
@@ -169,8 +184,7 @@ async fn main() {
         app.set_screen(DynamicScreen::Loading(screen::loading::build()));
 
         glib::MainContext::ref_thread_default().spawn_local(async move {
-            let (send, recv) = net::connect(url.clone()).await
-                .expect("failed to connect");
+            let (send, recv) = net::connect(url.clone()).await.expect("failed to connect");
 
             app.start(send, recv).await;
         });
