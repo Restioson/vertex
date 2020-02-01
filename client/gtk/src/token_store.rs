@@ -1,9 +1,8 @@
-use serde::{Serialize, Deserialize};
+use keyring::Keyring;
+use serde::{Deserialize, Serialize};
 use serde_json;
 
 use vertex::*;
-
-use keyring::Keyring;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct StoredToken {

@@ -1,7 +1,0 @@
-edition = "2018"
-
-max_width = 120
-error_on_line_overflow = true
-overflow_delimited_expr = true
-
-use_field_init_shorthand = true

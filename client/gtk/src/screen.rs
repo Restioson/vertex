@@ -1,7 +1,7 @@
-use std::rc::Rc;
 use std::cell::{self, RefCell};
 use std::future::Future;
 use std::pin::Pin;
+use std::rc::Rc;
 
 use gtk::prelude::*;
 

@@ -1,9 +1,9 @@
-use gtk::prelude::*;
-
 use std::rc::Rc;
 
+use gtk::prelude::*;
+
 use crate::net;
-use crate::screen::{self, Screen, DynamicScreen};
+use crate::screen::{self, DynamicScreen, Screen};
 
 const SCREEN_SRC: &str = include_str!("glade/settings/settings.glade");
 

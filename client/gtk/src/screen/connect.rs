@@ -2,7 +2,7 @@ use super::*;
 
 pub struct Connector<Model, Args: Clone> {
     screen: Screen<Model>,
-    do_async: Vec<Box<dyn Fn(Screen<Model>, Args) -> Pin<Box<dyn Future<Output=()>>>>>,
+    do_async: Vec<Box<dyn Fn(Screen<Model>, Args) -> Pin<Box<dyn Future<Output = ()>>>>>,
     do_sync: Vec<Box<dyn Fn(Screen<Model>, Args)>>,
     inhibit: bool,
 }
@@ -20,7 +20,7 @@ impl<Model, Args: Clone> Connector<Model, Args> {
     #[inline]
     pub fn do_async<F, Fut>(mut self, f: F) -> Self
         where F: Fn(Screen<Model>, Args) -> Fut + 'static,
-              Fut: Future<Output=()> + 'static,
+              Fut: Future<Output = ()> + 'static,
     {
         self.do_async.push(Box::new(move |screen, args| {
             let future = f(screen, args);

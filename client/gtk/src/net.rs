@@ -1,23 +1,20 @@
-use futures::stream::{Stream, StreamExt, SplitStream, SplitSink};
-use futures::sink::SinkExt;
-
-use url::Url;
-
 use std::cell::RefCell;
 
+use futures::sink::SinkExt;
+use futures::stream::{SplitSink, SplitStream, Stream, StreamExt};
+use url::Url;
+
 use async_trait::async_trait;
+pub use vertex_client::net::{Error, Result};
 
 type WsStream = tokio_tls::TlsStream<tokio::net::TcpStream>;
 type WsClient = tokio_tungstenite::WebSocketStream<WsStream>;
-
-pub use vertex_client::net::{Result, Error};
 
 /// Module adapted from tokio-tungstenite
 /// tokio-tungstenite does not support connection with a custom TlsConnector, so we need to reimplement it
 mod ws {
     use tokio::net::TcpStream;
-
-    use tungstenite::{Result, Error};
+    use tungstenite::{Error, Result};
     use tungstenite::handshake::client::{Request, Response};
 
     pub(super) async fn connect_async<R>(request: R) -> Result<(super::WsClient, Response)>
@@ -88,7 +85,7 @@ impl vertex_client::net::Sender for Sender {
 pub struct Receiver(SplitStream<WsClient>);
 
 impl vertex_client::net::Receiver for Receiver {
-    type Stream = impl Stream<Item=Result<vertex::ServerMessage>>;
+    type Stream = impl Stream<Item = Result<vertex::ServerMessage>>;
 
     fn stream(self) -> Self::Stream {
         self.0.filter_map(move |result| futures::future::ready(

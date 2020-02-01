@@ -1,13 +1,12 @@
+use std::cell::RefCell;
+use std::fmt;
+use std::rc::Rc;
+use std::sync::Mutex;
+
 use gtk::prelude::*;
 
 use crate::net;
-use crate::screen::{self, Screen, DynamicScreen, TryGetText};
-
-use std::fmt;
-
-use std::rc::Rc;
-use std::sync::Mutex;
-use std::cell::RefCell;
+use crate::screen::{self, DynamicScreen, Screen, TryGetText};
 
 const SCREEN_SRC: &str = include_str!("glade/active/active.glade");
 

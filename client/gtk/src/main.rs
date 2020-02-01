@@ -1,20 +1,18 @@
 #![feature(type_alias_impl_trait)]
 
-use gtk::prelude::*;
-use gio::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 
+use futures::Stream;
+use futures::stream::StreamExt;
+use gio::prelude::*;
+use gtk::prelude::*;
 use url::Url;
 
-use std::rc::Rc;
-use futures::stream::StreamExt;
+use vertex_client::net::{RequestManager, RequestSender};
 
 use crate::screen::DynamicScreen;
 use crate::token_store::TokenStore;
-
-use std::cell::RefCell;
-
-use vertex_client::net::{RequestManager, RequestSender};
-use futures::Stream;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -90,7 +88,7 @@ impl App {
     }
 
     async fn run<S>(&self, stream: S)
-        where S: Stream<Item=net::Result<vertex::ServerAction>> + Unpin
+        where S: Stream<Item = net::Result<vertex::ServerAction>> + Unpin
     {
         futures::future::join(
             async move {

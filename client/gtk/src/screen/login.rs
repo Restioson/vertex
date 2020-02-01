@@ -1,11 +1,10 @@
-use gtk::prelude::*;
-
+use std::fmt;
 use std::rc::Rc;
 
-use crate::net;
-use crate::screen::{self, Screen, DynamicScreen, TryGetText};
+use gtk::prelude::*;
 
-use std::fmt;
+use crate::net;
+use crate::screen::{self, DynamicScreen, Screen, TryGetText};
 
 const SCREEN_SRC: &str = include_str!("glade/login/login.glade");
 
