@@ -215,7 +215,6 @@ fn bind_events(screen: &Screen<Model>) {
     let model = screen.model();
     let widgets = &model.widgets;
 
-    // TODO: see if it would be viable for the connector to pass &mut Model instead of the screen
     widgets.message_entry.connect_activate(
         screen.connector()
             .do_async(|screen, entry: gtk::Entry| async move {

@@ -9,8 +9,10 @@ use gio::prelude::*;
 use gtk::prelude::*;
 use url::Url;
 
+use vertex_client::Client;
 use vertex_client::net::{RequestManager, RequestSender};
 
+use crate::net::Sender;
 use crate::screen::DynamicScreen;
 use crate::token_store::TokenStore;
 
@@ -18,9 +20,9 @@ const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 
+pub mod net;
 pub mod screen;
 pub mod token_store;
-pub mod net;
 
 pub struct App {
     window: gtk::ApplicationWindow,
@@ -70,21 +72,30 @@ impl App {
             async move { app.run(stream).await }
         });
 
-        match app.token_store.get_stored_token() {
-            Some((device, token)) => {
-                // TODO: Some code duplication with auth in login and register ui
-                let client = vertex_client::auth::Client::new(app.request_sender());
-                let client = client.login(device, token).await.expect("failed to login");
-                let client = Rc::new(client);
+        app.set_screen(app.clone().try_login().await);
+    }
 
-                let screen = screen::active::build(app.clone(), client);
-                app.set_screen(DynamicScreen::Active(screen));
+    async fn try_login(self: Rc<Self>) -> DynamicScreen {
+        match self.token_store.get_stored_token() {
+            Some((device, token)) => {
+                let client = vertex_client::auth::Client::new(self.request_sender());
+
+                match client.login(device, token).await {
+                    Ok(client) => {
+                        let screen = screen::active::build(self.clone(), Rc::new(client));
+                        return DynamicScreen::Active(screen);
+                    }
+                    Err(err) => {
+                        println!("failed to log in with stored token: {:?}", err);
+                        self.token_store.forget_token();
+                    }
+                }
             }
-            None => {
-                let screen = screen::login::build(app.clone());
-                app.set_screen(DynamicScreen::Login(screen));
-            }
+            _ => (),
         }
+
+        let screen = screen::login::build(self.clone());
+        DynamicScreen::Login(screen)
     }
 
     async fn run<S>(&self, stream: S)
@@ -100,7 +111,11 @@ impl App {
             async {
                 let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(2));
                 loop {
-                    self.request_sender().net().ping().await.expect("failed to dispatch heartbeat");
+                    let result = self.request_sender().net().ping().await;
+                    if result.is_err() {
+                        break;
+                    }
+
                     ticker.tick().await;
                 }
             },
