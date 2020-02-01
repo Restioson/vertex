@@ -649,10 +649,15 @@ impl<'a> Authenticated<'a> {
         }
 
         if code.0.len() > 11 {
-            return Err(ErrResponse::InvalidInviteCode)
+            return Err(ErrResponse::InvalidInviteCode);
         }
 
-        let id = match self.client.database.get_community_from_invite_code(code).await? {
+        let res = self
+            .client
+            .database
+            .get_community_from_invite_code(code)
+            .await?;
+        let id = match res {
             Ok(Some(id)) => id,
             Ok(None) | Err(_) => return Err(ErrResponse::InvalidInviteCode),
         };

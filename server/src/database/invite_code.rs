@@ -1,11 +1,11 @@
-use std::convert::{TryFrom, TryInto};
+use crate::database::{Database, DbResult};
 use base64::DecodeError;
 use byteorder::{NativeEndian, ReadBytesExt};
-use crate::database::{Database, DbResult};
-use tokio_postgres::types::ToSql;
-use vertex::{InviteCode, CommunityId};
 use rand::Rng;
+use std::convert::{TryFrom, TryInto};
 use std::io::Cursor;
+use tokio_postgres::types::ToSql;
+use vertex::{CommunityId, InviteCode};
 
 pub(super) const CREATE_INVITE_CODES_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS invite_codes (
@@ -56,10 +56,7 @@ impl Database {
         let query = conn.client.prepare(QUERY).await?;
 
         let random_bits = rand::thread_rng().gen::<u16>();
-        let args: &[&(dyn ToSql + Sync)] = &[
-            &(random_bits as i16),
-            &community.0,
-        ];
+        let args: &[&(dyn ToSql + Sync)] = &[&(random_bits as i16), &community.0];
 
         let row = conn.client.query_opt(&query, args).await.unwrap().unwrap();
 
@@ -73,7 +70,7 @@ impl Database {
 
     pub async fn get_community_from_invite_code(
         &self,
-        code: InviteCode
+        code: InviteCode,
     ) -> DbResult<Result<Option<CommunityId>, DecodeError>> {
         const QUERY: &str = "
             SELECT community_id FROM invite_codes WHERE random_bits=$1 AND incrementing_number=$2
@@ -88,7 +85,7 @@ impl Database {
         };
         let args: &[&(dyn ToSql + Sync)] = &[
             &(invite_code.random_bits as i16),
-            &(invite_code.incrementing_number as i64)
+            &(invite_code.incrementing_number as i64),
         ];
 
         let row_opt = conn.client.query_opt(&query, args).await?;

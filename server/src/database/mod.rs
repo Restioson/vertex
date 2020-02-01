@@ -7,9 +7,9 @@ use vertex::{DeviceId, ErrResponse, UserId};
 
 mod communities;
 mod community_membership;
+mod invite_code;
 mod token;
 mod user;
-mod invite_code;
 
 pub use communities::*;
 pub use community_membership::*;
@@ -19,10 +19,9 @@ pub use user::*;
 
 use crate::client::LogoutThisSession;
 use crate::client::USERS;
-use xtra::prelude::*;
 use futures::{Stream, TryStreamExt};
 use tokio_postgres::types::ToSql;
-
+use xtra::prelude::*;
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 
