@@ -3,7 +3,7 @@ use gtk::prelude::*;
 use std::rc::Rc;
 
 use crate::net;
-use crate::screen::{self, DynamicScreen, Screen};
+use crate::screen::{self, Screen, DynamicScreen};
 
 const SCREEN_SRC: &str = include_str!("glade/settings/settings.glade");
 
@@ -43,12 +43,13 @@ fn bind_events(screen: &Screen<Model>) {
     let widgets = &model.widgets;
 
     widgets.category_list.connect_row_selected(
-        screen
-            .connector()
+        screen.connector()
             .do_async(|screen, (_list, row)| async move {
                 if let Some(row) = row {
                     let row: gtk::ListBoxRow = row;
-                    let name = row.get_widget_name().map(|s| s.as_str().to_owned()).unwrap_or_default();
+                    let name = row.get_widget_name()
+                        .map(|s| s.as_str().to_owned())
+                        .unwrap_or_default();
 
                     let model = screen.model();
 
@@ -64,10 +65,10 @@ fn bind_events(screen: &Screen<Model>) {
                             let active = screen::active::build(model.app.clone(), model.client.clone());
                             model.app.set_screen(DynamicScreen::Active(active));
                         }
-                        _ => (),
+                        _ => ()
                     }
                 }
             })
-            .build_widget_and_option_consumer(),
+            .build_widget_and_option_consumer()
     );
 }

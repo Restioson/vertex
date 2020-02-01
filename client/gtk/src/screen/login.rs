@@ -3,7 +3,7 @@ use gtk::prelude::*;
 use std::rc::Rc;
 
 use crate::net;
-use crate::screen::{self, DynamicScreen, Screen, TryGetText};
+use crate::screen::{self, Screen, DynamicScreen, TryGetText};
 
 use std::fmt;
 
@@ -30,7 +30,7 @@ pub fn build(app: Rc<crate::App>) -> Screen<Model> {
     let viewport: gtk::Viewport = builder.get_object("viewport").unwrap();
 
     let model = Model {
-        app,
+        app: app.clone(),
         widgets: Widgets {
             username_entry: builder.get_object("username_entry").unwrap(),
             password_entry: builder.get_object("password_entry").unwrap(),
@@ -53,8 +53,7 @@ fn bind_events(screen: &Screen<Model>) {
     let widgets = &model.widgets;
 
     widgets.login_button.connect_button_press_event(
-        screen
-            .connector()
+        screen.connector()
             .do_async(|screen, (_button, _event)| async move {
                 let model = screen.model();
 
@@ -79,34 +78,25 @@ fn bind_events(screen: &Screen<Model>) {
 
                 model.widgets.status_stack.set_visible_child(&model.widgets.error_label);
             })
-            .build_widget_event(),
+            .build_widget_event()
     );
 
     widgets.register_button.connect_button_press_event(
-        screen
-            .connector()
+        screen.connector()
             .do_sync(|screen, (_button, _event)| {
                 let register = screen::register::build(screen.model().app.clone());
                 screen.model().app.set_screen(DynamicScreen::Register(register));
             })
-            .build_widget_event(),
+            .build_widget_event()
     );
 }
 
-async fn login(
-    app: &crate::App,
-    username: String,
-    password: String,
-) -> Result<vertex_client::Client<net::Sender>, LoginError> {
+async fn login(app: &crate::App, username: String, password: String) -> Result<vertex_client::Client<net::Sender>, LoginError> {
     let client = vertex_client::auth::Client::new(app.request_sender());
 
     let (device, token) = match app.token_store.get_stored_token() {
         Some(token) => token,
-        None => {
-            client
-                .authenticate(vertex::UserCredentials::new(username, password))
-                .await?
-        }
+        None => client.authenticate(vertex::UserCredentials::new(username, password)).await?,
     };
 
     Ok(client.login(device, token).await?)
@@ -145,9 +135,8 @@ impl From<vertex::ErrResponse> for LoginError {
     fn from(err: vertex::ErrResponse) -> Self {
         match err {
             vertex::ErrResponse::Internal => LoginError::InternalServerError,
-            vertex::ErrResponse::IncorrectUsernameOrPassword | vertex::ErrResponse::InvalidUser => {
-                LoginError::InvalidUsernameOrPassword
-            }
+            vertex::ErrResponse::IncorrectUsernameOrPassword |
+            vertex::ErrResponse::InvalidUser => LoginError::InvalidUsernameOrPassword,
 
             _ => LoginError::UnknownError,
         }

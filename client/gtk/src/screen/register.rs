@@ -1,10 +1,10 @@
 use gtk::prelude::*;
 
-use std::fmt;
 use std::rc::Rc;
+use std::fmt;
 
 use crate::net;
-use crate::screen::{self, DynamicScreen, Screen, TryGetText};
+use crate::screen::{self, Screen, DynamicScreen, TryGetText};
 
 const SCREEN_SRC: &str = include_str!("glade/register/register.glade");
 
@@ -30,7 +30,7 @@ pub fn build(app: Rc<crate::App>) -> Screen<Model> {
     let viewport: gtk::Viewport = builder.get_object("viewport").unwrap();
 
     let model = Model {
-        app,
+        app: app.clone(),
         widgets: Widgets {
             username_entry: builder.get_object("username_entry").unwrap(),
             password_entry_1: builder.get_object("password_entry_1").unwrap(),
@@ -54,18 +54,16 @@ fn bind_events(screen: &Screen<Model>) {
     let widgets = &model.widgets;
 
     widgets.login_button.connect_button_press_event(
-        screen
-            .connector()
+        screen.connector()
             .do_sync(|screen, (_button, _event)| {
                 let login = screen::login::build(screen.model().app.clone());
                 screen.model().app.set_screen(DynamicScreen::Login(login));
             })
-            .build_widget_event(),
+            .build_widget_event()
     );
 
     widgets.register_button.connect_button_press_event(
-        screen
-            .connector()
+        screen.connector()
             .do_async(|screen, (_button, _event)| async move {
                 let model = screen.model();
 
@@ -91,16 +89,11 @@ fn bind_events(screen: &Screen<Model>) {
 
                 model.widgets.status_stack.set_visible_child(&model.widgets.error_label);
             })
-            .build_widget_event(),
+            .build_widget_event()
     );
 }
 
-async fn register(
-    app: &crate::App,
-    username: String,
-    password_1: String,
-    password_2: String,
-) -> Result<vertex_client::Client<net::Sender>, RegisterError> {
+async fn register(app: &crate::App, username: String, password_1: String, password_2: String) -> Result<vertex_client::Client<net::Sender>, RegisterError> {
     if password_1 != password_2 {
         return Err(RegisterError::PasswordsDoNotMatch);
     }
