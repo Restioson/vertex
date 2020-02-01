@@ -45,7 +45,7 @@ rebuild the docker image with `docker-compose up --build`.
 | `tokens_sweep_interval_secs` | How often to sweep the database for possibly expired tokens in seconds. A warning will be printed if this is less than the time taken to complete a single sweep.                                                                   | 1800 (30min)                       |
 | `token_stale_days`           | How many days it takes for a token to become stale and require the user to refresh it with their password.                                                                                                                          | 7 (1 week)                         |
 | `token_expiry_days`          | How many days it takes for a token to expire and the device to be deleted from the user's account.                                                                                                                                  | 90 (~3 months)                     |
-| `log_level`                  | The minimum log level to display log statements for. Valid options are `trace`, `debug`, `info`, `warn`, and `error`. It must be written in quotation marks (e.g `"info"`).                                                        | `"info"                            |
+| `log_level`                  | The minimum log level to display log statements for. Valid options are `trace`, `debug`, `info`, `warn`, and `error`. It must be written in quotation marks (e.g `"info"`).                                                         | `"info"                            |
 
 It is written in TOML. 
 

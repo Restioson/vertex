@@ -18,6 +18,8 @@ use xtra::prelude::*;
 
 pub use token::*;
 pub use user::*;
+use tokio_postgres::types::ToSql;
+use futures::{Stream, TryStreamExt};
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 
@@ -92,7 +94,11 @@ impl Database {
         Ok(())
     }
 
-    pub async fn sweep_loop(self, token_expiry_days: u16, interval: Duration) {
+    pub async fn sweep_loop(
+        self,
+        token_expiry_days: u16,
+        interval: Duration,
+    ) {
         let mut timer = tokio::time::interval(interval);
 
         loop {
@@ -100,13 +106,21 @@ impl Database {
             let begin = Instant::now();
             self.expired_tokens(token_expiry_days)
                 .await
-                .map_err(|e| panic!("Database error while sweeping tokens: {:#?}", e))
-                .unwrap()
-                .iter()
-                .filter_map(|(user, device)| USERS.get(user).map(|u| (device, u)))
-                .for_each(|(device, user)| {
-                    user.get(device).map(|addr| addr.do_send(LogoutThisSession));
-                });
+                .expect("Database error while sweeping tokens")
+                .try_filter_map(|(user, device)| async move {
+                    Ok(USERS.get(&user).map(|u| (device, u)))
+                })
+                .try_for_each(|(device, user)| async move {
+                    if let Some(addr) = user.get(&device) {
+                        if addr.do_send(LogoutThisSession).is_err() {
+                            warn!("ClientWsSession actor disconnected. This is probably a timing anomaly.");
+                        }
+                    }
+
+                    Ok(())
+                })
+                .await
+                .expect("Database error while sweeping tokens");
 
             let time_taken = Instant::now().duration_since(begin);
             if time_taken > interval {
@@ -119,7 +133,10 @@ impl Database {
         }
     }
 
-    async fn expired_tokens(&self, token_expiry_days: u16) -> DbResult<Vec<(UserId, DeviceId)>> {
+    async fn expired_tokens(
+        &self,
+        token_expiry_days: u16
+    ) -> DbResult<impl Stream<Item = DbResult<(UserId, DeviceId)>>> {
         const QUERY: &str = "
             DELETE FROM login_tokens
                 WHERE expiration_date < NOW()::timestamp OR
@@ -127,19 +144,21 @@ impl Database {
             RETURNING device, user_id";
 
         let token_expiry_days = token_expiry_days as f64;
+        let args = [token_expiry_days];
+        let args = args.iter().map(|x| x as &dyn ToSql);
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(QUERY).await?;
 
-        conn.client
-            .query(&stmt, &[&token_expiry_days])
+        let stream = conn.client
+            .query_raw(&stmt, args)
             .await?
-            .iter()
-            .map(|row| {
+            .and_then(|row| async move {
                 Ok((
                     UserId(row.try_get("user_id")?),
                     DeviceId(row.try_get("device")?),
                 ))
             })
-            .collect()
+            .map_err(|e| e.into());
+        Ok(stream)
     }
 }
