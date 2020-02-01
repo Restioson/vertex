@@ -5,16 +5,27 @@ Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, feder
 
 ## Installation
 
-### Development
-1. Install the latest Rust **nightly** compiler (because of the `l337` crate)
-2. Install gtk+ development libraries
-3. Install the openssl development package
+### For Developing
+1. Install the latest Rust **nightly** compiler
+2. Install gtk+ development libraries  (guide [here](https://gtk-rs.org/docs-src/requirements))
+3. Install the openssl development package (`sudo apt install libssl-dev` on Linux)
 
 ### Server - Docker
-To install the server via Docker, you will require Docker and Docker Compose. Once they are installed, you will need to
-copy your certificate and key files to `server/docker/` (named `cert.pem` and `key.pem` respectively). Then, simply run
-`docker-compose up` in the main directory `vertex/` (if this does not work, try `sudo docker-compose up`). Add `--build`
-to the end to rebuild for new changes. To change the environment variables passed in, edit the values in `vertex/.docker_env.env`
+1. Install Docker and Docker Compose. On Linux, this is as simple as `sudo apt install docker.io docker-compose` 
+   (sometimes `docker` instead of `docker.io`).
+2. **(Optional)** If you do not already have a certificate, you can get one in two different ways. If you are unsure
+   which to pick, the simplest is (i) and it will probably work until the release of the first version of Vertex.
+   1. You can get an unverified certificate by self-signing one with OpenSSL 
+      [guide](https://www.ibm.com/support/knowledgecenter/SSMNED_5.0.0/com.ibm.apic.cmc.doc/task_apionprem_gernerate_self_signed_openSSL.html).
+      This currently works for the client, but in the future, it will trigger a warning or cause an error.
+   2. You can get a verified certificate for free with LetsEncrypt through its [Certbot](https://certbot.eff.org/instructions). 
+      You may also want to put an Nginx reverse proxy in front of Vertex 
+      so that you don't have to restart it every time to renew a certificate 
+      [(guide)](https://medium.com/@mightywomble/how-to-set-up-nginx-reverse-proxy-with-lets-encrypt-8ef3fd6b79e5).
+3. Copy your certificate and key files to `server/docker/` (named `cert.pem` and `key.pem` respectively).
+4. Run `docker-compose up` in the main directory `vertex/` (if this does not work, try `sudo docker-compose up`).
+   Run `docker-compose up --build` to rebuild for new changes. To set the server IP and password for `key.pem`, edit the
+   values in `vertex/docker_env.env`
 
 **Warning:** *First time* compilation may take very long for the server (~10min). Grab a cup of coffee ;).
 Luckily, you only need to do this once, except *if* the dependencies change *and* you are using Docker.
