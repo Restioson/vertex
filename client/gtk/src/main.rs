@@ -103,11 +103,8 @@ impl App {
             async {
                 let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(2));
                 loop {
-                    self.request_sender()
-                        .net()
-                        .ping()
-                        .await
-                        .expect("failed to dispatch heartbeat");
+                    let res = self.request_sender().net().ping().await;
+                    res.expect("failed to dispatch heartbeat");
                     ticker.tick().await;
                 }
             },
