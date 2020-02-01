@@ -83,7 +83,7 @@ The server's log files can be found in the log folder, under the standard data d
   - [ ] Message history
 - [ ] Client:
   - [x] Basic GUI client
-  - [ ] Make it nicer to use -- gui, not commands
+  - [x] Make it nicer to use -- gui, not commands
 - [x] Login & persistent identity
 - [ ] Federation
 - [ ] Encryption
