@@ -38,6 +38,9 @@ pub struct DeviceId(pub Uuid);
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct AuthToken(pub String);
 
+#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct InviteCode(pub String);
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserCredentials {
     pub username: String,
@@ -106,7 +109,10 @@ pub enum ClientRequest {
         name: String,
         community: CommunityId,
     },
-    JoinCommunity(CommunityId),
+    CreateInvite {
+        community: CommunityId,
+    },
+    JoinCommunity(InviteCode),
     Delete(Delete),
     ChangeUsername {
         new_username: String,
@@ -199,6 +205,8 @@ bitflags! {
         const CREATE_COMMUNITIES = 1 << 9;
         /// Create rooms
         const CREATE_ROOMS = 1 << 10;
+        /// Create invites to communities
+        const CREATE_INVITES = 1 << 11;
     }
 }
 
@@ -266,6 +274,7 @@ pub enum OkResponse {
     MessageId { id: MessageId },
     User { id: UserId },
     Token { device: DeviceId, token: AuthToken },
+    Invite { code: InviteCode },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -292,6 +301,7 @@ pub enum ErrResponse {
     AccessDenied,
     InvalidRoom,
     InvalidCommunity,
+    InvalidInviteCode,
     InvalidUser,
     AlreadyInCommunity,
 }

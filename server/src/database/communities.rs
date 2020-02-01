@@ -5,10 +5,10 @@ use uuid::Uuid;
 use vertex::CommunityId;
 
 pub(super) const CREATE_COMMUNITIES_TABLE: &str = "
-CREATE TABLE IF NOT EXISTS communities (
-    id   UUID PRIMARY KEY,
-    name VARCHAR NOT NULL
-)";
+    CREATE TABLE IF NOT EXISTS communities (
+        id   UUID PRIMARY KEY,
+        name VARCHAR NOT NULL
+    )";
 
 #[derive(Debug, Clone)]
 pub struct CommunityRecord {

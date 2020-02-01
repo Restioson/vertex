@@ -6,16 +6,16 @@ use uuid::Uuid;
 use vertex::UserId;
 
 pub(super) const CREATE_USERS_TABLE: &str = "
-CREATE TABLE IF NOT EXISTS users (
-    id                   UUID PRIMARY KEY,
-    username             VARCHAR NOT NULL UNIQUE,
-    display_name         VARCHAR NOT NULL,
-    password_hash        VARCHAR NOT NULL,
-    hash_scheme_version  SMALLINT NOT NULL,
-    compromised          BOOLEAN NOT NULL,
-    locked               BOOLEAN NOT NULL,
-    banned               BOOLEAN NOT NULL
-)";
+    CREATE TABLE IF NOT EXISTS users (
+        id                   UUID PRIMARY KEY,
+        username             VARCHAR NOT NULL UNIQUE,
+        display_name         VARCHAR NOT NULL,
+        password_hash        VARCHAR NOT NULL,
+        hash_scheme_version  SMALLINT NOT NULL,
+        compromised          BOOLEAN NOT NULL,
+        locked               BOOLEAN NOT NULL,
+        banned               BOOLEAN NOT NULL
+    )";
 
 pub struct UserRecord {
     pub id: UserId,

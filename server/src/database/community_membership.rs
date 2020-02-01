@@ -6,12 +6,12 @@ use tokio_postgres::Row;
 use vertex::{CommunityId, RoomId, UserId};
 
 pub(super) const CREATE_COMMUNITY_MEMBERSHIP_TABLE: &str = "
-CREATE TABLE IF NOT EXISTS community_membership (
-    community UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    CREATE TABLE IF NOT EXISTS community_membership (
+        community UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
-    UNIQUE(user_id, community)
-)";
+        UNIQUE(user_id, community)
+    )";
 
 /// Modified from https://stackoverflow.com/a/42217872/4871468
 const ADD_TO_ROOM: &str = r#"

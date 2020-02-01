@@ -9,17 +9,20 @@ mod communities;
 mod community_membership;
 mod token;
 mod user;
+mod invite_code;
+
+pub use communities::*;
+pub use community_membership::*;
+pub use invite_code::*;
+pub use token::*;
+pub use user::*;
 
 use crate::client::LogoutThisSession;
 use crate::client::USERS;
-pub use communities::*;
-pub use community_membership::*;
 use xtra::prelude::*;
-
 use futures::{Stream, TryStreamExt};
-pub use token::*;
 use tokio_postgres::types::ToSql;
-pub use user::*;
+
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 
@@ -84,6 +87,7 @@ impl Database {
             CREATE_TOKENS_TABLE,
             CREATE_COMMUNITIES_TABLE,
             CREATE_COMMUNITY_MEMBERSHIP_TABLE,
+            CREATE_INVITE_CODES_TABLE,
         ];
 
         for cmd in &cmds {
@@ -94,7 +98,7 @@ impl Database {
         Ok(())
     }
 
-    pub async fn sweep_loop(self, token_expiry_days: u16, interval: Duration) {
+    pub async fn sweep_tokens_loop(self, token_expiry_days: u16, interval: Duration) {
         let mut timer = tokio::time::interval(interval);
 
         loop {

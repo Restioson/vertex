@@ -125,8 +125,8 @@ impl<Net: net::Sender> Client<Net> {
         }
     }
 
-    pub async fn join_community(&self, community: CommunityId) -> Result<()> {
-        let request = ClientRequest::JoinCommunity(community);
+    pub async fn join_community(&self, invite: InviteCode) -> Result<()> {
+        let request = ClientRequest::JoinCommunity(invite);
         let request = self.sender.request(request).await?;
         request.response().await?;
 

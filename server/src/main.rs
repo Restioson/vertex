@@ -134,7 +134,7 @@ async fn main() {
 
     let (cert_path, key_path) = config::ssl_config();
     let db = Database::new().await.expect("Error in database setup");
-    tokio::spawn(db.clone().sweep_loop(
+    tokio::spawn(db.clone().sweep_tokens_loop(
         config.token_expiry_days,
         Duration::from_secs(config.tokens_sweep_interval_secs),
     ));

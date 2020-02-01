@@ -437,7 +437,7 @@ impl<'a> Authenticated<'a> {
         match request {
             ClientRequest::SendMessage(message) => self.send_message(message).await,
             ClientRequest::EditMessage(edit) => self.edit_message(edit).await,
-            ClientRequest::JoinCommunity(community) => self.join_community(community).await,
+            ClientRequest::JoinCommunity(code) => self.join_community(code).await,
             ClientRequest::CreateCommunity { name } => self.create_community(name).await,
             ClientRequest::RevokeToken => self.revoke_token().await,
             ClientRequest::RevokeForeignToken { device, password } => {
@@ -457,6 +457,7 @@ impl<'a> Authenticated<'a> {
             ClientRequest::CreateRoom { name, community } => {
                 self.create_room(name, community).await
             }
+            ClientRequest::CreateInvite { community } => self.create_invite(community).await,
             _ => unimplemented!(),
         }
     }
@@ -637,16 +638,29 @@ impl<'a> Authenticated<'a> {
 
         let id = self.client.database.create_community(name).await?;
         CommunityActor::create_and_spawn(id, self.client.database.clone(), self.user);
-        self.join_community(id).await?;
+        self.join_community_by_id(id).await?;
 
         Ok(OkResponse::Community { id })
     }
 
-    async fn join_community(self, id: CommunityId) -> ResponseResult {
+    async fn join_community(self, code: InviteCode) -> ResponseResult {
         if !self.perms.has_perms(TokenPermissionFlags::JOIN_COMMUNITIES) {
             return Err(ErrResponse::AccessDenied);
         }
 
+        if code.0.len() > 11 {
+            return Err(ErrResponse::InvalidInviteCode)
+        }
+
+        let id = match self.client.database.get_community_from_invite_code(code).await? {
+            Ok(Some(id)) => id,
+            Ok(None) | Err(_) => return Err(ErrResponse::InvalidInviteCode),
+        };
+
+        self.join_community_by_id(id).await
+    }
+
+    async fn join_community_by_id(self, id: CommunityId) -> ResponseResult {
         if let Some(community) = COMMUNITIES.get(&id) {
             let join = Join {
                 user: self.user,
@@ -700,6 +714,24 @@ impl<'a> Authenticated<'a> {
                 .unwrap();
 
             Ok(OkResponse::Room { id })
+        } else {
+            Err(ErrResponse::InvalidCommunity)
+        }
+    }
+
+    async fn create_invite(self, id: CommunityId) -> ResponseResult {
+        if !self.perms.has_perms(TokenPermissionFlags::CREATE_INVITES) {
+            return Err(ErrResponse::AccessDenied);
+        }
+
+        if !self.client.communities.contains(&id) {
+            return Err(ErrResponse::InvalidCommunity);
+        }
+
+        if COMMUNITIES.contains_key(&id) {
+            let code = self.client.database.create_invite_code(id).await?;
+
+            Ok(OkResponse::Invite { code })
         } else {
             Err(ErrResponse::InvalidCommunity)
         }
