@@ -24,12 +24,8 @@ impl TokenStore {
 
     // TODO: pass errors down?
     pub fn store_token(&self, device: DeviceId, token: AuthToken) {
-        let stored_token = StoredToken {
-            device,
-            token: token.0,
-        };
-        let serialized_token =
-            serde_json::to_string(&stored_token).expect("unable to serialize token");
+        let stored_token = StoredToken { device, token: token.0 };
+        let serialized_token = serde_json::to_string(&stored_token).expect("unable to serialize token");
         self.keyring
             .set_password(&serialized_token)
             .expect("unable to store token");
@@ -44,8 +40,6 @@ impl TokenStore {
     }
 
     pub fn forget_token(&self) {
-        self.keyring
-            .delete_password()
-            .expect("unable to forget token");
+        self.keyring.delete_password().expect("unable to forget token");
     }
 }

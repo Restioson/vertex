@@ -55,45 +55,29 @@ fn bind_events(screen: &Screen<Model>) {
     widgets.login_button.connect_button_press_event(
         screen
             .connector()
-            .do_async(|screen, (_button, _event)| {
-                async move {
-                    let model = screen.model();
+            .do_async(|screen, (_button, _event)| async move {
+                let model = screen.model();
 
-                    let username = model
-                        .widgets
-                        .username_entry
-                        .try_get_text()
-                        .unwrap_or_default();
-                    let password = model
-                        .widgets
-                        .password_entry
-                        .try_get_text()
-                        .unwrap_or_default();
+                let username = model.widgets.username_entry.try_get_text().unwrap_or_default();
+                let password = model.widgets.password_entry.try_get_text().unwrap_or_default();
 
-                    model
-                        .widgets
-                        .status_stack
-                        .set_visible_child(&model.widgets.spinner);
-                    model.widgets.error_label.set_text("");
+                model.widgets.status_stack.set_visible_child(&model.widgets.spinner);
+                model.widgets.error_label.set_text("");
 
-                    match login(&screen.model().app, username, password).await {
-                        Ok(client) => {
-                            let (device, token) = client.token();
-                            model.app.token_store.store_token(device, token);
+                match login(&screen.model().app, username, password).await {
+                    Ok(client) => {
+                        let (device, token) = client.token();
+                        model.app.token_store.store_token(device, token);
 
-                            let client = Rc::new(client);
+                        let client = Rc::new(client);
 
-                            let active = screen::active::build(screen.model().app.clone(), client);
-                            screen.model().app.set_screen(DynamicScreen::Active(active));
-                        }
-                        Err(err) => model.widgets.error_label.set_text(&format!("{}", err)),
+                        let active = screen::active::build(screen.model().app.clone(), client);
+                        screen.model().app.set_screen(DynamicScreen::Active(active));
                     }
-
-                    model
-                        .widgets
-                        .status_stack
-                        .set_visible_child(&model.widgets.error_label);
+                    Err(err) => model.widgets.error_label.set_text(&format!("{}", err)),
                 }
+
+                model.widgets.status_stack.set_visible_child(&model.widgets.error_label);
             })
             .build_widget_event(),
     );
@@ -103,10 +87,7 @@ fn bind_events(screen: &Screen<Model>) {
             .connector()
             .do_sync(|screen, (_button, _event)| {
                 let register = screen::register::build(screen.model().app.clone());
-                screen
-                    .model()
-                    .app
-                    .set_screen(DynamicScreen::Register(register));
+                screen.model().app.set_screen(DynamicScreen::Register(register));
             })
             .build_widget_event(),
     );

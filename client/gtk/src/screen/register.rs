@@ -66,50 +66,30 @@ fn bind_events(screen: &Screen<Model>) {
     widgets.register_button.connect_button_press_event(
         screen
             .connector()
-            .do_async(|screen, (_button, _event)| {
-                async move {
-                    let model = screen.model();
+            .do_async(|screen, (_button, _event)| async move {
+                let model = screen.model();
 
-                    let username = model
-                        .widgets
-                        .username_entry
-                        .try_get_text()
-                        .unwrap_or_default();
-                    let password_1 = model
-                        .widgets
-                        .password_entry_1
-                        .try_get_text()
-                        .unwrap_or_default();
-                    let password_2 = model
-                        .widgets
-                        .password_entry_2
-                        .try_get_text()
-                        .unwrap_or_default();
+                let username = model.widgets.username_entry.try_get_text().unwrap_or_default();
+                let password_1 = model.widgets.password_entry_1.try_get_text().unwrap_or_default();
+                let password_2 = model.widgets.password_entry_2.try_get_text().unwrap_or_default();
 
-                    model
-                        .widgets
-                        .status_stack
-                        .set_visible_child(&model.widgets.spinner);
-                    model.widgets.error_label.set_text("");
+                model.widgets.status_stack.set_visible_child(&model.widgets.spinner);
+                model.widgets.error_label.set_text("");
 
-                    match register(&screen.model().app, username, password_1, password_2).await {
-                        Ok(client) => {
-                            let (device, token) = client.token();
-                            model.app.token_store.store_token(device, token);
+                match register(&screen.model().app, username, password_1, password_2).await {
+                    Ok(client) => {
+                        let (device, token) = client.token();
+                        model.app.token_store.store_token(device, token);
 
-                            let client = Rc::new(client);
+                        let client = Rc::new(client);
 
-                            let active = screen::active::build(screen.model().app.clone(), client);
-                            screen.model().app.set_screen(DynamicScreen::Active(active));
-                        }
-                        Err(err) => model.widgets.error_label.set_text(&format!("{}", err)),
+                        let active = screen::active::build(screen.model().app.clone(), client);
+                        screen.model().app.set_screen(DynamicScreen::Active(active));
                     }
-
-                    model
-                        .widgets
-                        .status_stack
-                        .set_visible_child(&model.widgets.error_label);
+                    Err(err) => model.widgets.error_label.set_text(&format!("{}", err)),
                 }
+
+                model.widgets.status_stack.set_visible_child(&model.widgets.error_label);
             })
             .build_widget_event(),
     );
@@ -130,9 +110,7 @@ async fn register(
     let client = vertex_client::auth::Client::new(app.request_sender());
     let credentials = vertex::UserCredentials::new(username.clone(), password);
 
-    let _ = client
-        .register(credentials.clone(), username.clone())
-        .await?;
+    let _ = client.register(credentials.clone(), username.clone()).await?;
     let (device, token) = client.authenticate(credentials).await?;
 
     Ok(client.login(device, token).await?)

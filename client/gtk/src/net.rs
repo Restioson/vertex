@@ -45,19 +45,14 @@ mod ws {
                 .map_err(Error::Tls)?,
         );
 
-        let stream = connector
-            .connect(&domain, socket)
-            .await
-            .map_err(Error::Tls)?;
+        let stream = connector.connect(&domain, socket).await.map_err(Error::Tls)?;
 
         tokio_tungstenite::client_async(request, stream).await
     }
 }
 
 pub async fn connect(url: Url) -> Result<(Sender, Receiver)> {
-    let (client, _) = ws::connect_async(url)
-        .await
-        .map_err(tungstenite_to_net_error)?;
+    let (client, _) = ws::connect_async(url).await.map_err(tungstenite_to_net_error)?;
 
     let (sink, stream) = client.split();
 
@@ -85,8 +80,7 @@ impl Sender {
 #[async_trait(?Send)]
 impl vertex_client::net::Sender for Sender {
     async fn send(&self, message: vertex::ClientMessage) -> Result<()> {
-        self.send_raw(tungstenite::Message::Binary(message.into()))
-            .await
+        self.send_raw(tungstenite::Message::Binary(message.into())).await
     }
 
     async fn close(&self) -> Result<()> {

@@ -142,11 +142,7 @@ fn setup_gtk_style() {
         .load_from_path("res/style.css")
         .expect("unable to load css");
 
-    gtk::StyleContext::add_provider_for_screen(
-        &screen,
-        &css_provider,
-        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-    );
+    gtk::StyleContext::add_provider_for_screen(&screen, &css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
 }
 
 // TODO: can we get rid of need for this? (do we need to use tokio-tungstenite or can we just use tungstenite?)
@@ -168,12 +164,11 @@ async fn main() {
     let ip = matches
         .value_of("ip")
         .map(|ip| ip.to_string())
-        .unwrap_or_else(|| "localhost:8080".to_string());
+        .unwrap_or("localhost:8080".to_string());
 
     let url = Url::parse(&format!("wss://{}/client/", ip)).unwrap();
 
-    let application =
-        gtk::Application::new(None, Default::default()).expect("failed to create application");
+    let application = gtk::Application::new(None, Default::default()).expect("failed to create application");
 
     setup_gtk_style();
 
