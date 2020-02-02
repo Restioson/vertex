@@ -72,6 +72,7 @@ pub enum ClientRequest {
     },
     CreateInvite {
         community: CommunityId,
+        expiration_date: Option<DateTime<Utc>>,
     },
     JoinCommunity(InviteCode),
     Delete(Delete),

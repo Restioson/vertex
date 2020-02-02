@@ -4,8 +4,8 @@ use std::time::{Duration, Instant};
 use futures::{Stream, TryStreamExt};
 use l337_postgres::PostgresConnectionManager;
 use log::{error, warn};
-use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
+use tokio_postgres::NoTls;
 
 pub use communities::*;
 pub use community_membership::*;
@@ -157,5 +157,35 @@ impl Database {
             })
             .map_err(|e| e.into());
         Ok(stream)
+    }
+
+    pub async fn sweep_invite_codes_loop(self, interval: Duration) {
+        let mut timer = tokio::time::interval(interval);
+
+        loop {
+            timer.tick().await;
+            let begin = Instant::now();
+            self.delete_expired_invite_codes()
+                .await
+                .expect("Database error while sweeping invite codes");
+
+            let time_taken = Instant::now().duration_since(begin);
+            if time_taken > interval {
+                warn!(
+                    "Took {}s to sweep the database for expired invite codes, but the interval is {}s!",
+                    time_taken.as_secs(),
+                    interval.as_secs(),
+                );
+            }
+        }
+    }
+
+    async fn delete_expired_invite_codes(&self) -> DbResult<()> {
+        const STMT: &str = "DELETE FROM invite_codes WHERE expiration_date < NOW()::timestamp";
+
+        let conn = self.pool.connection().await?;
+        let stmt = conn.client.prepare(STMT).await?;
+        conn.client.execute(&stmt, &[]).await?;
+        Ok(())
     }
 }

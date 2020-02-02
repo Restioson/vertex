@@ -12,7 +12,11 @@ pub struct Authenticator {
 }
 
 impl Authenticator {
-    pub async fn authenticate(&self, device: DeviceId, pass: AuthToken) -> AuthResult<(UserId, DeviceId, TokenPermissionFlags)> {
+    pub async fn authenticate(
+        &self,
+        device: DeviceId,
+        pass: AuthToken,
+    ) -> AuthResult<(UserId, DeviceId, TokenPermissionFlags)> {
         let token = match self.global.database.get_token(device).await? {
             Some(token) => token,
             None => return Err(AuthError::InvalidToken),
@@ -30,7 +34,9 @@ impl Authenticator {
             return Err(AuthError::UserBanned);
         } else if user.compromised {
             return Err(AuthError::UserCompromised);
-        } else if (Utc::now() - token.last_used).num_days() > self.global.config.token_stale_days as i64 {
+        } else if (Utc::now() - token.last_used).num_days()
+            > self.global.config.token_stale_days as i64
+        {
             return Err(AuthError::StaleToken);
         }
 
@@ -50,14 +56,14 @@ impl Authenticator {
             return Err(AuthError::InvalidToken);
         }
 
-        if let Err(_) = self.global.database.refresh_token(device).await? {
+        if self.global.database.refresh_token(device).await?.is_err() {
             return Err(AuthError::InvalidToken);
         }
 
         Ok((user, device, permission_flags))
     }
 
-    pub  async fn create_user(
+    pub async fn create_user(
         &self,
         credentials: UserCredentials,
         display_name: String,
@@ -113,29 +119,40 @@ impl Authenticator {
             permission_flags: options.permission_flags,
         };
 
-        if let Err(_) = self.global.database.create_token(db_token).await? {
+        if self.global.database.create_token(db_token).await?.is_err() {
             // The chances of a UUID conflict is so abysmally low that we can only assume that a
             // conflict is due to a programming error
 
             panic!("Newly generated UUID conflicts with another!");
         }
 
-        Ok(CreateTokenResponse { device, token: auth_token })
+        Ok(CreateTokenResponse {
+            device,
+            token: auth_token,
+        })
     }
 
-    pub async fn refresh_token(&self, credentials: UserCredentials, to_refresh: DeviceId) -> AuthResult<()> {
+    pub async fn refresh_token(
+        &self,
+        credentials: UserCredentials,
+        to_refresh: DeviceId,
+    ) -> AuthResult<()> {
         self.verify_credentials(credentials).await?;
         match self.global.database.refresh_token(to_refresh).await? {
             Ok(_) => Ok(()),
-            Err(_) => Err(AuthError::InvalidToken)
+            Err(_) => Err(AuthError::InvalidToken),
         }
     }
 
-    pub async fn revoke_token(&self, credentials: UserCredentials, to_revoke: DeviceId) -> AuthResult<()> {
+    pub async fn revoke_token(
+        &self,
+        credentials: UserCredentials,
+        to_revoke: DeviceId,
+    ) -> AuthResult<()> {
         self.verify_credentials(credentials).await?;
         match self.global.database.revoke_token(to_revoke).await? {
             Ok(_) => Ok(()),
-            Err(_) => Err(AuthError::InvalidToken)
+            Err(_) => Err(AuthError::InvalidToken),
         }
     }
 

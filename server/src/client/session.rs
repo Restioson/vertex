@@ -1,8 +1,8 @@
 use std::ops::{Deref, DerefMut};
 use std::time::Instant;
 
-use futures::{Future, SinkExt};
 use futures::stream::SplitSink;
+use futures::{Future, SinkExt};
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
@@ -10,11 +10,12 @@ use xtra::prelude::*;
 pub use manager::*;
 use vertex::*;
 
-use crate::{auth, handle_disconnected, IdentifiedMessage, SendMessage};
-use crate::community::{COMMUNITIES, CommunityActor, CreateRoom, Join};
+use crate::community::{CommunityActor, CreateRoom, Join, COMMUNITIES};
 use crate::database::*;
+use crate::{auth, handle_disconnected, IdentifiedMessage, SendMessage};
 
 use super::*;
+use chrono::{DateTime, Utc};
 
 mod manager;
 
@@ -160,13 +161,21 @@ impl ActiveSession {
             };
 
             let (user, device, perms) = (self.user, self.device, self.perms);
-            let response = RequestHandler { session: self, ctx, user, device, perms }
-                .handle_request(msg.request).await;
+            let response = RequestHandler {
+                session: self,
+                ctx,
+                user,
+                device,
+                perms,
+            }
+            .handle_request(msg.request)
+            .await;
 
             self.send(ServerMessage::Response {
                 id: msg.id,
                 result: response,
-            }).await?;
+            })
+            .await?;
         } else if message.is_close() {
             ctx.stop();
         } else {
@@ -206,13 +215,22 @@ impl<'a> RequestHandler<'a> {
             ClientRequest::CreateRoom { name, community } => {
                 self.create_room(name, community).await
             }
-            ClientRequest::CreateInvite { community } => self.create_invite(community).await,
+            ClientRequest::CreateInvite {
+                community,
+                expiration_date,
+            } => self.create_invite(community, expiration_date).await,
             _ => unimplemented!(),
         }
     }
 
     async fn verify_password(&mut self, password: String) -> Result<(), ErrResponse> {
-        let user = match self.session.global.database.get_user_by_id(self.user).await? {
+        let user = match self
+            .session
+            .global
+            .database
+            .get_user_by_id(self.user)
+            .await?
+        {
             Some(user) => user,
             None => return Err(ErrResponse::InvalidUser),
         };
@@ -277,7 +295,13 @@ impl<'a> RequestHandler<'a> {
     }
 
     async fn revoke_token(self) -> ResponseResult {
-        if let Err(NonexistentDevice) = self.session.global.database.revoke_token(self.device).await? {
+        if let Err(NonexistentDevice) = self
+            .session
+            .global
+            .database
+            .revoke_token(self.device)
+            .await?
+        {
             return Err(ErrResponse::DeviceDoesNotExist);
         }
 
@@ -291,7 +315,8 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::AccessDenied);
         }
 
-        let new_username = match auth::prepare_username(&new_username, &self.session.global.config) {
+        let new_username = match auth::prepare_username(&new_username, &self.session.global.config)
+        {
             Ok(name) => name,
             Err(auth::TooShort) => return Err(ErrResponse::InvalidUsername),
         };
@@ -320,7 +345,10 @@ impl<'a> RequestHandler<'a> {
         }
 
         let database = &self.session.global.database;
-        match database.change_display_name(self.user, new_display_name).await? {
+        match database
+            .change_display_name(self.user, new_display_name)
+            .await?
+        {
             Ok(()) => Ok(OkResponse::NoData),
             Err(NonexistentUser) => {
                 self.ctx.stop(); // The user did not exist at the time of request
@@ -343,7 +371,9 @@ impl<'a> RequestHandler<'a> {
         let (new_password_hash, hash_version) = auth::hash(new_password).await;
 
         let database = &self.session.global.database;
-        let res = database.change_password(self.user, new_password_hash, hash_version).await?;
+        let res = database
+            .change_password(self.user, new_password_hash, hash_version)
+            .await?;
 
         match res {
             Ok(()) => Ok(OkResponse::NoData),
@@ -446,7 +476,11 @@ impl<'a> RequestHandler<'a> {
         }
     }
 
-    async fn create_invite(self, id: CommunityId) -> ResponseResult {
+    async fn create_invite(
+        self,
+        id: CommunityId,
+        expiration_date: Option<DateTime<Utc>>,
+    ) -> ResponseResult {
         if !self.perms.has_perms(TokenPermissionFlags::CREATE_INVITES) {
             return Err(ErrResponse::AccessDenied);
         }
@@ -456,7 +490,8 @@ impl<'a> RequestHandler<'a> {
         }
 
         if COMMUNITIES.contains_key(&id) {
-            let code = self.session.global.database.create_invite_code(id).await?;
+            let db = &self.session.global.database;
+            let code = db.create_invite_code(id, expiration_date).await?;
 
             Ok(OkResponse::Invite { code })
         } else {

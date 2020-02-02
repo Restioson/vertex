@@ -3,15 +3,15 @@ use std::collections::{BTreeSet, HashMap};
 use dashmap::DashMap;
 use futures::Future;
 use uuid::Uuid;
-use xtra::Disconnected;
 use xtra::prelude::*;
+use xtra::Disconnected;
 
 use lazy_static::lazy_static;
 use vertex::*;
 
-use crate::{handle_disconnected, IdentifiedMessage, SendMessage};
 use crate::client::{self, ActiveSession, Session};
 use crate::database::{AddToCommunityError, CommunityRecord, Database, DbResult};
+use crate::{handle_disconnected, IdentifiedMessage, SendMessage};
 
 lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Address<CommunityActor>> = DashMap::new();
@@ -88,31 +88,28 @@ impl CommunityActor {
             rooms: HashMap::new(), // TODO(room_persistence) load rooms
             online_members: BTreeSet::new(),
         }
-            .spawn();
+        .spawn();
 
         COMMUNITIES.insert(record.id, addr);
     }
 
     fn for_each_online_device_except<F>(&mut self, mut f: F, except: Option<DeviceId>)
-        where
-            F: FnMut(&Address<ActiveSession>) -> Result<(), Disconnected>,
+    where
+        F: FnMut(&Address<ActiveSession>) -> Result<(), Disconnected>,
     {
         for member in self.online_members.iter() {
             for (device, session) in client::session::get_all(*member).iter() {
-                match session {
-                    Session::Active(session) => {
-                        let disconnect = match except {
-                            Some(except) => except != *device,
-                            None => true,
-                        };
+                if let Session::Active(session) = session {
+                    let disconnect = match except {
+                        Some(except) => except != *device,
+                        None => true,
+                    };
 
-                        if disconnect {
-                            if let Err(d) = f(session) {
-                                handle_disconnected("ClientSession")(d);
-                            }
+                    if disconnect {
+                        if let Err(d) = f(session) {
+                            handle_disconnected("ClientSession")(d);
                         }
-                    },
-                    _ => (),
+                    }
                 }
             }
         }

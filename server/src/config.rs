@@ -30,6 +30,8 @@ pub struct Config {
     pub token_stale_days: u16,
     #[serde(default = "token_expiry_days")]
     pub token_expiry_days: u16,
+    #[serde(default = "invite_codes_sweep_interval_secs")]
+    pub invite_codes_sweep_interval_secs: u64,
     #[serde(default = "log_level")]
     pub log_level: String,
 }
@@ -76,6 +78,10 @@ fn token_expiry_days() -> u16 {
 
 fn log_level() -> String {
     "info".to_string()
+}
+
+fn invite_codes_sweep_interval_secs() -> u64 {
+    1800 // 30min
 }
 
 pub fn load_config() -> Config {

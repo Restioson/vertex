@@ -1,25 +1,25 @@
 #![feature(type_alias_impl_trait, generic_associated_types, type_ascription)]
 
-use std::{env, fmt::Debug, fs};
 use std::convert::Infallible;
 use std::fs::OpenOptions;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use std::{env, fmt::Debug, fs};
 
 use directories::ProjectDirs;
 use futures::StreamExt;
 use log::{info, LevelFilter};
 use warp::Filter;
-use xtra::Disconnected;
 use xtra::prelude::*;
+use xtra::Disconnected;
 
 use client::ActiveSession;
 use database::Database;
 use vertex::*;
 
-use crate::client::{Authenticator, session::WebSocketMessage};
+use crate::client::{session::WebSocketMessage, Authenticator};
 use crate::config::Config;
 
 mod auth;
@@ -61,9 +61,9 @@ struct IdentifiedMessage<T: VertexActorMessage> {
 }
 
 impl<T> Message for IdentifiedMessage<T>
-    where
-        T: VertexActorMessage,
-        T::Result: 'static,
+where
+    T: VertexActorMessage,
+    T::Result: 'static,
 {
     type Result = Result<T::Result, ErrResponse>;
 }
@@ -93,7 +93,7 @@ fn setup_logging(config: &Config) {
     let dir = dirs.data_dir().join("logs");
 
     fs::create_dir_all(&dir)
-        .unwrap_or_else(|_| panic!("Error creating log dirs ({})", dir.to_string_lossy(), ));
+        .unwrap_or_else(|_| panic!("Error creating log dirs ({})", dir.to_string_lossy(),));
 
     fern::Dispatch::new()
         .format(|out, message, record| {
@@ -147,6 +147,11 @@ async fn main() {
         config.token_expiry_days,
         Duration::from_secs(config.tokens_sweep_interval_secs),
     ));
+    tokio::spawn(
+        database
+            .clone()
+            .sweep_invite_codes_loop(Duration::from_secs(config.invite_codes_sweep_interval_secs)),
+    );
     let config = Arc::new(config);
 
     let global = Global { database, config };
@@ -156,51 +161,50 @@ async fn main() {
         .and(global.clone())
         .and(warp::query())
         .and(warp::ws())
-        .and_then(|global: Global, authenticate, ws: warp::ws::Ws| async move {
-            let response: Box<dyn warp::Reply> = match self::authenticate(global.clone(), ws, authenticate).await {
-                Ok(response) => Box::new(response),
-                Err(e) => return reply_cbor(Err(e): Result<(), AuthError>),
-            };
-            Ok(response)
-        });
+        .and_then(
+            |global: Global, authenticate, ws: warp::ws::Ws| async move {
+                let response: Box<dyn warp::Reply> =
+                    match self::authenticate(global.clone(), ws, authenticate).await {
+                        Ok(response) => Box::new(response),
+                        Err(e) => return reply_cbor(Err(e): Result<(), AuthError>),
+                    };
+                Ok(response)
+            },
+        );
 
     let register = warp::path("register")
         .and(global.clone())
         .and(warp::post())
         .and(warp::body::bytes())
-        .and_then(|global, bytes| async move {
-            reply_cbor(self::register(global, bytes).await)
-        });
+        .and_then(|global, bytes| async move { reply_cbor(self::register(global, bytes).await) });
 
     let create_token = warp::path("create")
         .and(global.clone())
         .and(warp::post())
         .and(warp::body::bytes())
-        .and_then(|global, bytes| async move {
-            reply_cbor(self::create_token(global, bytes).await)
-        });
+        .and_then(
+            |global, bytes| async move { reply_cbor(self::create_token(global, bytes).await) },
+        );
 
     let revoke_token = warp::path("revoke")
         .and(global.clone())
         .and(warp::post())
         .and(warp::body::bytes())
-        .and_then(|global, bytes| async move {
-            reply_cbor(self::revoke_token(global, bytes).await)
-        });
+        .and_then(
+            |global, bytes| async move { reply_cbor(self::revoke_token(global, bytes).await) },
+        );
 
     let refresh_token = warp::path("refresh")
         .and(global.clone())
         .and(warp::post())
         .and(warp::body::bytes())
-        .and_then(|global, bytes| async move {
-            reply_cbor(self::refresh_token(global, bytes).await)
-        });
+        .and_then(
+            |global, bytes| async move { reply_cbor(self::refresh_token(global, bytes).await) },
+        );
 
-    let token = warp::path("token")
-        .and(create_token.or(revoke_token).or(refresh_token));
+    let token = warp::path("token").and(create_token.or(revoke_token).or(refresh_token));
 
-    let routes = warp::path("client")
-        .and(authenticate.or(register.or(token)));
+    let routes = warp::path("client").and(authenticate.or(register.or(token)));
 
     info!("Vertex server starting on addr {}", addr);
     warp::serve(routes)
@@ -216,10 +220,18 @@ fn reply_cbor<T: serde::Serialize>(value: T) -> Result<Box<dyn warp::Reply>, Inf
     Ok(Box::new(serde_cbor::to_vec(&value).unwrap()))
 }
 
-async fn authenticate(global: Global, ws: warp::ws::Ws, authenticate: AuthenticateRequest) -> Result<impl warp::Reply, AuthError> {
-    let authenticator = Authenticator { global: global.clone() };
+async fn authenticate(
+    global: Global,
+    ws: warp::ws::Ws,
+    authenticate: AuthenticateRequest,
+) -> Result<impl warp::Reply, AuthError> {
+    let authenticator = Authenticator {
+        global: global.clone(),
+    };
 
-    let (user, device, perms) = authenticator.authenticate(authenticate.device, authenticate.token).await?;
+    let (user, device, perms) = authenticator
+        .authenticate(authenticate.device, authenticate.token)
+        .await?;
 
     match client::session::insert(user, device) {
         Ok(_) => {
@@ -244,32 +256,44 @@ async fn authenticate(global: Global, ws: warp::ws::Ws, authenticate: Authentica
 }
 
 async fn register(global: Global, bytes: bytes::Bytes) -> AuthResult<RegisterUserResponse> {
-    let register: RegisterUserRequest = serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
+    let register: RegisterUserRequest =
+        serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
 
     let credentials = register.credentials;
-    let display_name = register.display_name.unwrap_or_else(|| credentials.username.clone());
+    let display_name = register
+        .display_name
+        .unwrap_or_else(|| credentials.username.clone());
 
     let authenticator = Authenticator { global };
     authenticator.create_user(credentials, display_name).await
 }
 
 async fn create_token(global: Global, bytes: bytes::Bytes) -> AuthResult<CreateTokenResponse> {
-    let create_token: CreateTokenRequest = serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
+    let create_token: CreateTokenRequest =
+        serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
 
     let authenticator = Authenticator { global };
-    authenticator.create_token(create_token.credentials, create_token.options).await
+    authenticator
+        .create_token(create_token.credentials, create_token.options)
+        .await
 }
 
 async fn refresh_token(global: Global, bytes: bytes::Bytes) -> AuthResult<()> {
-    let refresh_token: RefreshTokenRequest = serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
+    let refresh_token: RefreshTokenRequest =
+        serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
 
     let authenticator = Authenticator { global };
-    authenticator.refresh_token(refresh_token.credentials, refresh_token.device).await
+    authenticator
+        .refresh_token(refresh_token.credentials, refresh_token.device)
+        .await
 }
 
 async fn revoke_token(global: Global, bytes: bytes::Bytes) -> AuthResult<()> {
-    let revoke_token: RevokeTokenRequest = serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
+    let revoke_token: RevokeTokenRequest =
+        serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
 
     let authenticator = Authenticator { global };
-    authenticator.revoke_token(revoke_token.credentials, revoke_token.device).await
+    authenticator
+        .revoke_token(revoke_token.credentials, revoke_token.device)
+        .await
 }
