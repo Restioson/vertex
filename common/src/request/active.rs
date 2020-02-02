@@ -32,6 +32,7 @@ pub enum ErrResponse {
     InvalidInviteCode,
     InvalidUser,
     AlreadyInCommunity,
+    TooManyInviteCodes
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

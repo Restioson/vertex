@@ -491,9 +491,13 @@ impl<'a> RequestHandler<'a> {
 
         if COMMUNITIES.contains_key(&id) {
             let db = &self.session.global.database;
-            let code = db.create_invite_code(id, expiration_date).await?;
+            let max = self.session.global.config.max_invite_codes_per_community as i64;
+            let res = db.create_invite_code(id, expiration_date, max).await?;
 
-            Ok(OkResponse::Invite { code })
+            match res {
+                Ok(code) => Ok(OkResponse::Invite { code }),
+                Err(_) => Err(ErrResponse::TooManyInviteCodes)
+            }
         } else {
             Err(ErrResponse::InvalidCommunity)
         }

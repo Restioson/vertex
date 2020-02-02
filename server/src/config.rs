@@ -30,6 +30,8 @@ pub struct Config {
     pub token_stale_days: u16,
     #[serde(default = "token_expiry_days")]
     pub token_expiry_days: u16,
+    #[serde(default = "max_invite_codes_per_community")]
+    pub max_invite_codes_per_community: u32,
     #[serde(default = "invite_codes_sweep_interval_secs")]
     pub invite_codes_sweep_interval_secs: u64,
     #[serde(default = "log_level")]
@@ -82,6 +84,10 @@ fn log_level() -> String {
 
 fn invite_codes_sweep_interval_secs() -> u64 {
     1800 // 30min
+}
+
+fn max_invite_codes_per_community() -> u32 {
+    100
 }
 
 pub fn load_config() -> Config {

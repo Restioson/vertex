@@ -14,7 +14,7 @@ futures = "^0.3"
 l337 = { git = "https://github.com/OneSignal/L3-37", rev = "a970fe669787c4caf8ae699870b97ed1d7616f00" }
 l337-postgres = { git = "https://github.com/OneSignal/L3-37", rev = "a970fe669787c4caf8ae699870b97ed1d7616f00" }
 tokio = { version = "^0.2", features = ["full"] }
-tokio-postgres = { version = "^0.5", features = ["with-uuid-0_8", "with-chrono-0_4"] }
+tokio-postgres = { version = "^0.5.2", features = ["with-uuid-0_8", "with-chrono-0_4"] }
 uuid = { version = "0.8", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 rust-argon2 = "^0.5"

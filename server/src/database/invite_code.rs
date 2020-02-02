@@ -4,6 +4,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use chrono::{DateTime, Utc};
 use rand::Rng;
 use tokio_postgres::types::ToSql;
+use tokio_postgres::IsolationLevel;
 
 use vertex::{CommunityId, InviteCode};
 
@@ -11,11 +12,9 @@ use crate::database::{Database, DbResult};
 
 pub(super) const CREATE_INVITE_CODES_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS invite_codes (
-        id BIGINT NOT NULL,
+        id BIGINT PRIMARY KEY,
         community_id UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
-        expiration_date TIMESTAMP WITH TIME ZONE,
-
-        PRIMARY KEY (id)
+        expiration_date TIMESTAMP WITH TIME ZONE
     )";
 
 #[derive(Copy, Clone, Debug)]
@@ -42,33 +41,70 @@ impl Into<String> for InviteCodeRecord {
     }
 }
 
+pub struct TooManyInviteCodes;
+
 impl Database {
     pub async fn create_invite_code(
         &self,
         community: CommunityId,
         expiration_date: Option<DateTime<Utc>>,
-    ) -> DbResult<InviteCode> {
-        const QUERY: &str = "
-            INSERT INTO invite_codes (id, community_id, expiration_date) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING
+        max_per_community: i64,
+    ) -> DbResult<Result<InviteCode, TooManyInviteCodes>> {
+        // From https://stackoverflow.com/a/26448803/4871468
+        const INSERT: &str = "
+            INSERT INTO invite_codes (id, community_id, expiration_date)
+            SELECT
+              $1 AS id,
+              $2 AS community_id,
+              $3 AS expiration_date
+            FROM
+              invite_codes
+            WHERE community_id = $2
+            HAVING
+              COUNT(*) < $4
+            ON CONFLICT DO NOTHING;
         ";
+        const COUNT: &str = "SELECT COUNT(*) FROM invite_codes WHERE community_id = $1;";
 
-        let conn = self.pool.connection().await?;
-        let query = conn.client.prepare(QUERY).await?;
+        let mut conn = self.pool.connection().await?;
 
         let id = loop {
             let id = rand::thread_rng().gen::<i64>();
-            let args: &[&(dyn ToSql + Sync)] = &[&id, &community.0, &expiration_date];
+            let args: &[&(dyn ToSql + Sync)] = &[
+                &id,
+                &community.0,
+                &expiration_date,
+                &max_per_community
+            ];
 
-            let rows_inserted = conn.client.execute(&query, args).await.unwrap();
+            let builder = conn.client.build_transaction();
+            let insert_transaction = builder
+                .isolation_level(IsolationLevel::Serializable) // Needed for our query but doesn't
+                                                               // lock too much
+                .start()
+                .await?;
+            let insert_stmt = insert_transaction.prepare(INSERT).await?;
 
-            // if we successfully inserted the id, it must be unique: return it
-            if rows_inserted == 1 {
-                break id;
+            let ret = insert_transaction.execute(&insert_stmt, args).await?;
+            insert_transaction.commit().await?;
+
+            // If 1 row modified, then it was successful
+            if ret == 1 {
+                break id; // If we successfully inserted the id, it must be unique: return it
+            } else { // Something went wrong...
+                // Note: we can spuriously fail here, but spurious failure is okay in the grand
+                // scheme of things. It's far better than spurious success...
+                let row = conn.client.query_opt(COUNT, &[&community.0]).await?.unwrap();
+                let count: i64 = row.try_get(0)?;
+
+                if count >= max_per_community { // Failed because of many invite codes
+                    return Ok(Err(TooManyInviteCodes));
+                } // ... or else it failed because of conflicting ID
             }
         };
 
         let record = InviteCodeRecord { id, expiration_date };
-        Ok(InviteCode(record.into()))
+        Ok(Ok(InviteCode(record.into())))
     }
 
     pub async fn get_community_from_invite_code(
