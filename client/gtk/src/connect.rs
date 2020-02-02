@@ -1,16 +1,28 @@
-use super::*;
+use std::pin::Pin;
 
-pub struct Connector<Model, Args: Clone> {
-    screen: Screen<Model>,
-    do_async: Vec<Box<dyn Fn(Screen<Model>, Args) -> Pin<Box<dyn Future<Output = ()>>>>>,
-    do_sync: Vec<Box<dyn Fn(Screen<Model>, Args)>>,
+use futures::Future;
+
+pub trait AsConnector: Clone {
+    fn connector<Args: Clone>(&self) -> Connector<Self, Args>;
+}
+
+impl<T: Clone> AsConnector for T {
+    fn connector<Args: Clone>(&self) -> Connector<Self, Args> {
+        Connector::new(self.clone())
+    }
+}
+
+pub struct Connector<Shared: Clone, Args: Clone> {
+    shared: Shared,
+    do_async: Vec<Box<dyn Fn(Shared, Args) -> Pin<Box<dyn Future<Output = ()>>>>>,
+    do_sync: Vec<Box<dyn Fn(Shared, Args)>>,
     inhibit: bool,
 }
 
-impl<Model, Args: Clone> Connector<Model, Args> {
-    pub fn new(screen: Screen<Model>) -> Self {
+impl<Shared: Clone, Args: Clone> Connector<Shared, Args> {
+    pub fn new(shared: Shared) -> Self {
         Connector {
-            screen,
+            shared,
             do_async: Vec::new(),
             do_sync: Vec::new(),
             inhibit: false,
@@ -19,11 +31,11 @@ impl<Model, Args: Clone> Connector<Model, Args> {
 
     #[inline]
     pub fn do_async<F, Fut>(mut self, f: F) -> Self
-        where F: Fn(Screen<Model>, Args) -> Fut + 'static,
+        where F: Fn(Shared, Args) -> Fut + 'static,
               Fut: Future<Output = ()> + 'static,
     {
-        self.do_async.push(Box::new(move |screen, args| {
-            let future = f(screen, args);
+        self.do_async.push(Box::new(move |shared, args| {
+            let future = f(shared, args);
             Box::pin(future)
         }));
         self
@@ -31,7 +43,7 @@ impl<Model, Args: Clone> Connector<Model, Args> {
 
     #[inline]
     pub fn do_sync<F>(mut self, f: F) -> Self
-        where F: Fn(Screen<Model>, Args) + 'static
+        where F: Fn(Shared, Args) + 'static
     {
         self.do_sync.push(Box::new(f));
         self
@@ -46,7 +58,7 @@ impl<Model, Args: Clone> Connector<Model, Args> {
     #[inline]
     fn execute_sync(&self, args: &Args) {
         for do_sync in &self.do_sync {
-            do_sync(self.screen.clone(), args.clone());
+            do_sync(self.shared.clone(), args.clone());
         }
     }
 
@@ -56,7 +68,7 @@ impl<Model, Args: Clone> Connector<Model, Args> {
 
         let context = glib::MainContext::ref_thread_default();
         for do_async in &self.do_async {
-            let future = do_async(self.screen.clone(), args.clone());
+            let future = do_async(self.shared.clone(), args.clone());
             context.spawn_local(future);
         }
     }
@@ -74,14 +86,14 @@ impl<Model, Args: Clone> Connector<Model, Args> {
     }
 }
 
-impl<Model, Arg: Clone> Connector<Model, Arg> {
+impl<Shared: Clone, Arg: Clone> Connector<Shared, Arg> {
     #[inline]
     pub fn build_cloned_consumer(self) -> impl Fn(&Arg) {
         move |arg| { self.execute(arg.clone()); }
     }
 }
 
-impl<Model, Widget: Clone, Event: Clone> Connector<Model, (Widget, Event)> {
+impl<Shared: Clone, Widget: Clone, Event: Clone> Connector<Shared, (Widget, Event)> {
     #[inline]
     pub fn build_widget_event(self) -> impl Fn(&Widget, &Event) -> gtk::Inhibit {
         move |widget, event| {
@@ -90,7 +102,7 @@ impl<Model, Widget: Clone, Event: Clone> Connector<Model, (Widget, Event)> {
     }
 }
 
-impl<Model, Widget: Clone, Opt: Clone> Connector<Model, (Widget, Option<Opt>)> {
+impl<Shared: Clone, Widget: Clone, Opt: Clone> Connector<Shared, (Widget, Option<Opt>)> {
     #[inline]
     pub fn build_widget_and_option_consumer(self) -> impl Fn(&Widget, Option<&Opt>) {
         move |widget, opt| {

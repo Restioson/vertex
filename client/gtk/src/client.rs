@@ -1,133 +1,178 @@
-use futures::Stream;
+use std::rc::Rc;
 
+use futures::{Stream, StreamExt};
+
+pub use community::*;
+pub use room::*;
+pub use user::*;
 use vertex::*;
 
-use crate::net;
+use crate::{net, UiShared};
+
+mod community;
+mod room;
+mod user;
 
 pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
 
-pub struct Client {
-    sender: net::RequestSender,
-    device: DeviceId,
-    token: AuthToken,
+pub trait ClientUi: Sized {
+    type CommunityEntryWidget: CommunityEntryWidget<Self>;
+    type RoomEntryWidget: RoomEntryWidget<Self>;
+
+    fn add_community(&self, name: String) -> Self::CommunityEntryWidget;
 }
 
-impl Client {
-    pub fn new(ws: net::AuthenticatedWs) -> (Client, impl Stream<Item = net::Result<ServerAction>>) {
+pub struct Client<Ui: ClientUi> {
+    pub ui: Ui,
+    net: Rc<net::RequestSender>,
+    close: Option<futures::channel::oneshot::Sender<()>>,
+
+    pub user: User,
+
+    pub communities: Vec<UiShared<CommunityEntry<Ui>>>,
+    selected_community: Option<usize>,
+}
+
+impl<Ui: ClientUi> Client<Ui> {
+    pub fn spawn(ws: net::AuthenticatedWs, ui: Ui) -> UiShared<Client<Ui>> {
         let (sender, receiver) = net::from_ws(ws.stream);
 
         let req_manager = net::RequestManager::new();
 
         let req_sender = req_manager.sender(sender);
+        let req_sender = Rc::new(req_sender);
+
         let req_receiver = req_manager.receive_from(receiver);
 
-        (
-            Client {
-                sender: req_sender,
-                device: ws.device,
-                token: ws.token,
-            },
-            req_receiver,
-        )
-    }
+        let (close_send, close_recv) = futures::channel::oneshot::channel();
 
-    pub async fn keep_alive_loop(&self) {
-        let mut ticker = tokio::time::interval(HEARTBEAT_INTERVAL);
-        loop {
-            if let Err(_) = self.sender.net().ping().await {
-                break;
-            }
-            ticker.tick().await;
-        }
-    }
+        let ctx = glib::MainContext::ref_thread_default();
+        ctx.spawn_local(ClientLoop {
+            send: req_sender.clone(),
+            stream: req_receiver,
+            close: close_recv,
+        }.run());
 
-    pub async fn change_username(&self, new_username: String) -> Result<()> {
-        let request = ClientRequest::ChangeUsername { new_username };
-        let request = self.sender.request(request).await?;
-        request.response().await?;
+        let client = Client {
+            ui,
+            net: req_sender.clone(),
+            close: Some(close_send),
 
-        Ok(())
-    }
+            user: User::new(
+                req_sender.clone(),
+                // TODO
+                "You".to_string(),
+                "You".to_string(),
+                ws.device,
+                ws.token,
+            ),
 
-    pub async fn change_display_name(&self, new_display_name: String) -> Result<()> {
-        let request = ClientRequest::ChangeDisplayName { new_display_name };
-        let request = self.sender.request(request).await?;
-        request.response().await?;
-
-        Ok(())
-    }
-
-    pub async fn change_password(&self, old_password: String, new_password: String) -> Result<()> {
-        let request = ClientRequest::ChangePassword {
-            old_password,
-            new_password,
+            communities: vec![], // TODO
+            selected_community: None,
         };
-        let request = self.sender.request(request).await?;
-        request.response().await?;
 
-        Ok(())
+        UiShared::new(client)
     }
 
-    pub async fn revoke_token(&self) -> Result<()> {
-        let request = self.sender.request(ClientRequest::RevokeToken).await?;
-        request.response().await?;
-        Ok(())
-    }
-
-    pub async fn create_room(&self, name: String, community: CommunityId) -> Result<RoomId> {
-        let request = ClientRequest::CreateRoom { name, community };
-        let request = self.sender.request(request).await?;
-        let response = request.response().await?;
-
-        match response {
-            OkResponse::Room { id } => Ok(id),
-            _ => Err(Error::UnexpectedResponse),
-        }
-    }
-
-    pub async fn send_message(
-        &self,
-        content: String,
-        to_community: CommunityId,
-        to_room: RoomId,
-    ) -> Result<()> {
-        let request = ClientRequest::SendMessage(ClientSentMessage {
-            to_community,
-            to_room,
-            content,
-        });
-        let request = self.sender.request(request).await?;
-        request.response().await?;
-
-        Ok(())
-    }
-
-    pub async fn create_community(&self, name: String) -> Result<CommunityId> {
-        let request = ClientRequest::CreateCommunity { name };
-        let request = self.sender.request(request).await?;
+    pub async fn create_community(&mut self, name: &str) -> Result<&UiShared<CommunityEntry<Ui>>> {
+        let request = ClientRequest::CreateCommunity { name: name.to_owned() };
+        let request = self.net.request(request).await?;
 
         match request.response().await? {
-            OkResponse::Community { id } => Ok(id),
+            OkResponse::AddCommunity { community } => Ok(self.add_community(community)),
             _ => Err(Error::UnexpectedResponse),
         }
     }
 
-    pub async fn join_community(&self, invite: InviteCode) -> Result<()> {
+    pub async fn join_community(&mut self, invite: InviteCode) -> Result<&UiShared<CommunityEntry<Ui>>> {
         let request = ClientRequest::JoinCommunity(invite);
-        let request = self.sender.request(request).await?;
-        request.response().await?;
-
-        Ok(())
-    }
-
-    pub async fn create_invite(&self, community: CommunityId) -> Result<InviteCode> {
-        let request = ClientRequest::CreateInvite { community, expiration_date: None };
-        let request = self.sender.request(request).await?;
+        let request = self.net.request(request).await?;
 
         match request.response().await? {
-            OkResponse::Invite { code } => Ok(code),
+            OkResponse::AddCommunity { community } => Ok(self.add_community(community)),
             _ => Err(Error::UnexpectedResponse),
         }
+    }
+
+    fn add_community(&mut self, community: CommunityStructure) -> &UiShared<CommunityEntry<Ui>> {
+        let widget = self.ui.add_community(community.name.clone());
+
+        let entry: UiShared<CommunityEntry<Ui>> = CommunityEntry::new(
+            self.net.clone(),
+            widget,
+            community.id,
+            community.name,
+        );
+
+        &entry.borrow().widget.bind_events(&entry);
+
+        for room in community.rooms {
+            entry.borrow_mut().add_room(room);
+        }
+
+        self.communities.push(entry);
+        self.communities.last().unwrap()
+    }
+
+    pub fn select_community(&mut self, index: Option<usize>) {
+        self.selected_community = index;
+    }
+
+    pub fn selected_community(&self) -> Option<&UiShared<CommunityEntry<Ui>>> {
+        self.selected_community.and_then(move |idx| self.communities.get(idx))
+    }
+
+    pub async fn log_out(&self) -> Result<()> {
+        let request = self.net.request(ClientRequest::LogOut).await?;
+        request.response().await?;
+        Ok(())
+    }
+}
+
+impl<Ui: ClientUi> Drop for Client<Ui> {
+    fn drop(&mut self) {
+        // make sure the client loop stops. we don't care if it's already stopped
+        if let Some(close) = self.close.take() {
+            let _ = close.send(());
+        }
+    }
+}
+
+struct ClientLoop<S> {
+    send: Rc<net::RequestSender>,
+    stream: S,
+    close: futures::channel::oneshot::Receiver<()>,
+}
+
+impl<S> ClientLoop<S>
+    where S: Stream<Item = net::Result<ServerAction>> + Unpin
+{
+    async fn run(self) {
+        let ClientLoop { send, stream, close } = self;
+
+        let receiver = Box::pin(async move {
+            let mut stream = stream;
+            while let Some(result) = stream.next().await {
+                // TODO
+                println!("{:?}", result);
+            }
+        });
+
+        let keep_alive = Box::pin(async move {
+            let mut ticker = tokio::time::interval(HEARTBEAT_INTERVAL);
+            loop {
+                if let Err(_) = send.net().ping().await {
+                    break;
+                }
+                ticker.tick().await;
+            }
+        });
+
+        // run until either the client is closed or the loop exits
+        futures::future::select(
+            close,
+            futures::future::join(receiver, keep_alive),
+        ).await;
     }
 }
 

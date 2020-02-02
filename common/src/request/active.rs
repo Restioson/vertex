@@ -2,11 +2,11 @@ use crate::*;
 
 pub type ResponseResult = Result<OkResponse, ErrResponse>;
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OkResponse {
     NoData,
-    Room { id: RoomId },
-    Community { id: CommunityId },
+    AddCommunity { community: CommunityStructure },
+    AddRoom { community: CommunityId, room: RoomStructure },
     MessageId { id: MessageId },
     User { id: UserId },
     Token { device: DeviceId, token: AuthToken },
@@ -61,7 +61,7 @@ impl Into<Vec<u8>> for ClientMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientRequest {
-    RevokeToken,
+    LogOut,
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
     CreateCommunity {

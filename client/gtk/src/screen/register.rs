@@ -1,12 +1,14 @@
 use std::fmt;
-use std::rc::Rc;
 
 use gtk::prelude::*;
 
-use crate::auth;
-use crate::screen::{self, Screen, TryGetText};
+use crate::{auth, local_server, token_store, TryGetText, window};
+use crate::connect::AsConnector;
+use crate::screen;
+use crate::UiShared;
 
-pub struct Widgets {
+pub struct Model {
+    pub main: gtk::Viewport,
     username_entry: gtk::Entry,
     password_entry_1: gtk::Entry,
     password_entry_2: gtk::Entry,
@@ -17,45 +19,35 @@ pub struct Widgets {
     spinner: gtk::Spinner,
 }
 
-pub struct Model {
-    app: Rc<crate::App>,
-    widgets: Widgets,
-}
-
-pub fn build(app: Rc<crate::App>) -> Screen<Model> {
+pub fn build() -> UiShared<Model> {
     let builder = gtk::Builder::new_from_file("res/glade/register/register.glade");
 
-    let viewport: gtk::Viewport = builder.get_object("viewport").unwrap();
-
     let model = Model {
-        app: app.clone(),
-        widgets: Widgets {
-            username_entry: builder.get_object("username_entry").unwrap(),
-            password_entry_1: builder.get_object("password_entry_1").unwrap(),
-            password_entry_2: builder.get_object("password_entry_2").unwrap(),
-            register_button: builder.get_object("register_button").unwrap(),
-            login_button: builder.get_object("login_button").unwrap(),
-            status_stack: builder.get_object("status_stack").unwrap(),
-            error_label: builder.get_object("error_label").unwrap(),
-            spinner: builder.get_object("spinner").unwrap(),
-        },
+        main: builder.get_object("viewport").unwrap(),
+        username_entry: builder.get_object("username_entry").unwrap(),
+        password_entry_1: builder.get_object("password_entry_1").unwrap(),
+        password_entry_2: builder.get_object("password_entry_2").unwrap(),
+        register_button: builder.get_object("register_button").unwrap(),
+        login_button: builder.get_object("login_button").unwrap(),
+        status_stack: builder.get_object("status_stack").unwrap(),
+        error_label: builder.get_object("error_label").unwrap(),
+        spinner: builder.get_object("spinner").unwrap(),
     };
 
-    let screen = Screen::new(viewport, model);
+    let screen = UiShared::new(model);
     bind_events(&screen);
 
     screen
 }
 
-fn bind_events(screen: &Screen<Model>) {
-    let model = screen.model();
-    let widgets = &model.widgets;
+fn bind_events(screen: &UiShared<Model>) {
+    let widgets = screen.borrow();
 
     widgets.login_button.connect_button_press_event(
         screen.connector()
             .do_sync(|screen, (_button, _event)| {
-                let app = &screen.model().app;
-                app.set_screen(screen::login::build(app.clone()));
+                let screen = screen::login::build();
+                window::set_screen(&screen.borrow().main);
             })
             .build_widget_event()
     );
@@ -63,31 +55,30 @@ fn bind_events(screen: &Screen<Model>) {
     widgets.register_button.connect_button_press_event(
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
-                let model = screen.model();
+                let widgets = screen.borrow();
 
-                let username = model.widgets.username_entry.try_get_text().unwrap_or_default();
-                let password_1 = model.widgets.password_entry_1.try_get_text().unwrap_or_default();
-                let password_2 = model.widgets.password_entry_2.try_get_text().unwrap_or_default();
+                let username = widgets.username_entry.try_get_text().unwrap_or_default();
+                let password_1 = widgets.password_entry_1.try_get_text().unwrap_or_default();
+                let password_2 = widgets.password_entry_2.try_get_text().unwrap_or_default();
 
-                model.widgets.status_stack.set_visible_child(&model.widgets.spinner);
-                model.widgets.error_label.set_text("");
+                widgets.status_stack.set_visible_child(&widgets.spinner);
+                widgets.error_label.set_text("");
 
-                match register(&screen.model().app, username, password_1, password_2).await {
+                match register(username, password_1, password_2).await {
                     Ok(ws) => {
-                        let app = &screen.model().app;
-                        app.set_screen(screen::active::build(app.clone(), ws));
+                        let screen = screen::active::build(ws);
+                        window::set_screen(&screen.borrow().ui.main);
                     }
-                    Err(err) => model.widgets.error_label.set_text(&format!("{}", err)),
+                    Err(err) => widgets.error_label.set_text(&format!("{}", err)),
                 }
 
-                model.widgets.status_stack.set_visible_child(&model.widgets.error_label);
+                widgets.status_stack.set_visible_child(&widgets.error_label);
             })
             .build_widget_event()
     );
 }
 
 async fn register(
-    app: &crate::App,
     username: String,
     password_1: String,
     password_2: String,
@@ -99,7 +90,8 @@ async fn register(
     let password = password_1;
     let credentials = vertex::UserCredentials::new(username, password);
 
-    let auth = auth::Client::new(app.server());
+    let server = local_server();
+    let auth = auth::Client::new(server.clone());
 
     let _ = auth.register(credentials.clone(), None).await?;
 
@@ -108,7 +100,7 @@ async fn register(
         vertex::TokenCreationOptions::default(),
     ).await?;
 
-    app.token_store.store_token(token.device, token.token.clone());
+    token_store::store_token(server, token.device, token.token.clone());
 
     Ok(auth.authenticate(token.device, token.token).await?)
 }

@@ -201,7 +201,7 @@ impl<'a> RequestHandler<'a> {
             ClientRequest::EditMessage(edit) => self.edit_message(edit).await,
             ClientRequest::JoinCommunity(code) => self.join_community(code).await,
             ClientRequest::CreateCommunity { name } => self.create_community(name).await,
-            ClientRequest::RevokeToken => self.revoke_token().await,
+            ClientRequest::LogOut => self.log_out().await,
             ClientRequest::ChangeUsername { new_username } => {
                 self.change_username(new_username).await
             }
@@ -294,7 +294,7 @@ impl<'a> RequestHandler<'a> {
         }
     }
 
-    async fn revoke_token(self) -> ResponseResult {
+    async fn log_out(self) -> ResponseResult {
         if let Err(NonexistentDevice) = self
             .session
             .global
@@ -394,9 +394,8 @@ impl<'a> RequestHandler<'a> {
 
         let id = self.session.global.database.create_community(name).await?;
         CommunityActor::create_and_spawn(id, self.session.global.database.clone(), self.user);
-        self.join_community_by_id(id).await?;
 
-        Ok(OkResponse::Community { id })
+        self.join_community_by_id(id).await
     }
 
     async fn join_community(self, code: InviteCode) -> ResponseResult {
@@ -418,6 +417,8 @@ impl<'a> RequestHandler<'a> {
     }
 
     async fn join_community_by_id(self, id: CommunityId) -> ResponseResult {
+        // TODO: needs to send ServerAction::AddCommunity to other devices
+
         if let Some(community) = COMMUNITIES.get(&id) {
             let join = Join {
                 user: self.user,
@@ -430,10 +431,13 @@ impl<'a> RequestHandler<'a> {
                 .await
                 .map_err(handle_disconnected("Community"))??;
 
+            // TODO
+            let community_structure = CommunityStructure { id, name: "".to_owned(), rooms: vec![] };
+
             match res {
                 Ok(()) => {
                     self.session.communities.push(id);
-                    Ok(OkResponse::NoData)
+                    Ok(OkResponse::AddCommunity { community: community_structure })
                 }
                 Err(AddToCommunityError::AlreadyInCommunity) => {
                     Err(ErrResponse::AlreadyInCommunity)
@@ -446,16 +450,16 @@ impl<'a> RequestHandler<'a> {
         }
     }
 
-    async fn create_room(self, name: String, id: CommunityId) -> ResponseResult {
+    async fn create_room(self, name: String, community: CommunityId) -> ResponseResult {
         if !self.perms.has_perms(TokenPermissionFlags::CREATE_ROOMS) {
             return Err(ErrResponse::AccessDenied);
         }
 
-        if !self.session.communities.contains(&id) {
+        if !self.session.communities.contains(&community) {
             return Err(ErrResponse::InvalidCommunity);
         }
 
-        if let Some(community) = COMMUNITIES.get(&id) {
+        if let Some(community) = COMMUNITIES.get(&community) {
             let create = CreateRoom {
                 creator: self.device,
                 name: name.clone(),
@@ -470,7 +474,8 @@ impl<'a> RequestHandler<'a> {
                 .await
                 .unwrap();
 
-            Ok(OkResponse::Room { id })
+            let room = RoomStructure { id, name: "".to_string() };
+            Ok(OkResponse::AddRoom { community: *community.key(), room })
         } else {
             Err(ErrResponse::InvalidCommunity)
         }

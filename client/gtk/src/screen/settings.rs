@@ -1,47 +1,35 @@
-use std::rc::Rc;
-
 use gtk::prelude::*;
 
-use crate::screen::{self, Screen};
+use crate::{Client, token_store, UiShared, window};
+use crate::connect::AsConnector;
+use crate::screen;
 
-pub struct Widgets {
+pub struct Model {
+    pub main: gtk::Viewport,
+    client: UiShared<Client<screen::active::Ui>>,
     category_list: gtk::ListBox,
     settings_viewport: gtk::Viewport,
 }
 
-pub struct Model {
-    parent_screen: Screen<screen::active::Model>,
-    app: Rc<crate::App>,
-    client: Rc<crate::Client>,
-    widgets: Widgets,
-}
-
-pub fn build(parent_screen: Screen<screen::active::Model>, app: Rc<crate::App>, client: Rc<crate::Client>) -> Screen<Model> {
+pub fn build(client: UiShared<Client<screen::active::Ui>>) -> UiShared<Model> {
     let builder = gtk::Builder::new_from_file("res/glade/settings/settings.glade");
 
-    let viewport: gtk::Viewport = builder.get_object("viewport").unwrap();
-
-    let model = Model {
-        parent_screen,
-        app,
+    let screen = UiShared::new(Model {
+        main: builder.get_object("viewport").unwrap(),
         client,
-        widgets: Widgets {
-            category_list: builder.get_object("category_list").unwrap(),
-            settings_viewport: builder.get_object("settings_viewport").unwrap(),
-        },
-    };
+        category_list: builder.get_object("category_list").unwrap(),
+        settings_viewport: builder.get_object("settings_viewport").unwrap(),
+    });
 
-    let screen = Screen::new(viewport, model);
     bind_events(&screen);
 
     screen
 }
 
-fn bind_events(screen: &Screen<Model>) {
-    let model = screen.model();
-    let widgets = &model.widgets;
+fn bind_events(screen: &UiShared<Model>) {
+    let model = screen.borrow();
 
-    widgets.category_list.connect_row_selected(
+    model.category_list.connect_row_selected(
         screen.connector()
             .do_async(|screen, (_list, row)| async move {
                 if let Some(row) = row {
@@ -50,17 +38,18 @@ fn bind_events(screen: &Screen<Model>) {
                         .map(|s| s.as_str().to_owned())
                         .unwrap_or_default();
 
-                    let model = screen.model();
+                    let model = screen.borrow();
 
                     match name.as_str() {
                         "log_out" => {
-                            model.app.token_store.forget_token();
-                            model.client.revoke_token().await.expect("failed to revoke token");
+                            token_store::forget_token();
+                            model.client.borrow_mut().log_out().await.expect("failed to revoke token");
 
-                            model.app.set_screen(screen::login::build(model.app.clone()));
+                            let screen = screen::login::build();
+                            window::set_screen(&screen.borrow().main);
                         }
                         "close" => {
-                            model.app.set_screen(model.parent_screen.clone());
+                            window::set_screen(&model.client.borrow().ui.main);
                         }
                         _ => ()
                     }

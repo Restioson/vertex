@@ -153,6 +153,19 @@ impl Default for TokenPermissionFlags {
     fn default() -> Self { TokenPermissionFlags::ALL }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityStructure {
+    pub id: CommunityId,
+    pub name: String,
+    pub rooms: Vec<RoomStructure>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomStructure {
+    pub id: RoomId,
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum RemoveCommunityReason {
     /// The community was deleted

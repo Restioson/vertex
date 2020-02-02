@@ -298,41 +298,41 @@ spinner:checked {
   background: shade(@upper_bar_bg_color, 1.2);
 }
 
-#active #add_community {
+#add_community {
   min-width: 180px;
   min-height: 100px;
 }
 
-#active #add_community #title {
+#add_community #title {
   font-size: 16px;
 }
 
-#active #add_community button {
+#add_community button {
   min-width: 80px;
   min-height: 40px;
   margin: 10px;
 }
 
-#active #create_community, #active #join_community, #active #invite_community {
+#create_community, #join_community, #invite_community {
   min-width: 180px;
   min-height: 100px;
 }
 
-#active #create_community #title, #active #join_community #title, #active #invite_community #title {
+#create_community #title, #join_community #title, #invite_community #title {
   font-size: 16px;
 }
 
-#active #create_community button, #active #create_community entry {
+#create_community button, #create_community entry {
   padding: 8px;
   margin: 4px;
 }
 
-#active #join_community button, #active #join_community entry {
+#join_community button, #join_community entry {
   padding: 8px;
   margin: 4px;
 }
 
-#active #invite_community textview {
+#invite_community textview {
   background: @widget_bg_color;
   padding: 8px;
   border-radius: 8px;
