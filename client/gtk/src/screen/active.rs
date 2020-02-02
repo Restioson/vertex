@@ -11,14 +11,6 @@ use vertex::{CommunityId, InviteCode};
 use crate::{auth, net};
 use crate::screen::{self, Screen, TryGetText};
 
-const SCREEN_SRC: &str = include_str!("glade/active/active.glade");
-
-const ADD_COMMUNITY_SRC: &str = include_str!("glade/active/add_community.glade");
-const CREATE_COMMUNITY_SRC: &str = include_str!("glade/active/create_community.glade");
-const JOIN_COMMUNITY_SRC: &str = include_str!("glade/active/join_community.glade");
-
-const INVITE_COMMUNITY_SRC: &str = include_str!("glade/active/invite_community.glade");
-
 pub struct Widgets {
     main: gtk::Overlay,
     communities: gtk::ListBox,
@@ -103,89 +95,42 @@ impl<Author: fmt::Display> MessageWidget<Author> {
 }
 
 fn push_community(screen: Screen<Model>, community: CommunityId, name: &str, rooms: &[&str]) {
-    let community_header = gtk::BoxBuilder::new()
-        .name("community_header")
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(8)
-        .build();
+    let builder = gtk::Builder::new_from_file("res/glade/active/community_entry.glade");
 
-    community_header.add(&gtk::FrameBuilder::new()
-        .name("community_icon")
-        .build()
-    );
+    let community_expander: gtk::Expander = builder.get_object("community_expander").unwrap();
 
-    let community_description = gtk::BoxBuilder::new()
-        .name("community_description")
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(2)
-        .build();
+    let community_name: gtk::Label = builder.get_object("community_name").unwrap();
+    let community_motd: gtk::Label = builder.get_object("community_motd").unwrap();
 
-    community_description.add(&gtk::LabelBuilder::new()
-        .name("community_name")
-        .label(name)
-        .halign(gtk::Align::Start)
-        .build()
-    );
+    let settings_button: gtk::Button = builder.get_object("settings_button").unwrap();
+    let invite_button: gtk::Button = builder.get_object("invite_button").unwrap();
 
-    community_description.add(&gtk::LabelBuilder::new()
-        .name("community_motd")
-        .label("Message of the day!")
-        .halign(gtk::Align::Start)
-        .build()
-    );
+    let room_list: gtk::ListBox = builder.get_object("room_list").unwrap();
 
-    community_header.add(&community_description);
+    community_name.set_text(name);
+    community_name.set_text("5 users online");
 
-    let expander = gtk::ExpanderBuilder::new()
-        .name("community_expander")
-        .label_widget(&community_header)
-        .build();
+    let settings_image = settings_button.get_child()
+        .and_then(|img| img.downcast::<gtk::Image>().ok())
+        .unwrap();
 
-    let community_content = gtk::BoxBuilder::new()
-        .name("community_content")
-        .orientation(gtk::Orientation::Vertical)
-        .build();
+    settings_image.set_from_pixbuf(Some(
+        &gdk_pixbuf::Pixbuf::new_from_file_at_size(
+            "res/feather/settings.svg",
+            20, 20,
+        ).unwrap()
+    ));
 
-    let community_widgets = gtk::BoxBuilder::new()
-        .name("community_widgets")
-        .orientation(gtk::Orientation::Horizontal)
-        .build();
+    let invite_image = invite_button.get_child()
+        .and_then(|img| img.downcast::<gtk::Image>().ok())
+        .unwrap();
 
-    let settings_button = gtk::ButtonBuilder::new()
-        .name("settings_button")
-        .image(&gtk::ImageBuilder::new()
-            .pixbuf(&gdk_pixbuf::Pixbuf::new_from_file_at_size(
-                "res/feather/settings.svg",
-                20, 20,
-            ).unwrap())
-            .build()
-        )
-        .relief(gtk::ReliefStyle::None)
-        .build();
-
-    community_widgets.add(&settings_button);
-    community_widgets.set_child_packing(&settings_button, false, false, 0, gtk::PackType::End);
-
-    community_content.add(&community_widgets);
-
-    let invite_button = gtk::ButtonBuilder::new()
-        .name("invite_button")
-        .image(&gtk::ImageBuilder::new()
-            .pixbuf(&gdk_pixbuf::Pixbuf::new_from_file_at_size(
-                "res/feather/user-plus.svg",
-                20, 20,
-            ).unwrap())
-            .build()
-        )
-        .relief(gtk::ReliefStyle::None)
-        .build();
-
-    community_widgets.add(&invite_button);
-    community_widgets.set_child_packing(&invite_button, false, false, 0, gtk::PackType::End);
-
-    let rooms_list = gtk::ListBoxBuilder::new()
-        .name("room_list")
-        .build();
+    invite_image.set_from_pixbuf(Some(
+        &gdk_pixbuf::Pixbuf::new_from_file_at_size(
+            "res/feather/user-plus.svg",
+            20, 20,
+        ).unwrap()
+    ));
 
     for &room in rooms {
         let room_label = gtk::LabelBuilder::new()
@@ -193,18 +138,14 @@ fn push_community(screen: Screen<Model>, community: CommunityId, name: &str, roo
             .label(room)
             .halign(gtk::Align::Start)
             .build();
-        rooms_list.add(&room_label);
+        room_list.add(&room_label);
     }
 
-    rooms_list.select_row(rooms_list.get_row_at_index(0).as_ref());
+    room_list.select_row(room_list.get_row_at_index(0).as_ref());
 
-    screen.model_mut().selected_community_widget = Some((expander.clone(), 0)); // TODO@gegy1000 testing porpoises
+    screen.model_mut().selected_community_widget = Some((community_expander.clone(), 0)); // TODO@gegy1000 testing porpoises
 
-    community_content.add(&rooms_list);
-
-    expander.add(&community_content);
-
-    expander.connect_property_expanded_notify(
+    community_expander.connect_property_expanded_notify(
         screen.connector()
             .do_sync(|screen, expander: gtk::Expander| {
                 if expander.get_expanded() {
@@ -228,7 +169,7 @@ fn push_community(screen: Screen<Model>, community: CommunityId, name: &str, roo
                 // TODO: error handling
                 let invite = screen.model().client.create_invite(community).await.expect("failed to create invite");
 
-                let builder = gtk::Builder::new_from_string(INVITE_COMMUNITY_SRC);
+                let builder = gtk::Builder::new_from_file("res/glade/active/invite_community.glade");
                 let main: gtk::Box = builder.get_object("main").unwrap();
 
                 let code_view: gtk::TextView = builder.get_object("code_view").unwrap();
@@ -252,9 +193,9 @@ fn push_community(screen: Screen<Model>, community: CommunityId, name: &str, roo
             .build_widget_event()
     );
 
-    expander.show_all();
+    community_expander.show_all();
 
-    screen.model().widgets.communities.insert(&expander, -1);
+    screen.model().widgets.communities.insert(&community_expander, -1);
 }
 
 pub struct Model {
@@ -268,7 +209,7 @@ pub struct Model {
 pub fn build(app: Rc<crate::App>, ws: auth::AuthenticatedWs) -> Screen<Model> {
     let (client, stream) = crate::Client::new(ws);
 
-    let builder = gtk::Builder::new_from_string(SCREEN_SRC);
+    let builder = gtk::Builder::new_from_file("res/glade/active/active.glade");
 
     let main: gtk::Overlay = builder.get_object("main").unwrap();
 
@@ -362,7 +303,7 @@ fn bind_events(screen: &Screen<Model>) {
 }
 
 fn show_add_community(screen: Screen<Model>) {
-    let builder = gtk::Builder::new_from_string(ADD_COMMUNITY_SRC);
+    let builder = gtk::Builder::new_from_file("res/glade/active/add_community.glade");
     let main: gtk::Box = builder.get_object("main").unwrap();
 
     let create_community_button: gtk::Button = builder.get_object("create_community_button").unwrap();
@@ -396,7 +337,7 @@ fn show_add_community(screen: Screen<Model>) {
 }
 
 fn show_create_community(screen: Screen<Model>) {
-    let builder = gtk::Builder::new_from_string(CREATE_COMMUNITY_SRC);
+    let builder = gtk::Builder::new_from_file("res/glade/active/create_community.glade");
     let main: gtk::Box = builder.get_object("main").unwrap();
 
     let name_entry: gtk::Entry = builder.get_object("name_entry").unwrap();
@@ -445,7 +386,7 @@ fn show_create_community(screen: Screen<Model>) {
 }
 
 fn show_join_community(screen: Screen<Model>) {
-    let builder = gtk::Builder::new_from_string(JOIN_COMMUNITY_SRC);
+    let builder = gtk::Builder::new_from_file("res/glade/active/join_community.glade");
     let main: gtk::Box = builder.get_object("main").unwrap();
 
     let code_entry: gtk::Entry = builder.get_object("invite_code_entry").unwrap();

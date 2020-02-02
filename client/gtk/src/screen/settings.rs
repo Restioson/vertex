@@ -4,8 +4,6 @@ use gtk::prelude::*;
 
 use crate::screen::{self, Screen};
 
-const SCREEN_SRC: &str = include_str!("glade/settings/settings.glade");
-
 pub struct Widgets {
     category_list: gtk::ListBox,
     settings_viewport: gtk::Viewport,
@@ -19,7 +17,7 @@ pub struct Model {
 }
 
 pub fn build(parent_screen: Screen<screen::active::Model>, app: Rc<crate::App>, client: Rc<crate::Client>) -> Screen<Model> {
-    let builder = gtk::Builder::new_from_string(SCREEN_SRC);
+    let builder = gtk::Builder::new_from_file("res/glade/settings/settings.glade");
 
     let viewport: gtk::Viewport = builder.get_object("viewport").unwrap();
 
