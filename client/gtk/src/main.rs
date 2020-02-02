@@ -2,8 +2,6 @@
 
 use std::rc::Rc;
 
-use futures::Stream;
-use futures::stream::StreamExt;
 use gio::prelude::*;
 use gtk::prelude::*;
 

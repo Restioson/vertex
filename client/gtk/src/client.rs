@@ -1,8 +1,8 @@
+use futures::Stream;
+
 use vertex::*;
 
 use crate::net;
-
-use super::*;
 
 pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
 
@@ -118,6 +118,16 @@ impl Client {
         request.response().await?;
 
         Ok(())
+    }
+
+    pub async fn create_invite(&self, community: CommunityId) -> Result<InviteCode> {
+        let request = ClientRequest::CreateInvite { community };
+        let request = self.sender.request(request).await?;
+
+        match request.response().await? {
+            OkResponse::Invite { code } => Ok(code),
+            _ => Err(Error::UnexpectedResponse),
+        }
     }
 }
 

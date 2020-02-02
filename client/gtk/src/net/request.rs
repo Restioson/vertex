@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use futures::channel::oneshot;
 use futures::FutureExt;
-use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
 
 use vertex::*;

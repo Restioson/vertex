@@ -5,7 +5,7 @@
 
 @define-color dialog_bg_color #313131;
 
-@define-color room_list_bg_color #2D2D2D;
+@define-color room_list_bg_color #2A2A2A;
 @define-color room_hover_color #323232;
 @define-color room_selected_color #383838;
 
@@ -44,6 +44,11 @@ entry:focus {
 }
 
 entry selection {
+  color: #ffffff;
+  background-color: @accent_color;
+}
+
+textview selection {
   color: #ffffff;
   background-color: @accent_color;
 }
@@ -182,10 +187,13 @@ spinner:checked {
   transition: none;
 }
 
-#active #room_list {
+#active #community_content {
   background: @room_list_bg_color;
-  padding: 5px 0px;
-  border-radius: 4px;
+  padding: 6px 0px;
+}
+
+#active #room_list {
+  margin-top: 4px;
 }
 
 #active #room_list row {
@@ -201,6 +209,16 @@ spinner:checked {
 
 #active #room_list row:selected {
   background: shade(@room_list_bg_color, 1.3);
+}
+
+#active #community_widgets {
+  background: @room_list_bg_color;
+  margin: 0px 4px;
+}
+
+#active #community_widgets button {
+  padding: 6px;
+  border-radius: 12px;
 }
 
 #active #community_expander {
@@ -225,13 +243,13 @@ spinner:checked {
   border-style: none;
 }
 
-#active #community_name {
+#active #community_header #community_name {
   color: #d0d0d0;
   font-size: 15px;
   font-weight: 600;
 }
 
-#active #community_motd {
+#active #community_header #community_motd {
   color: #a0a0a0;
   font-size: 12px;
   font-style: italic;
@@ -269,16 +287,16 @@ spinner:checked {
   padding-left: 2px;
 }
 
-#active #settings_button {
+#active #upper_bar #settings_button {
   background: @upper_bar_bg_color;
   margin: 4px;
+  padding: 4px;
   border-radius: 8px;
 }
 
-#active #settings_button:hover {
+#active #upper_bar #settings_button:hover {
   background: shade(@upper_bar_bg_color, 1.2);
 }
-
 
 #active #add_community {
   min-width: 180px;
@@ -295,18 +313,29 @@ spinner:checked {
   margin: 10px;
 }
 
-
-#active #create_community {
+#active #create_community, #active #join_community, #active #invite_community {
   min-width: 180px;
   min-height: 100px;
 }
 
-#active #create_community #title {
+#active #create_community #title, #active #join_community #title, #active #invite_community #title {
   font-size: 16px;
 }
 
 #active #create_community button, #active #create_community entry {
   padding: 8px;
+  margin: 4px;
+}
+
+#active #join_community button, #active #join_community entry {
+  padding: 8px;
+  margin: 4px;
+}
+
+#active #invite_community textview {
+  background: @widget_bg_color;
+  padding: 8px;
+  border-radius: 8px;
   margin: 4px;
 }
 

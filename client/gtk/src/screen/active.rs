@@ -6,6 +6,8 @@ use std::sync::Mutex;
 use futures::{Stream, StreamExt};
 use gtk::prelude::*;
 
+use vertex::{CommunityId, InviteCode};
+
 use crate::{auth, net};
 use crate::screen::{self, Screen, TryGetText};
 
@@ -13,6 +15,9 @@ const SCREEN_SRC: &str = include_str!("glade/active/active.glade");
 
 const ADD_COMMUNITY_SRC: &str = include_str!("glade/active/add_community.glade");
 const CREATE_COMMUNITY_SRC: &str = include_str!("glade/active/create_community.glade");
+const JOIN_COMMUNITY_SRC: &str = include_str!("glade/active/join_community.glade");
+
+const INVITE_COMMUNITY_SRC: &str = include_str!("glade/active/invite_community.glade");
 
 pub struct Widgets {
     main: gtk::Overlay,
@@ -97,7 +102,7 @@ impl<Author: fmt::Display> MessageWidget<Author> {
     }
 }
 
-fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
+fn push_community(screen: Screen<Model>, community: CommunityId, name: &str, rooms: &[&str]) {
     let community_header = gtk::BoxBuilder::new()
         .name("community_header")
         .orientation(gtk::Orientation::Horizontal)
@@ -136,6 +141,48 @@ fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
         .label_widget(&community_header)
         .build();
 
+    let community_content = gtk::BoxBuilder::new()
+        .name("community_content")
+        .orientation(gtk::Orientation::Vertical)
+        .build();
+
+    let community_widgets = gtk::BoxBuilder::new()
+        .name("community_widgets")
+        .orientation(gtk::Orientation::Horizontal)
+        .build();
+
+    let settings_button = gtk::ButtonBuilder::new()
+        .name("settings_button")
+        .image(&gtk::ImageBuilder::new()
+            .pixbuf(&gdk_pixbuf::Pixbuf::new_from_file_at_size(
+                "res/feather/settings.svg",
+                20, 20,
+            ).unwrap())
+            .build()
+        )
+        .relief(gtk::ReliefStyle::None)
+        .build();
+
+    community_widgets.add(&settings_button);
+    community_widgets.set_child_packing(&settings_button, false, false, 0, gtk::PackType::End);
+
+    community_content.add(&community_widgets);
+
+    let invite_button = gtk::ButtonBuilder::new()
+        .name("invite_button")
+        .image(&gtk::ImageBuilder::new()
+            .pixbuf(&gdk_pixbuf::Pixbuf::new_from_file_at_size(
+                "res/feather/user-plus.svg",
+                20, 20,
+            ).unwrap())
+            .build()
+        )
+        .relief(gtk::ReliefStyle::None)
+        .build();
+
+    community_widgets.add(&invite_button);
+    community_widgets.set_child_packing(&invite_button, false, false, 0, gtk::PackType::End);
+
     let rooms_list = gtk::ListBoxBuilder::new()
         .name("room_list")
         .build();
@@ -153,7 +200,9 @@ fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
 
     screen.model_mut().selected_community_widget = Some((expander.clone(), 0)); // TODO@gegy1000 testing porpoises
 
-    expander.add(&rooms_list);
+    community_content.add(&rooms_list);
+
+    expander.add(&community_content);
 
     expander.connect_property_expanded_notify(
         screen.connector()
@@ -171,6 +220,25 @@ fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
                 }
             })
             .build_cloned_consumer()
+    );
+
+    invite_button.connect_button_press_event(
+        screen.connector()
+            .do_async(move |screen, (widget, event)| async move {
+                // TODO: error handling
+                let invite = screen.model().client.create_invite(community).await.expect("failed to create invite");
+
+                let builder = gtk::Builder::new_from_string(INVITE_COMMUNITY_SRC);
+                let main: gtk::Box = builder.get_object("main").unwrap();
+
+                let code_view: gtk::TextView = builder.get_object("code_view").unwrap();
+                if let Some(code_view) = code_view.get_buffer() {
+                    code_view.set_text(&invite.0);
+                }
+
+                screen::show_dialog(&screen.model().widgets.main, main);
+            })
+            .build_widget_event()
     );
 
     expander.show_all();
@@ -293,9 +361,24 @@ fn show_add_community(screen: Screen<Model>) {
 
     create_community_button.connect_button_press_event(
         screen.connector()
-            .do_sync(move |screen, _| {
-                dialog.close();
-                show_create_community(screen);
+            .do_sync({
+                let dialog = dialog.clone();
+                move |screen, _| {
+                    dialog.close();
+                    show_create_community(screen);
+                }
+            })
+            .build_widget_event()
+    );
+
+    join_community_button.connect_button_press_event(
+        screen.connector()
+            .do_sync({
+                let dialog = dialog.clone();
+                move |screen, _| {
+                    dialog.close();
+                    show_join_community(screen);
+                }
             })
             .build_widget_event()
     );
@@ -338,9 +421,38 @@ fn show_create_community(screen: Screen<Model>) {
                                     ],
                                 });
 
-                                push_community(screen, &name, &["General", "Off Topic"]);
+                                push_community(screen, id, &name, &["General", "Off Topic"]);
                             }
                             Err(e) => panic!("{:?}", e),
+                        }
+                    }
+                    dialog.close();
+                }
+            })
+            .build_widget_event()
+    );
+}
+
+fn show_join_community(screen: Screen<Model>) {
+    let builder = gtk::Builder::new_from_string(JOIN_COMMUNITY_SRC);
+    let main: gtk::Box = builder.get_object("main").unwrap();
+
+    let code_entry: gtk::Entry = builder.get_object("invite_code_entry").unwrap();
+    let join_button: gtk::Button = builder.get_object("join_button").unwrap();
+
+    let dialog = screen::show_dialog(&screen.model().widgets.main, main);
+
+    join_button.connect_button_press_event(
+        screen.connector()
+            .do_async(move |screen, _| {
+                let dialog = dialog.clone();
+                let code_entry = code_entry.clone();
+                async move {
+                    if let Ok(code) = code_entry.try_get_text() {
+                        let code = InviteCode(code);
+                        // TODO: bad error handling
+                        if let Err(e) = screen.model().client.join_community(code).await {
+                            panic!("{:?}", e);
                         }
                     }
                     dialog.close();
