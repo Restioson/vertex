@@ -1,5 +1,4 @@
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
 use std::time::Instant;
 
 use futures::{Future, SinkExt};
@@ -13,7 +12,6 @@ use vertex::*;
 
 use crate::{auth, handle_disconnected, IdentifiedMessage, SendMessage};
 use crate::community::{COMMUNITIES, CommunityActor, CreateRoom, Join};
-use crate::config::Config;
 use crate::database::*;
 
 use super::*;

@@ -6,7 +6,6 @@ use l337_postgres::PostgresConnectionManager;
 use log::{error, warn};
 use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
-use xtra::prelude::*;
 
 pub use communities::*;
 pub use community_membership::*;

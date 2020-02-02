@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use chrono::Utc;
 use rand::RngCore;
 use uuid::Uuid;
@@ -7,8 +5,7 @@ use uuid::Uuid;
 use vertex::*;
 
 use crate::auth;
-use crate::config::Config;
-use crate::database::{self, Database};
+use crate::database;
 
 pub struct Authenticator {
     pub global: crate::Global,
