@@ -51,33 +51,14 @@ struct MessageWidget<Author: fmt::Display> {
 
 impl<Author: fmt::Display> MessageWidget<Author> {
     fn build(author: Author) -> MessageWidget<Author> {
-        let widget = gtk::BoxBuilder::new()
-            .name("message")
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(8)
-            .build();
+        let builder = gtk::Builder::new_from_file("res/glade/active/message_entry.glade");
 
-        widget.add(&gtk::FrameBuilder::new()
-            .name("author_icon")
-            .halign(gtk::Align::Start)
-            .valign(gtk::Align::Start)
-            .build()
-        );
+        let widget: gtk::Box = builder.get_object("message").unwrap();
+        let inner: gtk::Box = builder.get_object("message_inner").unwrap();
 
-        let inner = gtk::BoxBuilder::new()
-            .name("message_inner")
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(4)
-            .build();
+        let author_name: gtk::Label = builder.get_object("author_name").unwrap();
+        author_name.set_text(&format!("{}", author));
 
-        inner.add(&gtk::LabelBuilder::new()
-            .name("author_name")
-            .label(&format!("{}", author))
-            .halign(gtk::Align::Start)
-            .build()
-        );
-
-        widget.add(&inner);
         widget.show_all();
 
         MessageWidget { author, widget, inner }

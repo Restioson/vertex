@@ -1,7 +1,5 @@
 use futures::Stream;
 
-pub use communities::*;
-pub use messages::*;
 use vertex::*;
 
 use crate::net;
