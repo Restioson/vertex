@@ -236,6 +236,17 @@ fn push_community(screen: Screen<Model>, community: CommunityId, name: &str, roo
                     code_view.set_text(&invite.0);
                 }
 
+                code_view.connect_button_release_event(
+                    screen.connector()
+                        .do_sync(|screen, (code_view, _): (gtk::TextView, gdk::EventButton)| {
+                            if let Some(buf) = code_view.get_buffer() {
+                                let (start, end) = (buf.get_start_iter(), buf.get_end_iter());
+                                buf.select_range(&start, &end);
+                            }
+                        })
+                        .build_widget_event()
+                );
+
                 screen::show_dialog(&screen.model().widgets.main, main);
             })
             .build_widget_event()

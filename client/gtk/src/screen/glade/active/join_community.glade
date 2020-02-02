@@ -44,7 +44,7 @@
         </child>
         <child>
           <object class="GtkButton" id="join_button">
-            <property name="label" translatable="yes">Create</property>
+            <property name="label" translatable="yes">Join</property>
             <property name="name">join_community_button</property>
             <property name="visible">True</property>
             <property name="can_focus">True</property>

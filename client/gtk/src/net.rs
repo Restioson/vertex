@@ -1,11 +1,10 @@
 use std::cell::RefCell;
-use std::io;
 
 use futures::sink::SinkExt;
 use futures::stream::{SplitSink, SplitStream, Stream, StreamExt};
 
+pub use auth::{AuthenticatedWs, AuthenticatedWsStream};
 pub use request::*;
-pub use auth::{AuthenticatedWsStream, AuthenticatedWs};
 
 use crate::auth;
 
@@ -24,7 +23,7 @@ pub struct Sender(RefCell<SplitSink<AuthenticatedWsStream, tungstenite::Message>
 impl Sender {
     #[inline]
     async fn send_raw(&self, message: tungstenite::Message) -> Result<()> {
-        self.0.borrow_mut().send(message).await.map_err(tungstenite_to_net_error)?;
+        self.0.borrow_mut().send(message).await.map_err(Error::Ws)?;
         Ok(())
     }
 
@@ -54,18 +53,10 @@ impl Receiver {
                     }
                 }
                 Ok(tungstenite::Message::Close(_)) => Some(Err(Error::Closed)),
-                Err(e) => Some(Err(tungstenite_to_net_error(e))),
+                Err(e) => Some(Err(Error::Ws(e))),
                 _ => None,
             }
         ))
-    }
-}
-
-fn tungstenite_to_net_error(error: tungstenite::Error) -> Error {
-    match error {
-        tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed => Error::Closed,
-        tungstenite::Error::Io(io) => Error::Io(io),
-        _ => Error::Generic,
     }
 }
 
@@ -73,8 +64,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
-    Generic,
+    Ws(tungstenite::Error),
     MalformedMessage,
-    Io(io::Error),
     Closed,
 }

@@ -121,7 +121,7 @@ impl Client {
     }
 
     pub async fn create_invite(&self, community: CommunityId) -> Result<InviteCode> {
-        let request = ClientRequest::CreateInvite { community };
+        let request = ClientRequest::CreateInvite { community, expiration_date: None };
         let request = self.sender.request(request).await?;
 
         match request.response().await? {

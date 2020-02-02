@@ -1,47 +1,44 @@
-use crate::database::{Database, DbResult};
-use base64::DecodeError;
-use byteorder::{NativeEndian, ReadBytesExt};
+use std::io::Cursor;
+
+use byteorder::{LittleEndian, ReadBytesExt};
 use chrono::{DateTime, Utc};
 use rand::Rng;
-use std::io::Cursor;
 use tokio_postgres::types::ToSql;
+
 use vertex::{CommunityId, InviteCode};
+
+use crate::database::{Database, DbResult};
 
 pub(super) const CREATE_INVITE_CODES_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS invite_codes (
-        random_bits SMALLINT,
-        incrementing_number BIGSERIAL,
+        id BIGINT NOT NULL,
         community_id UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
         expiration_date TIMESTAMP WITH TIME ZONE,
 
-        PRIMARY KEY (random_bits, incrementing_number)
+        PRIMARY KEY (id)
     )";
+
+#[derive(Copy, Clone, Debug)]
+pub struct MalformedInviteCode;
 
 #[derive(Debug)]
 pub struct InviteCodeRecord {
-    pub random_bits: u16,
-    pub incrementing_number: u64,
+    pub id: i64,
     pub expiration_date: Option<DateTime<Utc>>,
 }
 
 impl InviteCodeRecord {
-    fn bits_and_incrementing_number(code: InviteCode) -> Result<(u16, u64), DecodeError> {
-        let b64 = base64::decode_config(&code.0, base64::URL_SAFE_NO_PAD)?;
-        let mut cursor = Cursor::new(b64);
-        let combined = cursor.read_u64::<NativeEndian>().unwrap();
-        let bottom_mask = (1u64 << 48) - 1;
+    fn parse_id(code: InviteCode) -> Result<i64, MalformedInviteCode> {
+        let bytes = base64::decode_config(&code.0, base64::URL_SAFE_NO_PAD)
+            .map_err(|_| MalformedInviteCode)?;
 
-        let random_bits = (combined >> 48) as u16;
-        let incrementing_number = combined & bottom_mask;
-
-        Ok((random_bits, incrementing_number))
+        Cursor::new(bytes).read_i64::<LittleEndian>().map_err(|_| MalformedInviteCode)
     }
 }
 
 impl Into<String> for InviteCodeRecord {
     fn into(self) -> String {
-        let combined = ((self.random_bits as u64) << 48) | self.incrementing_number;
-        base64::encode_config(&combined.to_le_bytes(), base64::URL_SAFE_NO_PAD)
+        base64::encode_config(&self.id.to_le_bytes(), base64::URL_SAFE_NO_PAD)
     }
 }
 
@@ -52,48 +49,48 @@ impl Database {
         expiration_date: Option<DateTime<Utc>>,
     ) -> DbResult<InviteCode> {
         const QUERY: &str = "
-            INSERT INTO invite_codes (random_bits, community_id, expiration_date) VALUES ($1, $2, $3)
-                RETURNING incrementing_number
+            INSERT INTO invite_codes (id, community_id, expiration_date) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING
         ";
 
         let conn = self.pool.connection().await?;
         let query = conn.client.prepare(QUERY).await?;
 
-        let random_bits = rand::thread_rng().gen::<u16>();
-        let args: &[&(dyn ToSql + Sync)] = &[&(random_bits as i16), &community.0, &expiration_date];
+        let id = loop {
+            let id = rand::thread_rng().gen::<i64>();
+            let args: &[&(dyn ToSql + Sync)] = &[&id, &community.0, &expiration_date];
 
-        let row = conn.client.query_opt(&query, args).await.unwrap().unwrap();
+            let rows_inserted = conn.client.execute(&query, args).await.unwrap();
 
-        let record = InviteCodeRecord {
-            random_bits,
-            incrementing_number: row.get::<&str, i64>("incrementing_number") as u64,
-            expiration_date,
+            // if we successfully inserted the id, it must be unique: return it
+            if rows_inserted == 1 {
+                break id;
+            }
         };
 
+        let record = InviteCodeRecord { id, expiration_date };
         Ok(InviteCode(record.into()))
     }
 
     pub async fn get_community_from_invite_code(
         &self,
         code: InviteCode,
-    ) -> DbResult<Result<Option<CommunityId>, DecodeError>> {
+    ) -> DbResult<Result<Option<CommunityId>, MalformedInviteCode>> {
         const QUERY: &str = "
-            SELECT community_id FROM invite_codes WHERE random_bits=$1 AND incrementing_number=$2
+            SELECT community_id FROM invite_codes WHERE id=$1
         ";
 
         let conn = self.pool.connection().await?;
         let query = conn.client.prepare(QUERY).await?;
 
-        let res = InviteCodeRecord::bits_and_incrementing_number(code);
-        let (random_bits, incrementing_number) = match res {
-            Ok(tuple) => tuple,
+        let id = match InviteCodeRecord::parse_id(code) {
+            Ok(id) => id,
             Err(e) => return Ok(Err(e)),
         };
-        let args: &[&(dyn ToSql + Sync)] = &[&(random_bits as i16), &(incrementing_number as i64)];
+        let args: &[&(dyn ToSql + Sync)] = &[&id];
 
         let row_opt = conn.client.query_opt(&query, args).await?;
         if let Some(row) = row_opt {
-            Ok(Ok(Some(CommunityId(row.try_get("community")?))))
+            Ok(Ok(Some(CommunityId(row.try_get("community_id")?))))
         } else {
             Ok(Ok(None))
         }
