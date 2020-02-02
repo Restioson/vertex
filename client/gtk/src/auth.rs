@@ -58,11 +58,9 @@ impl Client {
             .unwrap();
 
         let response = self.build_client().request(request).await?;
-        println!("response");
 
         match response.status() {
             hyper::StatusCode::SWITCHING_PROTOCOLS => {
-                println!("upgrade");
                 let body = response.into_body();
                 let upgraded = body.on_upgrade().await?;
 
@@ -75,8 +73,6 @@ impl Client {
                 Ok(AuthenticatedWs { stream: ws, device, token })
             }
             _ => {
-                println!("fail");
-
                 let body = response.into_body();
                 let bytes = hyper::body::to_bytes(body).await?;
 
