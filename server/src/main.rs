@@ -21,6 +21,8 @@ use vertex::*;
 
 use crate::client::{session::WebSocketMessage, Authenticator};
 use crate::config::Config;
+use crate::database::{DbResult, MalformedInviteCode};
+use warp::reply::Reply;
 
 mod auth;
 mod client;
@@ -202,9 +204,14 @@ async fn main() {
             |global, bytes| async move { reply_cbor(self::refresh_token(global, bytes).await) },
         );
 
-    let token = warp::path("token").and(create_token.or(revoke_token).or(refresh_token));
+    let invite = warp::path!("invite" / String)
+    //  .and(warp::header::<String>("host")) // https://github.com/seanmonstar/warp/issues/432
+        .and(global.clone())
+        .and_then(|invite, global| self::invite_reply(global, invite));
 
-    let routes = warp::path("client").and(authenticate.or(register.or(token)));
+    let token = warp::path("token").and(create_token.or(revoke_token).or(refresh_token));
+    let client = warp::path("client").and(authenticate.or(register.or(token)));
+    let routes = invite.or(client);
 
     info!("Vertex server starting on addr {}", addr);
     warp::serve(routes)
@@ -296,4 +303,60 @@ async fn revoke_token(global: Global, bytes: bytes::Bytes) -> AuthResult<()> {
     authenticator
         .revoke_token(revoke_token.credentials, revoke_token.device)
         .await
+}
+
+async fn invite_reply(
+    global: Global,
+//  hostname: String, // https://github.com/seanmonstar/warp/issues/432
+    invite_code: String
+) -> Result<Box<dyn Reply>, Infallible> {
+    let res = invite(global, invite_code).await;
+
+    match res {
+        Ok(Ok(html)) => Ok(Box::new(warp::reply::html(html))),
+        _ => {
+            let response = http::response::Builder::new()
+                .status(404) // Not found
+                .body("")
+                .unwrap();
+            Ok(Box::new(response))
+        },
+    }
+}
+
+async fn invite(
+    global: Global,
+//  hostname: String, // https://github.com/seanmonstar/warp/issues/432
+    invite_code: String
+) -> DbResult<Result<String, MalformedInviteCode>> {
+    let code = InviteCode(invite_code.clone());
+    let id = match global.database.get_community_from_invite_code(code).await? {
+        Ok(Some(id)) => id,
+        _ => return Ok(Err(MalformedInviteCode)),
+    };
+    let community_record = match global.database.get_community_metadata(id).await? {
+        Some(rec) => rec,
+        None => return Ok(Err(MalformedInviteCode)),
+    };
+
+    let html = format!(
+        r#"
+            <head>
+                <meta property="og:title" content="Vertex Community Invite"/>
+                <meta property="og:description" content="You are invited to join {community} on Vertex!"/>
+            </head>
+            <body>
+                <script>
+                    // Redirect to vertex://...
+                    var no_http = window.location.href.replace("https", "").replace("http", "");
+                    window.location.replace("vertex" + no_http);
+                </script>
+            </script>
+        "#,
+//        hostname = hostname, // TODO https://github.com/seanmonstar/warp/issues/432
+                               // We just use JS as a workaround
+        community = community_record.name,
+    );
+
+    Ok(Ok(html))
 }

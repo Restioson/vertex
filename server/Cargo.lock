@@ -1741,6 +1741,7 @@ dependencies = [
  "directories 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "fern 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "http 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "l337 0.0.0 (git+https://github.com/OneSignal/L3-37?rev=a970fe669787c4caf8ae699870b97ed1d7616f00)",
  "l337-postgres 0.2.0 (git+https://github.com/OneSignal/L3-37?rev=a970fe669787c4caf8ae699870b97ed1d7616f00)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
