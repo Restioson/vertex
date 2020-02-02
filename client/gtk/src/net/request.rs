@@ -1,18 +1,18 @@
-use vertex::*;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use futures::channel::oneshot;
 use futures::FutureExt;
-use futures::{Stream, StreamExt};
+use futures::sink::SinkExt;
+use futures::stream::{Stream, StreamExt};
 
-use std::collections::HashMap;
+use vertex::*;
 
-use std::cell::RefCell;
-use std::io;
-use std::rc::Rc;
+use crate::net;
 
-use std::sync::atomic::{AtomicU32, Ordering};
-
-use async_trait::async_trait;
+use super::Result;
 
 struct RequestIdGenerator {
     next_request_id: AtomicU32,
@@ -87,7 +87,7 @@ impl RequestManager {
         }
     }
 
-    pub fn sender<S: Sender>(&self, net: S) -> RequestSender<S> {
+    pub fn sender(&self, net: net::Sender) -> RequestSender {
         RequestSender {
             tracker: self.tracker.clone(),
             id_gen: self.id_gen.clone(),
@@ -95,7 +95,7 @@ impl RequestManager {
         }
     }
 
-    pub fn receive_from<R: Receiver>(&self, net: R) -> impl Stream<Item = Result<ServerAction>> {
+    pub fn receive_from(&self, net: net::Receiver) -> impl Stream<Item = Result<ServerAction>> {
         let tracker = Rc::downgrade(&self.tracker);
 
         net.stream().filter_map(move |result| {
@@ -122,23 +122,14 @@ impl Request {
     }
 }
 
-pub struct RequestSender<S: Sender> {
+#[derive(Clone)]
+pub struct RequestSender {
     tracker: Rc<RequestTracker>,
     id_gen: Rc<RequestIdGenerator>,
-    net: Rc<S>,
+    net: Rc<net::Sender>,
 }
 
-impl<S: Sender> Clone for RequestSender<S> {
-    fn clone(&self) -> Self {
-        RequestSender {
-            tracker: self.tracker.clone(),
-            id_gen: self.id_gen.clone(),
-            net: self.net.clone(),
-        }
-    }
-}
-
-impl<S: Sender> RequestSender<S> {
+impl RequestSender {
     pub async fn request(&self, request: ClientRequest) -> Result<Request> {
         let id = self.id_gen.next();
 
@@ -161,30 +152,7 @@ impl<S: Sender> RequestSender<S> {
     }
 
     #[inline]
-    pub fn net(&self) -> &S {
+    pub fn net(&self) -> &net::Sender {
         &self.net
     }
-}
-
-#[async_trait(? Send)]
-pub trait Sender {
-    async fn send(&self, message: ClientMessage) -> Result<()>;
-
-    async fn close(&self) -> Result<()>;
-}
-
-pub trait Receiver {
-    type Stream: Stream<Item = Result<ServerMessage>>;
-
-    fn stream(self) -> Self::Stream;
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
-#[derive(Debug)]
-pub enum Error {
-    Generic,
-    MalformedMessage,
-    Io(io::Error),
-    Closed,
 }

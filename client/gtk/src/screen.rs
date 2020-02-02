@@ -63,28 +63,6 @@ impl Dialog {
     }
 }
 
-// TODO: Ideally don't have to use an enum and can rather use a Box with dyn type
-pub enum DynamicScreen {
-    Active(Screen<active::Model>),
-    Login(Screen<login::Model>),
-    Register(Screen<register::Model>),
-    Settings(Screen<settings::Model>),
-    Loading(Screen<()>),
-}
-
-impl DynamicScreen {
-    #[inline]
-    pub fn widget(&self) -> &gtk::Widget {
-        match self {
-            DynamicScreen::Active(screen) => screen.widget(),
-            DynamicScreen::Login(screen) => screen.widget(),
-            DynamicScreen::Register(screen) => screen.widget(),
-            DynamicScreen::Settings(screen) => screen.widget(),
-            DynamicScreen::Loading(screen) => screen.widget(),
-        }
-    }
-}
-
 pub struct Screen<M> {
     widget: gtk::Widget,
     model: Rc<RefCell<M>>,

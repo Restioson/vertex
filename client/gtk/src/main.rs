@@ -1,141 +1,112 @@
 #![feature(type_alias_impl_trait)]
 
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use futures::Stream;
 use futures::stream::StreamExt;
 use gio::prelude::*;
 use gtk::prelude::*;
-use url::Url;
 
-use vertex_client::Client;
-use vertex_client::net::{RequestManager, RequestSender};
+use vertex::*;
 
-use crate::net::Sender;
-use crate::screen::DynamicScreen;
+pub use crate::client::Client;
+use crate::screen::Screen;
 use crate::token_store::TokenStore;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 
+pub mod auth;
+pub mod client;
 pub mod net;
 pub mod screen;
 pub mod token_store;
 
+#[derive(Debug, Clone)]
+pub struct Server(String);
+
+impl Server {
+    pub fn url(&self) -> &str { &self.0 }
+}
+
+#[derive(Debug)]
+pub struct Community {
+    pub id: CommunityId,
+    pub name: String,
+    pub rooms: Vec<Room>,
+}
+
+#[derive(Debug)]
+pub struct Room {
+    pub id: RoomId,
+    pub name: String,
+}
+
 pub struct App {
     window: gtk::ApplicationWindow,
-    request_sender: Option<RequestSender<net::Sender>>,
+    server: Server,
     token_store: TokenStore,
-    screen: RefCell<Option<DynamicScreen>>,
 }
 
 impl App {
-    pub fn build(application: &gtk::Application) -> App {
-        let window = gtk::ApplicationWindowBuilder::new()
+    pub fn build(application: &gtk::Application, server: Server) -> App {
+        let mut window = gtk::ApplicationWindowBuilder::new()
             .application(application)
             .title(&format!("Vertex {}", crate::VERSION))
-            .icon_name("res/icon.png")
             .default_width(1280)
-            .default_height(720)
-            .build();
+            .default_height(720);
+
+        if let Ok(icon) = gdk_pixbuf::Pixbuf::new_from_file("res/icon.png") {
+            window = window.icon(&icon);
+        }
+
+        let window = window.build();
 
         window.show_all();
 
         App {
             window,
-            request_sender: None,
+            server,
             token_store: TokenStore::new(),
-            screen: RefCell::new(None),
         }
     }
 
-    pub async fn start(mut self, sender: net::Sender, receiver: net::Receiver) {
-        let request_manager = RequestManager::new();
-
-        let sender = request_manager.sender(sender);
-        let stream = request_manager.receive_from(receiver);
-
-        self.request_sender = Some(sender.clone());
-
-        self.window.connect_delete_event(move |_window, _event| {
-            let _ = futures::executor::block_on(sender.close());
-            gtk::Inhibit(false)
-        });
-
+    pub async fn start(self) {
         let app = Rc::new(self);
-
-        let context = glib::MainContext::ref_thread_default();
-        context.spawn_local({
-            let app = app.clone();
-            async move { app.run(stream).await }
-        });
-
-        app.set_screen(app.clone().try_login().await);
+        match app.clone().try_login().await {
+            Some(ws) => app.set_screen(screen::active::build(app.clone(), ws)),
+            None => app.set_screen(screen::login::build(app.clone())),
+        }
     }
 
-    async fn try_login(self: Rc<Self>) -> DynamicScreen {
+    async fn try_login(self: Rc<Self>) -> Option<auth::AuthenticatedWs> {
         match self.token_store.get_stored_token() {
             Some((device, token)) => {
-                let client = vertex_client::auth::Client::new(self.request_sender());
-
-                match client.login(device, token).await {
-                    Ok(client) => {
-                        let screen = screen::active::build(self.clone(), Rc::new(client));
-                        return DynamicScreen::Active(screen);
-                    }
+                let auth = auth::Client::new(self.server.clone());
+                match auth.authenticate(device, token).await {
+                    Ok(ws) => Some(ws),
                     Err(err) => {
                         println!("failed to log in with stored token: {:?}", err);
                         self.token_store.forget_token();
+                        None
                     }
                 }
             }
-            _ => (),
+            _ => None,
         }
-
-        let screen = screen::login::build(self.clone());
-        DynamicScreen::Login(screen)
     }
 
-    async fn run<S>(&self, stream: S)
-        where S: Stream<Item = net::Result<vertex::ServerAction>> + Unpin
-    {
-        futures::future::join(
-            async move {
-                let mut stream = stream;
-                while let Some(result) = stream.next().await {
-                    println!("{:?}", result);
-                }
-            },
-            async {
-                let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(2));
-                loop {
-                    let result = self.request_sender().net().ping().await;
-                    if result.is_err() {
-                        break;
-                    }
-
-                    ticker.tick().await;
-                }
-            },
-        ).await;
-    }
-
-    pub fn set_screen(&self, screen: DynamicScreen) {
+    pub fn set_screen<M>(&self, screen: Screen<M>) {
         for child in self.window.get_children() {
             self.window.remove(&child);
         }
         self.window.add(screen.widget());
 
         self.window.show_all();
-
-        *(self.screen.borrow_mut()) = Some(screen);
     }
 
-    pub fn request_sender(&self) -> RequestSender<net::Sender> {
-        self.request_sender.clone().unwrap()
-    }
+    pub fn server(&self) -> Server { self.server.clone() }
 
     pub fn token_store(&self) -> &TokenStore { &self.token_store }
 }
@@ -166,9 +137,9 @@ async fn main() {
 
     let ip = matches.value_of("ip")
         .map(|ip| ip.to_string())
-        .unwrap_or("localhost:8080".to_string());
+        .unwrap_or("https://localhost:8080/client".to_string());
 
-    let url = Url::parse(&format!("wss://{}/client/", ip)).unwrap();
+    let server = Server(ip);
 
     let application = gtk::Application::new(None, Default::default())
         .expect("failed to create application");
@@ -176,16 +147,12 @@ async fn main() {
     setup_gtk_style();
 
     application.connect_activate(move |app| {
-        let url = url.clone();
-        let app = App::build(app);
+        let app = App::build(app, server.clone());
 
-        app.set_screen(DynamicScreen::Loading(screen::loading::build()));
+        app.set_screen(screen::loading::build());
 
         glib::MainContext::ref_thread_default().spawn_local(async move {
-            let (send, recv) = net::connect(url.clone()).await
-                .expect("failed to connect");
-
-            app.start(send, recv).await;
+            app.start().await;
         });
     });
 

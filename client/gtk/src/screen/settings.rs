@@ -2,8 +2,7 @@ use std::rc::Rc;
 
 use gtk::prelude::*;
 
-use crate::net;
-use crate::screen::{self, DynamicScreen, Screen};
+use crate::screen::{self, Screen};
 
 const SCREEN_SRC: &str = include_str!("glade/settings/settings.glade");
 
@@ -13,17 +12,19 @@ pub struct Widgets {
 }
 
 pub struct Model {
+    parent_screen: Screen<screen::active::Model>,
     app: Rc<crate::App>,
-    client: Rc<vertex_client::Client<net::Sender>>,
+    client: Rc<crate::Client>,
     widgets: Widgets,
 }
 
-pub fn build(app: Rc<crate::App>, client: Rc<vertex_client::Client<net::Sender>>) -> Screen<Model> {
+pub fn build(parent_screen: Screen<screen::active::Model>, app: Rc<crate::App>, client: Rc<crate::Client>) -> Screen<Model> {
     let builder = gtk::Builder::new_from_string(SCREEN_SRC);
 
     let viewport: gtk::Viewport = builder.get_object("viewport").unwrap();
 
     let model = Model {
+        parent_screen,
         app,
         client,
         widgets: Widgets {
@@ -58,12 +59,10 @@ fn bind_events(screen: &Screen<Model>) {
                             model.app.token_store.forget_token();
                             model.client.revoke_token().await.expect("failed to revoke token");
 
-                            let login = screen::login::build(model.app.clone());
-                            model.app.set_screen(DynamicScreen::Login(login));
+                            model.app.set_screen(screen::login::build(model.app.clone()));
                         }
                         "close" => {
-                            let active = screen::active::build(model.app.clone(), model.client.clone());
-                            model.app.set_screen(DynamicScreen::Active(active));
+                            model.app.set_screen(model.parent_screen.clone());
                         }
                         _ => ()
                     }

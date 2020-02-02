@@ -1,27 +1,27 @@
-use l337_postgres::PostgresConnectionManager;
-use log::{error, warn};
 use std::fs;
 use std::time::{Duration, Instant};
-use tokio_postgres::NoTls;
-use vertex::{DeviceId, ErrResponse, UserId};
 
-mod communities;
-mod community_membership;
-mod invite_code;
-mod token;
-mod user;
+use futures::{Stream, TryStreamExt};
+use l337_postgres::PostgresConnectionManager;
+use log::{error, warn};
+use tokio_postgres::NoTls;
+use tokio_postgres::types::ToSql;
+use xtra::prelude::*;
 
 pub use communities::*;
 pub use community_membership::*;
 pub use invite_code::*;
 pub use token::*;
 pub use user::*;
+use vertex::{AuthError, DeviceId, ErrResponse, UserId};
 
-use crate::client::LogoutThisSession;
-use crate::client::USERS;
-use futures::{Stream, TryStreamExt};
-use tokio_postgres::types::ToSql;
-use xtra::prelude::*;
+use crate::client;
+
+mod communities;
+mod community_membership;
+mod invite_code;
+mod token;
+mod user;
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 
@@ -52,6 +52,12 @@ impl From<DatabaseError> for ErrResponse {
         }
 
         ErrResponse::Internal
+    }
+}
+
+impl From<DatabaseError> for AuthError {
+    fn from(_: DatabaseError) -> AuthError {
+        AuthError::Internal
     }
 }
 
@@ -106,16 +112,8 @@ impl Database {
             self.expired_tokens(token_expiry_days)
                 .await
                 .expect("Database error while sweeping tokens")
-                .try_filter_map(|(user, device)| async move {
-                    Ok(USERS.get(&user).map(|u| (device, u)))
-                })
-                .try_for_each(|(device, user)| async move {
-                    if let Some(addr) = user.get(&device) {
-                        if addr.do_send(LogoutThisSession).is_err() {
-                            warn!("ClientWsSession actor disconnected. This is probably a timing anomaly.");
-                        }
-                    }
-
+                .try_for_each(|(user, device)| async move {
+                    client::session::remove_and_notify(user, device);
                     Ok(())
                 })
                 .await

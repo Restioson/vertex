@@ -1,9 +1,10 @@
-use crate::config::Config;
-use crate::database::UserRecord;
 use futures::Future;
 use futures::FutureExt;
 use rand::RngCore;
 use unicode_normalization::UnicodeNormalization;
+
+use crate::config::Config;
+use crate::database::UserRecord;
 
 pub const MAX_TOKEN_LENGTH: usize = 45;
 

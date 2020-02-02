@@ -1,10 +1,13 @@
 //! Some definitions common between server and client
-use bitflags::bitflags;
+use std::fmt;
+use std::time::Duration;
+
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use uuid::Uuid;
+
+use bitflags::bitflags;
 
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -35,8 +38,20 @@ pub struct MessageId(pub Uuid);
 #[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct DeviceId(pub Uuid);
 
+impl fmt::Display for DeviceId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct AuthToken(pub String);
+
+impl fmt::Display for AuthToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct InviteCode(pub String);
@@ -51,6 +66,66 @@ impl UserCredentials {
     pub fn new(username: String, password: String) -> UserCredentials {
         UserCredentials { username, password }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthenticateRequest {
+    pub device: DeviceId,
+    pub token: AuthToken,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTokenRequest {
+    pub credentials: UserCredentials,
+    pub options: TokenCreationOptions,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTokenResponse {
+    pub device: DeviceId,
+    pub token: AuthToken,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefreshTokenRequest {
+    pub credentials: UserCredentials,
+    pub device: DeviceId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevokeTokenRequest {
+    pub credentials: UserCredentials,
+    pub device: DeviceId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterUserRequest {
+    pub credentials: UserCredentials,
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterUserResponse {
+    pub user: UserId,
+}
+
+pub type AuthResult<T> = Result<T, AuthError>;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AuthError {
+    Internal,
+    IncorrectCredentials,
+    InvalidToken,
+    StaleToken,
+    TokenInUse,
+    InvalidUser,
+    UserCompromised,
+    UserLocked,
+    UserBanned,
+    UsernameAlreadyExists,
+    InvalidUsername,
+    InvalidPassword,
+    InvalidDisplayName,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,27 +154,7 @@ impl Into<Vec<u8>> for ClientMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientRequest {
-    Login {
-        device: DeviceId,
-        token: AuthToken,
-    },
-    CreateToken {
-        credentials: UserCredentials,
-        options: TokenCreationOptions,
-    },
     RevokeToken,
-    RevokeForeignToken {
-        device: DeviceId,
-        password: String,
-    },
-    RefreshToken {
-        credentials: UserCredentials,
-        device: DeviceId,
-    },
-    CreateUser {
-        credentials: UserCredentials,
-        display_name: String,
-    },
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
     CreateCommunity {
@@ -173,7 +228,7 @@ pub struct Delete {
     pub room: RoomId,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct TokenCreationOptions {
     pub device_name: Option<String>,
     pub expiration_date: Option<DateTime<Utc>>,
@@ -214,6 +269,10 @@ impl TokenPermissionFlags {
     pub fn has_perms(self, perms: TokenPermissionFlags) -> bool {
         self.contains(TokenPermissionFlags::ALL) || self.contains(perms)
     }
+}
+
+impl Default for TokenPermissionFlags {
+    fn default() -> Self { TokenPermissionFlags::ALL }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -280,21 +339,13 @@ pub enum OkResponse {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ErrResponse {
     Internal,
-    NotLoggedIn,
-    AlreadyLoggedIn,
     UsernameAlreadyExists,
     InvalidUsername,
+    InvalidPassword,
     InvalidDisplayName,
-    InvalidToken,
-    StaleToken,
-    TokenInUse,
-    UserCompromised,
-    UserLocked,
-    UserBanned,
     /// Returned when the user that is sending a message is deleted while processing the message
     UserDeleted,
     DeviceDoesNotExist,
-    InvalidPassword,
     IncorrectUsernameOrPassword,
     /// User is not able to perform said action with current authentication token, or request to
     /// revoke authentication token requires re-entry of password.

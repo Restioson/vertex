@@ -1,9 +1,11 @@
-mod session;
-mod user;
-
-pub use session::*;
-pub use user::*;
 use xtra::Message;
+
+pub use auth::*;
+pub use session::{ActiveSession, Session};
+
+pub mod session;
+
+mod auth;
 
 #[derive(Debug)]
 pub struct LogoutThisSession;

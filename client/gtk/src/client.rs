@@ -1,33 +1,46 @@
 use vertex::*;
 
-use std::time::Duration;
+use crate::net;
 
-pub mod auth;
-pub mod net;
+use super::*;
 
-pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
+pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
 
-#[derive(Debug)]
-pub struct Community {
-    pub id: CommunityId,
-    pub name: String,
-    pub rooms: Vec<Room>,
-}
-
-#[derive(Debug)]
-pub struct Room {
-    pub id: RoomId,
-    pub name: String,
-}
-
-pub struct Client<Net: net::Sender> {
-    sender: net::RequestSender<Net>,
-    user: UserId,
+pub struct Client {
+    sender: net::RequestSender,
     device: DeviceId,
     token: AuthToken,
 }
 
-impl<Net: net::Sender> Client<Net> {
+impl Client {
+    pub fn new(ws: net::AuthenticatedWs) -> (Client, impl Stream<Item = net::Result<ServerAction>>) {
+        let (sender, receiver) = net::from_ws(ws.stream);
+
+        let req_manager = net::RequestManager::new();
+
+        let req_sender = req_manager.sender(sender);
+        let req_receiver = req_manager.receive_from(receiver);
+
+        (
+            Client {
+                sender: req_sender,
+                device: ws.device,
+                token: ws.token,
+            },
+            req_receiver,
+        )
+    }
+
+    pub async fn keep_alive_loop(&self) {
+        let mut ticker = tokio::time::interval(HEARTBEAT_INTERVAL);
+        loop {
+            if let Err(_) = self.sender.net().ping().await {
+                break;
+            }
+            ticker.tick().await;
+        }
+    }
+
     pub async fn change_username(&self, new_username: String) -> Result<()> {
         let request = ClientRequest::ChangeUsername { new_username };
         let request = self.sender.request(request).await?;
@@ -48,32 +61,6 @@ impl<Net: net::Sender> Client<Net> {
         let request = ClientRequest::ChangePassword {
             old_password,
             new_password,
-        };
-        let request = self.sender.request(request).await?;
-        request.response().await?;
-
-        Ok(())
-    }
-
-    pub async fn refresh_token(
-        &self,
-        credentials: UserCredentials,
-        to_refresh: DeviceId,
-    ) -> Result<()> {
-        let request = ClientRequest::RefreshToken {
-            credentials,
-            device: to_refresh,
-        };
-        let request = self.sender.request(request).await?;
-        request.response().await?;
-
-        Ok(())
-    }
-
-    pub async fn revoke_foreign_token(&self, to_revoke: DeviceId, password: String) -> Result<()> {
-        let request = ClientRequest::RevokeForeignToken {
-            device: to_revoke,
-            password,
         };
         let request = self.sender.request(request).await?;
         request.response().await?;
@@ -131,10 +118,6 @@ impl<Net: net::Sender> Client<Net> {
         request.response().await?;
 
         Ok(())
-    }
-
-    pub fn token(&self) -> (DeviceId, AuthToken) {
-        (self.device, self.token.clone())
     }
 }
 

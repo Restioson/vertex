@@ -3,10 +3,11 @@ use std::fmt;
 use std::rc::Rc;
 use std::sync::Mutex;
 
+use futures::{Stream, StreamExt};
 use gtk::prelude::*;
 
-use crate::net;
-use crate::screen::{self, DynamicScreen, Screen, TryGetText};
+use crate::{auth, net};
+use crate::screen::{self, Screen, TryGetText};
 
 const SCREEN_SRC: &str = include_str!("glade/active/active.glade");
 
@@ -179,20 +180,22 @@ fn push_community(screen: Screen<Model>, name: &str, rooms: &[&str]) {
 
 pub struct Model {
     app: Rc<crate::App>,
-    client: Rc<vertex_client::Client<net::Sender>>,
+    client: Rc<crate::Client>,
     widgets: Widgets,
     selected_community_widget: Option<(gtk::Expander, usize)>,
-    pub(crate) communities: Mutex<Vec<vertex_client::Community>>, // TODO better solution
+    pub(crate) communities: Mutex<Vec<crate::Community>>, // TODO better solution
 }
 
-pub fn build(app: Rc<crate::App>, client: Rc<vertex_client::Client<net::Sender>>) -> Screen<Model> {
+pub fn build(app: Rc<crate::App>, ws: auth::AuthenticatedWs) -> Screen<Model> {
+    let (client, stream) = crate::Client::new(ws);
+
     let builder = gtk::Builder::new_from_string(SCREEN_SRC);
 
     let main: gtk::Overlay = builder.get_object("main").unwrap();
 
     let model = Model {
         app: app.clone(),
-        client,
+        client: Rc::new(client),
         widgets: Widgets {
             main: main.clone(),
             communities: builder.get_object("communities").unwrap(),
@@ -208,7 +211,29 @@ pub fn build(app: Rc<crate::App>, client: Rc<vertex_client::Client<net::Sender>>
     let screen = Screen::new(main, model);
     bind_events(&screen);
 
+    // FIXME: we need to stop these loops when this screen closes!
+    glib::MainContext::ref_thread_default().spawn_local({
+        let client = screen.model().client.clone();
+        run(client, stream)
+    });
+
     screen
+}
+
+async fn run<S>(client: Rc<crate::Client>, stream: S)
+    where S: Stream<Item = net::Result<vertex::ServerAction>> + Unpin
+{
+    futures::future::join(
+        async move {
+            let mut stream = stream;
+            while let Some(result) = stream.next().await {
+                println!("{:?}", result);
+            }
+        },
+        async move {
+            client.keep_alive_loop().await;
+        },
+    ).await;
 }
 
 fn bind_events(screen: &Screen<Model>) {
@@ -231,13 +256,7 @@ fn bind_events(screen: &Screen<Model>) {
                 let row = list.get_selected_row().unwrap();
                 let room = &community.rooms[row.get_index() as usize];
 
-                let req = vertex::ClientRequest::SendMessage(vertex::ClientSentMessage {
-                    to_community: community.id,
-                    to_room: room.id,
-                    content: content.clone(),
-                });
-
-                screen.model().app.request_sender().request(req).await.unwrap(); // TODO handle error?
+                screen.model().client.send_message(content.clone(), community.id, room.id).await.unwrap(); // TODO handle error?
                 screen.model().widgets.messages.borrow_mut().push("You".to_owned(), &content);
             })
             .build_cloned_consumer()
@@ -247,8 +266,11 @@ fn bind_events(screen: &Screen<Model>) {
         screen.connector()
             .do_sync(|screen, (_button, _event)| {
                 let model = screen.model();
-                let settings = screen::settings::build(model.app.clone(), model.client.clone());
-                model.app.set_screen(DynamicScreen::Settings(settings));
+                model.app.set_screen(screen::settings::build(
+                    screen.clone(),
+                    model.app.clone(),
+                    model.client.clone(),
+                ));
             })
             .build_widget_event()
     );
@@ -307,12 +329,12 @@ fn show_create_community(screen: Screen<Model>) {
                                     )
                                 };
 
-                                screen.model.borrow().communities.lock().unwrap().push(vertex_client::Community {
+                                screen.model.borrow().communities.lock().unwrap().push(crate::Community {
                                     id,
                                     name: name.clone(),
                                     rooms: vec![
-                                        vertex_client::Room { id: general, name: "General".into() },
-                                        vertex_client::Room { id: off_topic, name: "Off Topic".into() },
+                                        crate::Room { id: general, name: "General".into() },
+                                        crate::Room { id: off_topic, name: "Off Topic".into() },
                                     ],
                                 });
 

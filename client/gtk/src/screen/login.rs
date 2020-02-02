@@ -3,8 +3,8 @@ use std::rc::Rc;
 
 use gtk::prelude::*;
 
-use crate::net;
-use crate::screen::{self, DynamicScreen, Screen, TryGetText};
+use crate::auth;
+use crate::screen::{self, Screen, TryGetText};
 
 const SCREEN_SRC: &str = include_str!("glade/login/login.glade");
 
@@ -63,14 +63,9 @@ fn bind_events(screen: &Screen<Model>) {
                 model.widgets.error_label.set_text("");
 
                 match login(&screen.model().app, username, password).await {
-                    Ok(client) => {
-                        let (device, token) = client.token();
-                        model.app.token_store.store_token(device, token);
-
-                        let client = Rc::new(client);
-
-                        let active = screen::active::build(screen.model().app.clone(), client);
-                        screen.model().app.set_screen(DynamicScreen::Active(active));
+                    Ok(ws) => {
+                        let app = &screen.model().app;
+                        app.set_screen(screen::active::build(app.clone(), ws));
                     }
                     Err(err) => model.widgets.error_label.set_text(&format!("{}", err)),
                 }
@@ -83,22 +78,34 @@ fn bind_events(screen: &Screen<Model>) {
     widgets.register_button.connect_button_press_event(
         screen.connector()
             .do_sync(|screen, (_button, _event)| {
-                let register = screen::register::build(screen.model().app.clone());
-                screen.model().app.set_screen(DynamicScreen::Register(register));
+                let app = &screen.model().app;
+                app.set_screen(screen::register::build(app.clone()));
             })
             .build_widget_event()
     );
 }
 
-async fn login(app: &crate::App, username: String, password: String) -> Result<vertex_client::Client<net::Sender>, LoginError> {
-    let client = vertex_client::auth::Client::new(app.request_sender());
+async fn login(
+    app: &crate::App,
+    username: String,
+    password: String,
+) -> Result<auth::AuthenticatedWs, LoginError> {
+    let auth = auth::Client::new(app.server());
 
     let (device, token) = match app.token_store.get_stored_token() {
         Some(token) => token,
-        None => client.authenticate(vertex::UserCredentials::new(username, password)).await?,
+        None => {
+            let token = auth.create_token(
+                vertex::UserCredentials::new(username, password),
+                vertex::TokenCreationOptions::default(),
+            ).await?;
+
+            app.token_store.store_token(token.device, token.token.clone());
+            (token.device, token.token)
+        }
     };
 
-    Ok(client.login(device, token).await?)
+    Ok(auth.authenticate(device, token).await?)
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -120,22 +127,22 @@ impl fmt::Display for LoginError {
     }
 }
 
-impl From<vertex_client::Error> for LoginError {
-    fn from(err: vertex_client::Error) -> Self {
+impl From<auth::Error> for LoginError {
+    fn from(err: auth::Error) -> Self {
         match err {
-            vertex_client::Error::Net(_) => LoginError::NetworkError,
-            vertex_client::Error::Response(err) => err.into(),
+            auth::Error::Net(_) => LoginError::NetworkError,
+            auth::Error::Server(err) => err.into(),
             _ => LoginError::UnknownError,
         }
     }
 }
 
-impl From<vertex::ErrResponse> for LoginError {
-    fn from(err: vertex::ErrResponse) -> Self {
+impl From<vertex::AuthError> for LoginError {
+    fn from(err: vertex::AuthError) -> Self {
         match err {
-            vertex::ErrResponse::Internal => LoginError::InternalServerError,
-            vertex::ErrResponse::IncorrectUsernameOrPassword |
-            vertex::ErrResponse::InvalidUser => LoginError::InvalidUsernameOrPassword,
+            vertex::AuthError::Internal => LoginError::InternalServerError,
+            vertex::AuthError::IncorrectCredentials | vertex::AuthError::InvalidUser
+            => LoginError::InvalidUsernameOrPassword,
 
             _ => LoginError::UnknownError,
         }
