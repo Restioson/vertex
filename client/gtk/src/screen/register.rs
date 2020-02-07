@@ -19,7 +19,7 @@ pub struct Model {
     spinner: gtk::Spinner,
 }
 
-pub fn build() -> UiEntity<Model> {
+pub async fn build() -> UiEntity<Model> {
     let builder = gtk::Builder::new_from_file("res/glade/register/register.glade");
 
     let model = Model {
@@ -35,19 +35,19 @@ pub fn build() -> UiEntity<Model> {
     };
 
     let screen = UiEntity::new(model);
-    bind_events(&screen);
+    bind_events(&screen).await;
 
     screen
 }
 
-fn bind_events(screen: &UiEntity<Model>) {
-    let widgets = screen.borrow();
+async fn bind_events(screen: &UiEntity<Model>) {
+    let widgets = screen.read().await;
 
     widgets.login_button.connect_button_press_event(
         screen.connector()
-            .do_sync(|screen, (_button, _event)| {
-                let screen = screen::login::build();
-                window::set_screen(&screen.borrow().main);
+            .do_async(|screen, (_button, _event)| async move {
+                let screen = screen::login::build().await;
+                window::set_screen(&screen.read().await.main);
             })
             .build_widget_event()
     );
@@ -55,7 +55,7 @@ fn bind_events(screen: &UiEntity<Model>) {
     widgets.register_button.connect_button_press_event(
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
-                let widgets = screen.borrow();
+                let widgets = screen.read().await;
 
                 let username = widgets.username_entry.try_get_text().unwrap_or_default();
                 let password_1 = widgets.password_entry_1.try_get_text().unwrap_or_default();
@@ -67,10 +67,10 @@ fn bind_events(screen: &UiEntity<Model>) {
                 match register(username, password_1, password_2).await {
                     Ok(ws) => {
                         let screen = screen::loading::build();
-                        window::set_screen(&*screen.borrow());
+                        window::set_screen(&*screen.read().await);
 
                         let screen = screen::active::start(ws).await;
-                        window::set_screen(&screen.borrow().ui.main);
+                        window::set_screen(&screen.read().await.ui.main);
                     }
                     Err(err) => widgets.error_label.set_text(&format!("{}", err)),
                 }

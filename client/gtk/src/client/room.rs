@@ -47,7 +47,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
     }
 
     pub async fn send_message(&mut self, content: String) -> Result<()> {
-        let mut message = self.message_stream.push(self.user.borrow().id(), content.clone());
+        let mut message = self.message_stream.push(self.user.read().await.id(), content.clone()).await;
         message.set_status(MessageStatus::Pending);
 
         let result = self.send_message_request(content).await;

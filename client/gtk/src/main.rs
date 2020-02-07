@@ -1,6 +1,5 @@
 #![feature(type_alias_impl_trait)]
 
-use std::cell::{self, RefCell};
 use std::rc::{Rc, Weak};
 
 use gio::prelude::*;
@@ -40,7 +39,7 @@ impl Server {
     pub fn url(&self) -> &str { &self.0 }
 }
 
-pub struct UiEntity<T>(Rc<RefCell<T>>);
+pub struct UiEntity<T>(Rc<tokio::sync::RwLock<T>>);
 
 impl<T> Clone for UiEntity<T> {
     #[inline]
@@ -50,14 +49,14 @@ impl<T> Clone for UiEntity<T> {
 impl<T> UiEntity<T> {
     #[inline]
     pub fn new(value: T) -> Self {
-        UiEntity(Rc::new(RefCell::new(value)))
+        UiEntity(Rc::new(tokio::sync::RwLock::new(value)))
     }
 
     #[inline]
-    pub fn borrow(&self) -> cell::Ref<T> { self.0.borrow() }
+    pub async fn read(&self) -> tokio::sync::RwLockReadGuard<'_, T> { self.0.read().await }
 
     #[inline]
-    pub fn borrow_mut(&self) -> cell::RefMut<T> { self.0.borrow_mut() }
+    pub async fn write(&self) -> tokio::sync::RwLockWriteGuard<'_, T> { self.0.write().await }
 
     #[inline]
     pub fn downgrade(&self) -> WeakUiEntity<T> {
@@ -65,7 +64,7 @@ impl<T> UiEntity<T> {
     }
 }
 
-pub struct WeakUiEntity<T>(Weak<RefCell<T>>);
+pub struct WeakUiEntity<T>(Weak<tokio::sync::RwLock<T>>);
 
 impl<T> Clone for WeakUiEntity<T> {
     #[inline]
@@ -83,11 +82,11 @@ async fn start() {
     match try_login().await {
         Some(ws) => {
             let screen = screen::active::start(ws).await;
-            window::set_screen(&screen.borrow().ui.main);
+            window::set_screen(&screen.read().await.ui.main);
         }
         None => {
-            let screen = screen::login::build();
-            window::set_screen(&screen.borrow().main);
+            let screen = screen::login::build().await;
+            window::set_screen(&screen.read().await.main);
         }
     }
 }
@@ -138,11 +137,13 @@ async fn main() {
 
         window::init(window.build());
 
-        let screen = screen::loading::build();
-        window::set_screen(&*screen.borrow());
-
         let ctx = glib::MainContext::ref_thread_default();
-        ctx.spawn_local(start());
+        ctx.spawn_local(async move {
+            let screen = screen::loading::build();
+            window::set_screen(&*screen.read().await);
+
+            start().await;
+        });
     });
 
     application.run(&[]);

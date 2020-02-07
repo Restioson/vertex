@@ -1,8 +1,6 @@
-use std::future::Future;
 use std::rc::Rc;
 
 use futures::{Stream, StreamExt};
-use futures::channel::oneshot;
 
 pub use community::*;
 pub use message::*;
@@ -31,6 +29,12 @@ pub trait ClientUi: Sized {
     fn build_message_list(&self) -> Self::MessageListWidget;
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct RoomIndex {
+    pub community: usize,
+    pub room: usize,
+}
+
 pub struct Client<Ui: ClientUi + 'static> {
     request: Rc<net::RequestSender>,
 
@@ -39,7 +43,8 @@ pub struct Client<Ui: ClientUi + 'static> {
     pub message_list: UiEntity<MessageList<Ui>>,
 
     pub communities: Vec<UiEntity<CommunityEntry<Ui>>>,
-    selected_community: Option<usize>,
+
+    selected_room: Option<RoomIndex>,
 }
 
 async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
@@ -86,7 +91,7 @@ impl<Ui: ClientUi + 'static> Client<Ui> {
             user,
             message_list,
             communities: vec![], // TODO
-            selected_community: None,
+            selected_room: None,
         });
 
         let ctx = glib::MainContext::ref_thread_default();
@@ -102,7 +107,6 @@ impl<Ui: ClientUi + 'static> Client<Ui> {
     pub async fn handle_event(&mut self, event: ServerEvent) {
         // TODO
         match event {
-            ServerEvent::Message(message) => {}
             unexpected => println!("unhandled server event: {:?}", unexpected),
         }
     }
@@ -116,7 +120,7 @@ impl<Ui: ClientUi + 'static> Client<Ui> {
         let request = self.request.send(request).await?;
 
         match request.response().await? {
-            OkResponse::AddCommunity { community } => Ok(self.add_community(community)),
+            OkResponse::AddCommunity { community } => Ok(self.add_community(community).await),
             _ => Err(Error::UnexpectedMessage),
         }
     }
@@ -126,12 +130,12 @@ impl<Ui: ClientUi + 'static> Client<Ui> {
         let request = self.request.send(request).await?;
 
         match request.response().await? {
-            OkResponse::AddCommunity { community } => Ok(self.add_community(community)),
+            OkResponse::AddCommunity { community } => Ok(self.add_community(community).await),
             _ => Err(Error::UnexpectedMessage),
         }
     }
 
-    fn add_community(&mut self, community: CommunityStructure) -> UiEntity<CommunityEntry<Ui>> {
+    async fn add_community(&mut self, community: CommunityStructure) -> UiEntity<CommunityEntry<Ui>> {
         let widget = self.ui.add_community(community.name.clone());
 
         let entry: UiEntity<CommunityEntry<Ui>> = CommunityEntry::new(
@@ -143,22 +147,31 @@ impl<Ui: ClientUi + 'static> Client<Ui> {
             community.name,
         );
 
-        &entry.borrow().widget.bind_events(&entry);
+        &entry.read().await.widget.bind_events(&entry);
 
         for room in community.rooms {
-            entry.borrow_mut().add_room(room);
+            entry.write().await.add_room(room);
         }
 
         self.communities.push(entry);
         self.communities.last().unwrap().clone()
     }
 
-    pub fn select_community(&mut self, index: Option<usize>) {
-        self.selected_community = index;
+    pub fn select_room(&mut self, index: Option<RoomIndex>) {
+        self.selected_room = index;
     }
 
-    pub fn selected_community(&self) -> Option<&UiEntity<CommunityEntry<Ui>>> {
-        self.selected_community.and_then(move |idx| self.communities.get(idx))
+    pub async fn selected_room(&self) -> Option<UiEntity<RoomEntry<Ui>>> {
+        match self.selected_room {
+            Some(RoomIndex { community, room }) => {
+                if let Some(community) = self.communities.get(community) {
+                    let community = community.read().await;
+                    return community.get_room(room).cloned();
+                }
+            },
+            _ => (),
+        }
+        None
     }
 
     pub async fn log_out(&self) -> Result<()> {
@@ -184,7 +197,7 @@ impl<Ui: ClientUi, S> ClientLoop<Ui, S>
             let mut event_receiver = event_receiver;
             while let Some(result) = event_receiver.next().await {
                 if let Some(client) = client.upgrade() {
-                    let mut client = client.borrow_mut();
+                    let mut client = client.write().await;
                     match result {
                         Ok(event) => client.handle_event(event).await,
                         Err(err) => client.handle_err(err).await,

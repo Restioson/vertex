@@ -4,7 +4,7 @@ use vertex::*;
 
 use crate::{Client, client, screen, TryGetText, window};
 use crate::auth;
-use crate::client::{ClientUi, MessageStatus};
+use crate::client::MessageStatus;
 use crate::connect::AsConnector;
 use crate::UiEntity;
 
@@ -37,12 +37,10 @@ impl Ui {
         self.message_entry.connect_activate(
             screen.connector()
                 .do_async(|screen, entry: gtk::Entry| async move {
-                    let mut client = screen.borrow_mut();
-                    let selected_room = client.selected_community()
-                        .and_then(|community| community.borrow().selected_room().cloned());
+                    let mut client = screen.write().await;
 
-                    if let Some(selected_room) = selected_room {
-                        let mut selected_room = selected_room.borrow_mut();
+                    if let Some(selected_room) = client.selected_room().await {
+                        let mut selected_room = selected_room.write().await;
 
                         let content = entry.try_get_text().unwrap_or_default();
                         entry.set_text("");
@@ -56,9 +54,9 @@ impl Ui {
 
         self.settings_button.connect_button_press_event(
             screen.connector()
-                .do_sync(|screen, (_button, _event)| {
+                .do_async(|screen, (_button, _event)| async move {
                     let screen = screen::settings::build(screen.clone());
-                    window::set_screen(&screen.borrow().main);
+                    window::set_screen(&screen.read().await.main);
                 })
                 .build_widget_event()
         );
@@ -152,7 +150,7 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
             community_entry.connector()
                 .do_async(move |community_entry, (widget, event)| async move {
                     // TODO: error handling
-                    let community_entry = community_entry.borrow();
+                    let community_entry = community_entry.read().await;
 
                     let invite = community_entry.create_invite(None).await.expect("failed to create invite");
 
@@ -300,7 +298,7 @@ pub async fn start(ws: auth::AuthenticatedWs) -> UiEntity<Client<Ui>> {
     let screen = Client::start(ws, Ui::build()).await
         .expect("client failed to start");
 
-    screen.borrow().ui.bind_events(&screen);
+    screen.read().await.ui.bind_events(&screen);
 
     screen
 }
@@ -356,10 +354,11 @@ fn show_create_community(client: UiEntity<Client<Ui>>) {
                 async move {
                     if let Ok(name) = name_entry.try_get_text() {
                         // TODO: error handling
-                        let community = client.borrow_mut().create_community(&name).await.unwrap();
+                        let community = client.write().await.create_community(&name).await.unwrap();
 
-                        community.borrow_mut().create_room("General").await.unwrap();
-                        community.borrow_mut().create_room("Off Topic").await.unwrap();
+                        let mut community = community.write().await;
+                        community.create_room("General").await.unwrap();
+                        community.create_room("Off Topic").await.unwrap();
                     }
                     dialog.close();
                 }
@@ -386,7 +385,7 @@ fn show_join_community(client: UiEntity<Client<Ui>>) {
                     if let Ok(code) = code_entry.try_get_text() {
                         let code = InviteCode(code);
                         // TODO: error handling
-                        client.borrow_mut().join_community(code).await.unwrap();
+                        client.write().await.join_community(code).await.unwrap();
                     }
                     dialog.close();
                 }

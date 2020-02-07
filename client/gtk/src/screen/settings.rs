@@ -27,7 +27,7 @@ pub fn build(client: UiEntity<Client<screen::active::Ui>>) -> UiEntity<Model> {
 }
 
 fn bind_events(screen: &UiEntity<Model>) {
-    let model = screen.borrow();
+    let model = futures::executor::block_on(screen.read());
 
     model.category_list.connect_row_selected(
         screen.connector()
@@ -38,18 +38,18 @@ fn bind_events(screen: &UiEntity<Model>) {
                         .map(|s| s.as_str().to_owned())
                         .unwrap_or_default();
 
-                    let model = screen.borrow();
+                    let model = screen.read().await;
 
                     match name.as_str() {
                         "log_out" => {
                             token_store::forget_token();
-                            model.client.borrow_mut().log_out().await.expect("failed to revoke token");
+                            model.client.write().await.log_out().await.expect("failed to revoke token");
 
-                            let screen = screen::login::build();
-                            window::set_screen(&screen.borrow().main);
+                            let screen = screen::login::build().await;
+                            window::set_screen(&screen.read().await.main);
                         }
                         "close" => {
-                            window::set_screen(&model.client.borrow().ui.main);
+                            window::set_screen(&model.client.read().await.ui.main);
                         }
                         _ => ()
                     }

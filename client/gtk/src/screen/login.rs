@@ -18,7 +18,7 @@ pub struct Screen {
     spinner: gtk::Spinner,
 }
 
-pub fn build() -> UiEntity<Screen> {
+pub async fn build() -> UiEntity<Screen> {
     let builder = gtk::Builder::new_from_file("res/glade/login/login.glade");
 
     let screen = Screen {
@@ -33,18 +33,18 @@ pub fn build() -> UiEntity<Screen> {
     };
 
     let screen = UiEntity::new(screen);
-    bind_events(&screen);
+    bind_events(&screen).await;
 
     screen
 }
 
-fn bind_events(screen: &UiEntity<Screen>) {
-    let widgets = screen.borrow();
+async fn bind_events(screen: &UiEntity<Screen>) {
+    let widgets = screen.read().await;
 
     widgets.login_button.connect_button_press_event(
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
-                let widgets = screen.borrow();
+                let widgets = screen.read().await;
 
                 let username = widgets.username_entry.try_get_text().unwrap_or_default();
                 let password = widgets.password_entry.try_get_text().unwrap_or_default();
@@ -55,10 +55,10 @@ fn bind_events(screen: &UiEntity<Screen>) {
                 match login(username, password).await {
                     Ok(ws) => {
                         let screen = screen::loading::build();
-                        window::set_screen(&*screen.borrow());
+                        window::set_screen(&*screen.read().await);
 
                         let screen = screen::active::start(ws).await;
-                        window::set_screen(&screen.borrow().ui.main);
+                        window::set_screen(&screen.read().await.ui.main);
                     }
                     Err(err) => widgets.error_label.set_text(&format!("{}", err)),
                 }
@@ -70,9 +70,9 @@ fn bind_events(screen: &UiEntity<Screen>) {
 
     widgets.register_button.connect_button_press_event(
         screen.connector()
-            .do_sync(|screen, (_button, _event)| {
-                let screen = screen::register::build();
-                window::set_screen(&screen.borrow().main);
+            .do_async(|screen, (_button, _event)| async move {
+                let screen = screen::register::build().await;
+                window::set_screen(&screen.read().await.main);
             })
             .build_widget_event()
     );

@@ -28,7 +28,6 @@ pub struct CommunityEntry<Ui: ClientUi> {
     name: String,
 
     rooms: Vec<UiEntity<RoomEntry<Ui>>>,
-    selected_room: Option<usize>,
 }
 
 impl<Ui: ClientUi> CommunityEntry<Ui> {
@@ -48,7 +47,6 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
             id,
             name,
             rooms: Vec::new(),
-            selected_room: None,
         })
     }
 
@@ -72,14 +70,6 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
             OkResponse::AddRoom { room, .. } => Ok(self.add_room(room)),
             _ => Err(Error::UnexpectedMessage),
         }
-    }
-
-    pub fn select_room(&mut self, index: Option<usize>) {
-        self.selected_room = index;
-    }
-
-    pub fn selected_room(&self) -> Option<&UiEntity<RoomEntry<Ui>>> {
-        self.selected_room.and_then(move |idx| self.get_room(idx))
     }
 
     #[inline]

@@ -1,13 +1,8 @@
-use std::collections::LinkedList;
-use std::rc::Rc;
-
-use futures::{SinkExt, StreamExt};
-
 use vertex::*;
 
-use crate::{net, UiEntity};
+use crate::UiEntity;
 
-use super::{ClientUi, Result};
+use super::ClientUi;
 
 #[derive(Debug, Copy, Clone)]
 pub enum MessageStatus {
@@ -60,7 +55,7 @@ impl<Ui: ClientUi> MessageStream<Ui> {
         MessageStream { list }
     }
 
-    pub fn push(&mut self, author: UserId, content: String) -> MessageHandle<Ui> {
-        self.list.borrow_mut().push(author, content)
+    pub async fn push(&mut self, author: UserId, content: String) -> MessageHandle<Ui> {
+        self.list.write().await.push(author, content)
     }
 }
