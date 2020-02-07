@@ -1,74 +1,17 @@
-use std::cell::RefCell;
-use std::fmt;
-
 use gtk::prelude::*;
 
 use vertex::*;
 
 use crate::{Client, client, screen, TryGetText, window};
 use crate::auth;
+use crate::client::{ClientUi, MessageStatus};
 use crate::connect::AsConnector;
-use crate::UiShared;
-
-struct MessageList<Author: Eq + fmt::Display> {
-    list: gtk::ListBox,
-    last_widget: Option<MessageWidget<Author>>,
-}
-
-impl<Author: Eq + fmt::Display> MessageList<Author> {
-    fn new(list: gtk::ListBox) -> MessageList<Author> {
-        MessageList { list, last_widget: None }
-    }
-
-    fn push(&mut self, author: Author, message: &str) {
-        if self.last_widget.is_none() {
-            let widget = MessageWidget::build(author);
-            self.list.insert(&widget.widget, -1);
-            self.last_widget = Some(widget);
-        }
-
-        if let Some(widget) = &mut self.last_widget {
-            widget.push_content(message.trim());
-        }
-    }
-}
-
-struct MessageWidget<Author: fmt::Display> {
-    author: Author,
-    widget: gtk::Box,
-    inner: gtk::Box,
-}
-
-impl<Author: fmt::Display> MessageWidget<Author> {
-    fn build(author: Author) -> MessageWidget<Author> {
-        let builder = gtk::Builder::new_from_file("res/glade/active/message_entry.glade");
-
-        let widget: gtk::Box = builder.get_object("message").unwrap();
-        let inner: gtk::Box = builder.get_object("message_inner").unwrap();
-
-        let author_name: gtk::Label = builder.get_object("author_name").unwrap();
-        author_name.set_text(&format!("{}", author));
-
-        widget.show_all();
-
-        MessageWidget { author, widget, inner }
-    }
-
-    fn push_content(&mut self, content: &str) {
-        self.inner.add(&gtk::LabelBuilder::new()
-            .name("message_content")
-            .label(content)
-            .halign(gtk::Align::Start)
-            .build()
-        );
-        self.widget.show_all();
-    }
-}
+use crate::UiEntity;
 
 pub struct Ui {
     pub main: gtk::Viewport,
     communities: gtk::ListBox,
-    messages: RefCell<MessageList<String>>,
+    messages: gtk::ListBox,
     message_entry: gtk::Entry,
     settings_button: gtk::Button,
     add_community_button: gtk::Button,
@@ -83,14 +26,14 @@ impl Ui {
         Ui {
             main: main.clone(),
             communities: builder.get_object("communities").unwrap(),
-            messages: RefCell::new(MessageList::new(builder.get_object("messages").unwrap())),
+            messages: builder.get_object("messages").unwrap(),
             message_entry: builder.get_object("message_entry").unwrap(),
             settings_button: builder.get_object("settings_button").unwrap(),
             add_community_button: builder.get_object("add_community_button").unwrap(),
         }
     }
 
-    fn bind_events(&self, screen: &UiShared<Client<Ui>>) {
+    fn bind_events(&self, screen: &UiEntity<Client<Ui>>) {
         self.message_entry.connect_activate(
             screen.connector()
                 .do_async(|screen, entry: gtk::Entry| async move {
@@ -131,6 +74,8 @@ impl Ui {
 impl client::ClientUi for Ui {
     type CommunityEntryWidget = CommunityEntryWidget;
     type RoomEntryWidget = RoomEntryWidget;
+    type MessageListWidget = MessageListWidget;
+    type MessageEntryWidget = MessageEntryWidget;
 
     fn add_community(&self, name: String) -> CommunityEntryWidget {
         let widget = CommunityEntryWidget::build(name);
@@ -139,6 +84,10 @@ impl client::ClientUi for Ui {
         widget.expander.show_all();
 
         widget
+    }
+
+    fn build_message_list(&self) -> MessageListWidget {
+        MessageListWidget { list: self.messages.clone(), last_group: None }
     }
 }
 
@@ -198,24 +147,7 @@ impl CommunityEntryWidget {
 }
 
 impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
-    fn bind_events(&self, community_entry: &UiShared<client::CommunityEntry<Ui>>) {
-//        self.expander.connect_property_expanded_notify(
-//            client.connector()
-//                .do_sync(|client, expander: gtk::Expander| {
-//                    if expander.get_expanded() {
-//                    let last_expanded = screen.model_mut().selected_community_widget.take();
-//                    if let Some((expander, _)) = last_expanded {
-//                        expander.set_expanded(false);
-//                    }
-//                    // TODO@gegy1000: help it needs to set the selected widget *with index* here
-//                    } else {
-//                        // TODO@gegy1000 testing porpoises
-//                        screen.model_mut().selected_community_widget = None;
-//                    }
-//                })
-//                .build_cloned_consumer()
-//        );
-
+    fn bind_events(&self, community_entry: &UiEntity<client::CommunityEntry<Ui>>) {
         self.invite_button.connect_button_press_event(
             community_entry.connector()
                 .do_async(move |community_entry, (widget, event)| async move {
@@ -273,17 +205,107 @@ impl RoomEntryWidget {
 }
 
 impl client::RoomEntryWidget<Ui> for RoomEntryWidget {
-    fn bind_events(&self, room: &UiShared<client::RoomEntry<Ui>>) {}
+    fn bind_events(&self, room: &UiEntity<client::RoomEntry<Ui>>) {}
 }
 
-pub fn build(ws: auth::AuthenticatedWs) -> UiShared<Client<Ui>> {
-    let screen = Client::spawn(ws, Ui::build());
+pub struct MessageListWidget {
+    list: gtk::ListBox,
+    last_group: Option<GroupedMessageWidget>,
+}
+
+impl MessageListWidget {
+    fn next_group(&mut self, author: UserId) -> &GroupedMessageWidget {
+        match &self.last_group {
+            Some(group) if group.author == author => {}
+            _ => {
+                let group = GroupedMessageWidget::build(author);
+                self.list.insert(&group.widget, -1);
+                self.last_group = Some(group);
+            }
+        }
+
+        self.last_group.as_ref().unwrap()
+    }
+}
+
+impl client::MessageListWidget<Ui> for MessageListWidget {
+    fn push_message(&mut self, author: UserId, content: String) -> MessageEntryWidget {
+        let group = self.next_group(author);
+        group.push_message(content)
+    }
+}
+
+pub struct GroupedMessageWidget {
+    author: UserId,
+    widget: gtk::Box,
+    inner: gtk::Box,
+}
+
+impl GroupedMessageWidget {
+    fn build(author: UserId) -> GroupedMessageWidget {
+        let builder = gtk::Builder::new_from_file("res/glade/active/message_entry.glade");
+
+        let widget: gtk::Box = builder.get_object("message").unwrap();
+        let inner: gtk::Box = builder.get_object("message_inner").unwrap();
+
+        let author_name: gtk::Label = builder.get_object("author_name").unwrap();
+        author_name.set_text(&format!("{}", author.0));
+
+        widget.show_all();
+
+        GroupedMessageWidget { author, widget, inner }
+    }
+
+    fn push_message(&self, content: String) -> MessageEntryWidget {
+        let entry = MessageEntryWidget::build(content);
+        self.widget.add(&entry.label);
+        self.widget.show_all();
+
+        entry
+    }
+}
+
+pub struct MessageEntryWidget {
+    label: gtk::Label,
+}
+
+impl MessageEntryWidget {
+    fn build(content: String) -> MessageEntryWidget {
+        let label = gtk::LabelBuilder::new()
+            .name("message_content")
+            .label(content.trim())
+            .halign(gtk::Align::Start)
+            .build();
+
+        MessageEntryWidget { label }
+    }
+}
+
+impl client::MessageEntryWidget<Ui> for MessageEntryWidget {
+    fn set_status(&mut self, status: client::MessageStatus) {
+        let style = self.label.get_style_context();
+        style.remove_class("pending");
+        style.remove_class("error");
+
+        match status {
+            MessageStatus::Pending => style.add_class("pending"),
+            MessageStatus::Err => style.add_class("error"),
+            _ => (),
+        }
+    }
+}
+
+pub async fn start(ws: auth::AuthenticatedWs) -> UiEntity<Client<Ui>> {
+    // TODO: extract login process such that this error can be properly handled
+    let screen = Client::start(ws, Ui::build()).await
+        .expect("client failed to start");
+
     screen.borrow().ui.bind_events(&screen);
 
     screen
 }
 
-fn show_add_community(client: UiShared<Client<Ui>>) {
+fn show_add_community(client: UiEntity<Client<Ui>>) {
     let builder = gtk::Builder::new_from_file("res/glade/active/dialog/add_community.glade");
     let main: gtk::Box = builder.get_object("main").unwrap();
 
@@ -317,7 +339,7 @@ fn show_add_community(client: UiShared<Client<Ui>>) {
     );
 }
 
-fn show_create_community(client: UiShared<Client<Ui>>) {
+fn show_create_community(client: UiEntity<Client<Ui>>) {
     let builder = gtk::Builder::new_from_file("res/glade/active/dialog/create_community.glade");
     let main: gtk::Box = builder.get_object("main").unwrap();
 
@@ -334,11 +356,10 @@ fn show_create_community(client: UiShared<Client<Ui>>) {
                 async move {
                     if let Ok(name) = name_entry.try_get_text() {
                         // TODO: error handling
-                        let mut client = client.borrow_mut();
-                        let community = client.create_community(&name).await.unwrap();
-                        let mut community = community.borrow_mut();
-                        community.create_room("General").await.unwrap();
-                        community.create_room("Off Topic").await.unwrap();
+                        let community = client.borrow_mut().create_community(&name).await.unwrap();
+
+                        community.borrow_mut().create_room("General").await.unwrap();
+                        community.borrow_mut().create_room("Off Topic").await.unwrap();
                     }
                     dialog.close();
                 }
@@ -347,7 +368,7 @@ fn show_create_community(client: UiShared<Client<Ui>>) {
     );
 }
 
-fn show_join_community(client: UiShared<Client<Ui>>) {
+fn show_join_community(client: UiEntity<Client<Ui>>) {
     let builder = gtk::Builder::new_from_file("res/glade/active/dialog/join_community.glade");
     let main: gtk::Box = builder.get_object("main").unwrap();
 

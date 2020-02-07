@@ -1,8 +1,8 @@
 use gtk::prelude::*;
 
-use crate::UiShared;
+use crate::UiEntity;
 
-pub fn build() -> UiShared<gtk::Viewport> {
+pub fn build() -> UiEntity<gtk::Viewport> {
     let builder = gtk::Builder::new_from_file("res/glade/loading/loading.glade");
-    UiShared::new(builder.get_object("viewport").unwrap())
+    UiEntity::new(builder.get_object("viewport").unwrap())
 }

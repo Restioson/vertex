@@ -91,7 +91,7 @@ pub enum ClientRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
-    Action(ServerAction),
+    Event(ServerEvent),
     Response {
         id: RequestId,
         result: ResponseResult,
@@ -100,7 +100,8 @@ pub enum ServerMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ServerAction {
+pub enum ServerEvent {
+    ClientReady(ClientReady),
     Message(ForwardedMessage),
     Edit(Edit),
     Delete(Delete),
@@ -129,4 +130,11 @@ impl Into<Vec<u8>> for ServerMessage {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClientReady {
+    pub user: UserId,
+    pub username: String,
+    pub display_name: String,
 }

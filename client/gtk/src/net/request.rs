@@ -94,12 +94,12 @@ impl RequestManager {
         }
     }
 
-    pub fn receive_from(&self, net: net::Receiver) -> impl Stream<Item = Result<ServerAction>> {
+    pub fn receive_from(&self, net: net::Receiver) -> impl Stream<Item = Result<ServerEvent>> {
         let tracker = Rc::downgrade(&self.tracker);
 
         net.stream().filter_map(move |result| {
             futures::future::ready(match result {
-                Ok(ServerMessage::Action(action)) => Some(Ok(action)),
+                Ok(ServerMessage::Event(action)) => Some(Ok(action)),
                 Ok(ServerMessage::Response { result, id }) => {
                     if let Some(tracker) = tracker.upgrade() {
                         tracker.complete(id, result);
@@ -129,25 +129,15 @@ pub struct RequestSender {
 }
 
 impl RequestSender {
-    pub async fn request(&self, request: ClientRequest) -> Result<Request> {
+    pub async fn send(&self, request: ClientRequest) -> Result<Request> {
         let id = self.id_gen.next();
 
         let receiver = self.tracker.enqueue(id).expect("unable to enqueue message");
 
         let message = ClientMessage { id, request };
-        self.send(message).await?;
+        self.net.send(message).await?;
 
         Ok(Request(receiver))
-    }
-
-    #[inline]
-    pub async fn send(&self, message: ClientMessage) -> Result<()> {
-        self.net.send(message).await
-    }
-
-    #[inline]
-    pub async fn close(&self) -> Result<()> {
-        self.net.close().await
     }
 
     #[inline]

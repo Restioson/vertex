@@ -282,9 +282,17 @@ spinner:checked {
   border-radius: 20px;
 }
 
-#active #message #message_content {
+#active #message label {
   color: #e0e0e0;
   padding-left: 2px;
+}
+
+#active #message label.pending {
+  color: #a0a0a0;
+}
+
+#active #message label.error {
+  color: @error_color;
 }
 
 #active #upper_bar #settings_button {

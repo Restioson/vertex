@@ -5,7 +5,7 @@ use gtk::prelude::*;
 use crate::{auth, local_server, token_store, TryGetText, window};
 use crate::connect::AsConnector;
 use crate::screen;
-use crate::UiShared;
+use crate::UiEntity;
 
 pub struct Screen {
     pub main: gtk::Viewport,
@@ -18,7 +18,7 @@ pub struct Screen {
     spinner: gtk::Spinner,
 }
 
-pub fn build() -> UiShared<Screen> {
+pub fn build() -> UiEntity<Screen> {
     let builder = gtk::Builder::new_from_file("res/glade/login/login.glade");
 
     let screen = Screen {
@@ -32,13 +32,13 @@ pub fn build() -> UiShared<Screen> {
         spinner: builder.get_object("spinner").unwrap(),
     };
 
-    let screen = UiShared::new(screen);
+    let screen = UiEntity::new(screen);
     bind_events(&screen);
 
     screen
 }
 
-fn bind_events(screen: &UiShared<Screen>) {
+fn bind_events(screen: &UiEntity<Screen>) {
     let widgets = screen.borrow();
 
     widgets.login_button.connect_button_press_event(
@@ -54,7 +54,10 @@ fn bind_events(screen: &UiShared<Screen>) {
 
                 match login(username, password).await {
                     Ok(ws) => {
-                        let screen = screen::active::build(ws);
+                        let screen = screen::loading::build();
+                        window::set_screen(&*screen.borrow());
+
+                        let screen = screen::active::start(ws).await;
                         window::set_screen(&screen.borrow().ui.main);
                     }
                     Err(err) => widgets.error_label.set_text(&format!("{}", err)),

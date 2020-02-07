@@ -1,8 +1,9 @@
 use std::ops::{Deref, DerefMut};
 use std::time::Instant;
 
-use futures::stream::SplitSink;
+use chrono::{DateTime, Utc};
 use futures::{Future, SinkExt};
+use futures::stream::SplitSink;
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
@@ -10,12 +11,11 @@ use xtra::prelude::*;
 pub use manager::*;
 use vertex::*;
 
-use crate::community::{CommunityActor, CreateRoom, Join, COMMUNITIES};
-use crate::database::*;
 use crate::{auth, handle_disconnected, IdentifiedMessage, SendMessage};
+use crate::community::{COMMUNITIES, CommunityActor, CreateRoom, Join};
+use crate::database::*;
 
 use super::*;
-use chrono::{DateTime, Utc};
 
 mod manager;
 
@@ -28,6 +28,12 @@ impl Message for WebSocketMessage {
 struct CheckHeartbeat;
 
 impl Message for CheckHeartbeat {
+    type Result = ();
+}
+
+struct NotifyClientReady;
+
+impl Message for NotifyClientReady {
     type Result = ();
 }
 
@@ -63,6 +69,7 @@ impl ActiveSession {
 
 impl Actor for ActiveSession {
     fn started(&mut self, ctx: &mut Context<Self>) {
+        ctx.notify_immediately(NotifyClientReady);
         ctx.notify_interval(HEARTBEAT_TIMEOUT, || CheckHeartbeat);
     }
 
@@ -93,7 +100,18 @@ impl Handler<WebSocketMessage> for ActiveSession {
     ) -> Self::Responder<'a> {
         async move {
             if self.handle_ws_message(message, ctx).await.is_err() {
-                self.log_out();
+                ctx.stop();
+            }
+        }
+    }
+}
+
+impl Handler<NotifyClientReady> for ActiveSession {
+    type Responder<'a> = impl Future<Output = ()> + 'a;
+
+    fn handle<'a>(&'a mut self, _: NotifyClientReady, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
+        async move {
+            if self.send_ready_event().await.is_err() {
                 ctx.stop();
             }
         }
@@ -122,7 +140,7 @@ impl Handler<LogoutThisSession> for ActiveSession {
     fn handle(&mut self, _: LogoutThisSession, _: &mut Context<Self>) -> Self::Responder<'_> {
         async move {
             let _ = self
-                .send(ServerMessage::Action(ServerAction::SessionLoggedOut))
+                .send(ServerMessage::Event(ServerEvent::SessionLoggedOut))
                 .await;
             self.log_out();
         }
@@ -139,6 +157,20 @@ impl ActiveSession {
     /// Remove the device from wherever it is referenced
     fn log_out(&mut self) {
         manager::remove(self.user, self.device);
+    }
+
+    async fn send_ready_event(&mut self) -> Result<(), ()> {
+        match self.global.database.get_user_by_id(self.user).await {
+            Ok(Some(user)) => {
+                let ready = ClientReady {
+                    user: self.user,
+                    username: user.username,
+                    display_name: user.display_name,
+                };
+                self.send(ServerMessage::Event(ServerEvent::ClientReady(ready))).await.map_err(|_| ())
+            }
+            _ => Err(()),
+        }
     }
 
     async fn handle_ws_message(
@@ -168,14 +200,14 @@ impl ActiveSession {
                 device,
                 perms,
             }
-            .handle_request(msg.request)
-            .await;
+                .handle_request(msg.request)
+                .await;
 
             self.send(ServerMessage::Response {
                 id: msg.id,
                 result: response,
             })
-            .await?;
+                .await?;
         } else if message.is_close() {
             ctx.stop();
         } else {
@@ -470,11 +502,11 @@ impl<'a> RequestHandler<'a> {
                 .map_err(handle_disconnected("Community"))?;
 
             self.session
-                .send(ServerMessage::Action(ServerAction::AddRoom { id, name }))
+                .send(ServerMessage::Event(ServerEvent::AddRoom { id, name: name.clone() }))
                 .await
                 .unwrap();
 
-            let room = RoomStructure { id, name: "".to_string() };
+            let room = RoomStructure { id, name };
             Ok(OkResponse::AddRoom { community: *community.key(), room })
         } else {
             Err(ErrResponse::InvalidCommunity)

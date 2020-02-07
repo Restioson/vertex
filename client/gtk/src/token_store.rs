@@ -10,7 +10,7 @@ use crate::Server;
 struct StoredToken {
     server: Server,
     device: DeviceId,
-    token: String,
+    token: AuthToken,
 }
 
 fn keyring() -> Keyring<'static> {
@@ -19,11 +19,7 @@ fn keyring() -> Keyring<'static> {
 
 // TODO: pass errors down?
 pub fn store_token(server: Server, device: DeviceId, token: AuthToken) {
-    let stored_token = StoredToken {
-        server,
-        device,
-        token: token.0,
-    };
+    let stored_token = StoredToken { server, device, token };
     let serialized_token = serde_json::to_string(&stored_token).expect("unable to serialize token");
     keyring().set_password(&serialized_token)
         .expect("unable to store token");
@@ -32,7 +28,7 @@ pub fn store_token(server: Server, device: DeviceId, token: AuthToken) {
 pub fn get_stored_token() -> Option<(DeviceId, AuthToken)> {
     keyring().get_password().ok()
         .and_then(|token_str| serde_json::from_str::<StoredToken>(&token_str).ok())
-        .map(|stored| (stored.device, AuthToken(stored.token)))
+        .map(|stored| (stored.device, stored.token))
 }
 
 pub fn forget_token() {

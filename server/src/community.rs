@@ -143,7 +143,7 @@ impl SyncHandler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
     ) -> Result<MessageId, ErrResponse> {
         let from_device = m.device;
         let fwd = ForwardedMessage::from_message_author_device(m.message, m.user, m.device);
-        let send = SendMessage(ServerMessage::Action(ServerAction::Message(fwd)));
+        let send = SendMessage(ServerMessage::Event(ServerEvent::Message(fwd)));
 
         self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(from_device));
 
@@ -158,7 +158,7 @@ impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
         _: &mut Context<Self>,
     ) -> Result<(), ErrResponse> {
         let from_device = m.device;
-        let send = SendMessage(ServerMessage::Action(ServerAction::Edit(m.message)));
+        let send = SendMessage(ServerMessage::Event(ServerEvent::Edit(m.message)));
 
         self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(from_device));
 
@@ -192,7 +192,7 @@ impl SyncHandler<CreateRoom> for CommunityActor {
             },
         );
 
-        let send = SendMessage(ServerMessage::Action(ServerAction::AddRoom {
+        let send = SendMessage(ServerMessage::Event(ServerEvent::AddRoom {
             id,
             name: create.name.clone(),
         }));

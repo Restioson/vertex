@@ -1,20 +1,20 @@
 use gtk::prelude::*;
 
-use crate::{Client, token_store, UiShared, window};
+use crate::{Client, token_store, UiEntity, window};
 use crate::connect::AsConnector;
 use crate::screen;
 
 pub struct Model {
     pub main: gtk::Viewport,
-    client: UiShared<Client<screen::active::Ui>>,
+    client: UiEntity<Client<screen::active::Ui>>,
     category_list: gtk::ListBox,
     settings_viewport: gtk::Viewport,
 }
 
-pub fn build(client: UiShared<Client<screen::active::Ui>>) -> UiShared<Model> {
+pub fn build(client: UiEntity<Client<screen::active::Ui>>) -> UiEntity<Model> {
     let builder = gtk::Builder::new_from_file("res/glade/settings/settings.glade");
 
-    let screen = UiShared::new(Model {
+    let screen = UiEntity::new(Model {
         main: builder.get_object("viewport").unwrap(),
         client,
         category_list: builder.get_object("category_list").unwrap(),
@@ -26,7 +26,7 @@ pub fn build(client: UiShared<Client<screen::active::Ui>>) -> UiShared<Model> {
     screen
 }
 
-fn bind_events(screen: &UiShared<Model>) {
+fn bind_events(screen: &UiEntity<Model>) {
     let model = screen.borrow();
 
     model.category_list.connect_row_selected(

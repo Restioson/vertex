@@ -1,7 +1,7 @@
 #![feature(type_alias_impl_trait)]
 
 use std::cell::{self, RefCell};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use gio::prelude::*;
 use gtk::prelude::*;
@@ -40,17 +40,17 @@ impl Server {
     pub fn url(&self) -> &str { &self.0 }
 }
 
-pub struct UiShared<T>(Rc<RefCell<T>>);
+pub struct UiEntity<T>(Rc<RefCell<T>>);
 
-impl<T> Clone for UiShared<T> {
+impl<T> Clone for UiEntity<T> {
     #[inline]
-    fn clone(&self) -> Self { UiShared(self.0.clone()) }
+    fn clone(&self) -> Self { UiEntity(self.0.clone()) }
 }
 
-impl<T> UiShared<T> {
+impl<T> UiEntity<T> {
     #[inline]
     pub fn new(value: T) -> Self {
-        UiShared(Rc::new(RefCell::new(value)))
+        UiEntity(Rc::new(RefCell::new(value)))
     }
 
     #[inline]
@@ -58,12 +58,31 @@ impl<T> UiShared<T> {
 
     #[inline]
     pub fn borrow_mut(&self) -> cell::RefMut<T> { self.0.borrow_mut() }
+
+    #[inline]
+    pub fn downgrade(&self) -> WeakUiEntity<T> {
+        WeakUiEntity(Rc::downgrade(&self.0))
+    }
+}
+
+pub struct WeakUiEntity<T>(Weak<RefCell<T>>);
+
+impl<T> Clone for WeakUiEntity<T> {
+    #[inline]
+    fn clone(&self) -> Self { WeakUiEntity(self.0.clone()) }
+}
+
+impl<T> WeakUiEntity<T> {
+    #[inline]
+    pub fn upgrade(&self) -> Option<UiEntity<T>> {
+        self.0.upgrade().map(|upgrade| UiEntity(upgrade))
+    }
 }
 
 async fn start() {
     match try_login().await {
         Some(ws) => {
-            let screen = screen::active::build(ws);
+            let screen = screen::active::start(ws).await;
             window::set_screen(&screen.borrow().ui.main);
         }
         None => {
@@ -98,8 +117,8 @@ fn setup_gtk_style() {
     gtk::StyleContext::add_provider_for_screen(&screen, &css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
 }
 
-// TODO: can we get rid of need for this? (do we need to use tokio-tungstenite or can we just use tungstenite?)
-#[tokio::main]
+// TODO: it freezes if we use <2 threads: why? (something with tokio-tungstenite, maybe?)
+#[tokio::main(core_threads = 2)]
 async fn main() {
     let application = gtk::Application::new(None, Default::default())
         .expect("failed to create application");

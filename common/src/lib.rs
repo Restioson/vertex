@@ -35,6 +35,7 @@ impl fmt::Display for DeviceId {
     }
 }
 
+#[serde(transparent)]
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct AuthToken(pub String);
 
