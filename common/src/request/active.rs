@@ -102,11 +102,12 @@ pub enum ServerMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerEvent {
     ClientReady(ClientReady),
-    Message(ForwardedMessage),
+    AddMessage(ForwardedMessage),
     Edit(Edit),
     Delete(Delete),
     SessionLoggedOut,
     AddRoom {
+        community: CommunityId,
         id: RoomId,
         name: String,
     },

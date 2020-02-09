@@ -482,16 +482,16 @@ impl<'a> RequestHandler<'a> {
         }
     }
 
-    async fn create_room(self, name: String, community: CommunityId) -> ResponseResult {
+    async fn create_room(self, name: String, community_id: CommunityId) -> ResponseResult {
         if !self.perms.has_perms(TokenPermissionFlags::CREATE_ROOMS) {
             return Err(ErrResponse::AccessDenied);
         }
 
-        if !self.session.communities.contains(&community) {
+        if !self.session.communities.contains(&community_id) {
             return Err(ErrResponse::InvalidCommunity);
         }
 
-        if let Some(community) = COMMUNITIES.get(&community) {
+        if let Some(community) = COMMUNITIES.get(&community_id) {
             let create = CreateRoom {
                 creator: self.device,
                 name: name.clone(),
@@ -502,7 +502,7 @@ impl<'a> RequestHandler<'a> {
                 .map_err(handle_disconnected("Community"))?;
 
             self.session
-                .send(ServerMessage::Event(ServerEvent::AddRoom { id, name: name.clone() }))
+                .send(ServerMessage::Event(ServerEvent::AddRoom { community: community_id, id, name: name.clone() }))
                 .await
                 .unwrap();
 

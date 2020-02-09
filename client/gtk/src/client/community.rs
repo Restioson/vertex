@@ -64,6 +64,12 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
         }
     }
 
+    pub async fn room_by_id(&self, id: RoomId) -> Option<RoomEntry<Ui>> {
+        self.state.read().await.rooms.iter()
+            .find(|&room| room.id == id)
+            .cloned()
+    }
+
     #[inline]
     pub async fn get_room(&self, index: usize) -> Option<RoomEntry<Ui>> {
         self.state.read().await.rooms.get(index).cloned()

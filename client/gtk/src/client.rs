@@ -101,8 +101,34 @@ impl<Ui: ClientUi> Client<Ui> {
     }
 
     pub async fn handle_event(&self, event: ServerEvent) {
-        // TODO
         match event {
+            ServerEvent::AddCommunity { id, name } => {
+                // TODO
+                self.add_community(CommunityStructure {
+                    id,
+                    name,
+                    rooms: vec![],
+                }).await;
+            }
+            ServerEvent::AddRoom { community, id, name } => {
+                if let Some(community) = self.community_by_id(community).await {
+                    community.add_room(RoomStructure { id, name }).await;
+                } else {
+                    println!("received AddRoom for invalid community: {:?}", community);
+                }
+            }
+            ServerEvent::AddMessage(message) => {
+                let room = match self.community_by_id(message.community).await {
+                    Some(community) => community.room_by_id(message.room).await,
+                    None => None,
+                };
+
+                if let Some(room) = room {
+                    room.add_message(message.author, message.content).await;
+                } else {
+                    println!("received message for invalid room: {:?}#{:?}", message.community, message.room);
+                }
+            }
             unexpected => println!("unhandled server event: {:?}", unexpected),
         }
     }
@@ -150,6 +176,12 @@ impl<Ui: ClientUi> Client<Ui> {
         let mut state = self.state.write().await;
         state.communities.push(entry);
         state.communities.last().unwrap().clone()
+    }
+
+    pub async fn community_by_id(&self, id: CommunityId) -> Option<CommunityEntry<Ui>> {
+        self.state.read().await.communities.iter()
+            .find(|&community| community.id == id)
+            .cloned()
     }
 
     pub async fn select_room(&self, room: Option<RoomEntry<Ui>>) {

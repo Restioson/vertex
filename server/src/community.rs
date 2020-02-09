@@ -143,7 +143,7 @@ impl SyncHandler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
     ) -> Result<MessageId, ErrResponse> {
         let from_device = m.device;
         let fwd = ForwardedMessage::from_message_author_device(m.message, m.user, m.device);
-        let send = SendMessage(ServerMessage::Event(ServerEvent::Message(fwd)));
+        let send = SendMessage(ServerMessage::Event(ServerEvent::AddMessage(fwd)));
 
         self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(from_device));
 
@@ -193,6 +193,7 @@ impl SyncHandler<CreateRoom> for CommunityActor {
         );
 
         let send = SendMessage(ServerMessage::Event(ServerEvent::AddRoom {
+            community: self.id,
             id,
             name: create.name.clone(),
         }));
