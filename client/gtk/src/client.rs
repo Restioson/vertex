@@ -85,11 +85,15 @@ impl<Ui: ClientUi> Client<Ui> {
         let message_list = MessageList::new(ui.build_message_list());
 
         let state = SharedMut::new(ClientState {
-            communities: vec![], // TODO
+            communities: Vec::new(),
             selected_room: None,
         });
 
         let client = Client { request, ui, user, message_list, state };
+
+        for community in ready.communities {
+            client.add_community(community).await;
+        }
 
         let ctx = glib::MainContext::ref_thread_default();
         ctx.spawn_local(ClientLoop {

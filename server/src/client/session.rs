@@ -160,17 +160,32 @@ impl ActiveSession {
     }
 
     async fn send_ready_event(&mut self) -> Result<(), ()> {
-        match self.global.database.get_user_by_id(self.user).await {
-            Ok(Some(user)) => {
-                let ready = ClientReady {
-                    user: self.user,
-                    username: user.username,
-                    display_name: user.display_name,
-                };
-                self.send(ServerMessage::Event(ServerEvent::ClientReady(ready))).await.map_err(|_| ())
-            }
-            _ => Err(()),
-        }
+        // TODO: handle errors better
+
+        let user = self.global.database.get_user_by_id(self.user).await
+            .map_err(|_| ())?
+            .ok_or(())?;
+
+        let communities = self.global.database.get_communities_for_user(self.user).await
+            .map_err(|_| ())?;
+
+        let communities = communities.into_iter()
+            .map(|community| CommunityStructure {
+                id: community.id,
+                name: community.name,
+                // TODO: rooms
+                rooms: vec![],
+            })
+            .collect();
+
+        let ready = ClientReady {
+            user: self.user,
+            username: user.username,
+            display_name: user.display_name,
+            communities,
+        };
+
+        self.send(ServerMessage::Event(ServerEvent::ClientReady(ready))).await.map_err(|_| ())
     }
 
     async fn handle_ws_message(

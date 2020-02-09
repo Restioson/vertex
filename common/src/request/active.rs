@@ -134,4 +134,5 @@ pub struct ClientReady {
     pub user: UserId,
     pub username: String,
     pub display_name: String,
+    pub communities: Vec<CommunityStructure>,
 }

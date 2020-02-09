@@ -1,9 +1,12 @@
-use super::*;
 use std::convert::TryFrom;
 use std::error::Error;
+
 use tokio_postgres::error::{DbError, SqlState};
 use tokio_postgres::Row;
+
 use vertex::{CommunityId, RoomId, UserId};
+
+use super::*;
 
 pub(super) const CREATE_COMMUNITY_MEMBERSHIP_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS community_membership (
@@ -105,6 +108,25 @@ pub enum AddToCommunityError {
 }
 
 impl Database {
+    pub async fn get_communities_for_user(&self, user: UserId) -> DbResult<Vec<CommunityRecord>> {
+        const QUERY: &str = "\
+        SELECT * FROM communities WHERE id IN\
+        (SELECT (community) from community_membership WHERE user_id = $1)\
+        ";
+
+        let conn = self.pool.connection().await?;
+
+        let query = conn.client.prepare(QUERY).await?;
+        let rows = conn.client.query(&query, &[&user.0]).await?;
+
+        let mut records = Vec::with_capacity(rows.len());
+        for row in rows {
+            records.push(CommunityRecord::try_from(row)?);
+        }
+
+        Ok(records)
+    }
+
     pub async fn get_community_membership(
         &self,
         community: CommunityId,
