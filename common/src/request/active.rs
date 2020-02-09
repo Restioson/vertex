@@ -32,7 +32,7 @@ pub enum ErrResponse {
     InvalidInviteCode,
     InvalidUser,
     AlreadyInCommunity,
-    TooManyInviteCodes
+    TooManyInviteCodes,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,13 +108,9 @@ pub enum ServerEvent {
     SessionLoggedOut,
     AddRoom {
         community: CommunityId,
-        id: RoomId,
-        name: String,
+        structure: RoomStructure,
     },
-    AddCommunity {
-        id: CommunityId,
-        name: String,
-    },
+    AddCommunity(CommunityStructure),
     RemoveCommunity {
         id: CommunityId,
         reason: RemoveCommunityReason,

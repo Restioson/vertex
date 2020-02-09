@@ -502,7 +502,13 @@ impl<'a> RequestHandler<'a> {
                 .map_err(handle_disconnected("Community"))?;
 
             self.session
-                .send(ServerMessage::Event(ServerEvent::AddRoom { community: community_id, id, name: name.clone() }))
+                .send(ServerMessage::Event(ServerEvent::AddRoom {
+                    community: community_id,
+                    structure: RoomStructure {
+                        id,
+                        name: name.clone(),
+                    },
+                }))
                 .await
                 .unwrap();
 

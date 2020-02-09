@@ -194,8 +194,10 @@ impl SyncHandler<CreateRoom> for CommunityActor {
 
         let send = SendMessage(ServerMessage::Event(ServerEvent::AddRoom {
             community: self.id,
-            id,
-            name: create.name.clone(),
+            structure: RoomStructure {
+                id,
+                name: create.name.clone(),
+            },
         }));
 
         self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(create.creator));

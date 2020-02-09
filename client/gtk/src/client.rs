@@ -102,17 +102,12 @@ impl<Ui: ClientUi> Client<Ui> {
 
     pub async fn handle_event(&self, event: ServerEvent) {
         match event {
-            ServerEvent::AddCommunity { id, name } => {
-                // TODO
-                self.add_community(CommunityStructure {
-                    id,
-                    name,
-                    rooms: vec![],
-                }).await;
+            ServerEvent::AddCommunity(structure) => {
+                self.add_community(structure).await;
             }
-            ServerEvent::AddRoom { community, id, name } => {
+            ServerEvent::AddRoom { community, structure } => {
                 if let Some(community) = self.community_by_id(community).await {
-                    community.add_room(RoomStructure { id, name }).await;
+                    community.add_room(structure).await;
                 } else {
                     println!("received AddRoom for invalid community: {:?}", community);
                 }
