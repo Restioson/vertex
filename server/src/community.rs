@@ -3,15 +3,15 @@ use std::collections::{BTreeSet, HashMap};
 use dashmap::DashMap;
 use futures::Future;
 use uuid::Uuid;
-use xtra::prelude::*;
 use xtra::Disconnected;
+use xtra::prelude::*;
 
 use lazy_static::lazy_static;
 use vertex::*;
 
+use crate::{handle_disconnected, IdentifiedMessage, SendMessage};
 use crate::client::{self, ActiveSession, Session};
 use crate::database::{AddToCommunityError, CommunityRecord, Database, DbResult};
-use crate::{handle_disconnected, IdentifiedMessage, SendMessage};
 
 lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Address<CommunityActor>> = DashMap::new();
@@ -38,7 +38,7 @@ pub struct Join {
 }
 
 impl Message for Join {
-    type Result = DbResult<Result<(), AddToCommunityError>>;
+    type Result = DbResult<Result<CommunityStructure, AddToCommunityError>>;
 }
 
 pub struct CreateRoom {
@@ -167,7 +167,7 @@ impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
 }
 
 impl Handler<Join> for CommunityActor {
-    type Responder<'a> = impl Future<Output = DbResult<Result<(), AddToCommunityError>>>;
+    type Responder<'a> = impl Future<Output = DbResult<Result<CommunityStructure, AddToCommunityError>>>;
 
     fn handle(&mut self, join: Join, _: &mut Context<Self>) -> Self::Responder<'_> {
         async move {
@@ -177,7 +177,16 @@ impl Handler<Join> for CommunityActor {
 
             self.online_members.insert(join.user);
 
-            Ok(Ok(()))
+            Ok(Ok(CommunityStructure {
+                id: self.id,
+                name: "".to_string(), // TODO: name
+                rooms: self.rooms.iter()
+                    .map(|(id, room)| RoomStructure {
+                        id: *id,
+                        name: room.name.clone(),
+                    })
+                    .collect(),
+            }))
         }
     }
 }

@@ -478,13 +478,10 @@ impl<'a> RequestHandler<'a> {
                 .await
                 .map_err(handle_disconnected("Community"))??;
 
-            // TODO
-            let community_structure = CommunityStructure { id, name: "".to_owned(), rooms: vec![] };
-
             match res {
-                Ok(()) => {
-                    self.session.communities.push(id);
-                    Ok(OkResponse::AddCommunity { community: community_structure })
+                Ok(community) => {
+                    self.session.communities.push(community.id);
+                    Ok(OkResponse::AddCommunity { community })
                 }
                 Err(AddToCommunityError::AlreadyInCommunity) => {
                     Err(ErrResponse::AlreadyInCommunity)
