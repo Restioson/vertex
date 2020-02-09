@@ -516,16 +516,7 @@ impl<'a> RequestHandler<'a> {
                 .await
                 .map_err(handle_disconnected("Community"))?;
 
-            self.session
-                .send(ServerMessage::Event(ServerEvent::AddRoom {
-                    community: community_id,
-                    structure: RoomStructure {
-                        id,
-                        name: name.clone(),
-                    },
-                }))
-                .await
-                .unwrap();
+            // TODO: needs to send ServerAction::AddRoom to other devices
 
             let room = RoomStructure { id, name };
             Ok(OkResponse::AddRoom { community: *community.key(), room })
