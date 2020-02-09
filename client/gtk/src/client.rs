@@ -29,12 +29,6 @@ pub trait ClientUi: Sized + Clone + 'static {
     fn build_message_list(&self) -> Self::MessageListWidget;
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct RoomIndex {
-    pub community: usize,
-    pub room: usize,
-}
-
 async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
     where S: Stream<Item = net::Result<ServerEvent>> + Unpin
 {
@@ -52,7 +46,7 @@ async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
 pub struct ClientState<Ui: ClientUi> {
     pub communities: Vec<CommunityEntry<Ui>>,
 
-    selected_room: Option<RoomIndex>,
+    selected_room: Option<RoomEntry<Ui>>,
 }
 
 #[derive(Clone)]
@@ -141,9 +135,7 @@ impl<Ui: ClientUi> Client<Ui> {
         let widget = self.ui.add_community(community.name.clone());
 
         let entry: CommunityEntry<Ui> = CommunityEntry::new(
-            self.request.clone(),
-            self.user.clone(),
-            self.message_list.clone(),
+            self.clone(),
             widget,
             community.id,
             community.name,
@@ -160,22 +152,14 @@ impl<Ui: ClientUi> Client<Ui> {
         state.communities.last().unwrap().clone()
     }
 
-    pub async fn select_room(&self, index: Option<RoomIndex>) {
+    pub async fn select_room(&self, room: Option<RoomEntry<Ui>>) {
         let mut state = self.state.write().await;
-        state.selected_room = index;
+        state.selected_room = room;
     }
 
     pub async fn selected_room(&self) -> Option<RoomEntry<Ui>> {
         let state = self.state.read().await;
-        match state.selected_room {
-            Some(RoomIndex { community, room }) => {
-                if let Some(community) = state.communities.get(community) {
-                    return community.get_room(room).await.clone();
-                }
-            }
-            _ => (),
-        }
-        None
+        state.selected_room.as_ref().cloned()
     }
 
     pub async fn log_out(&self) -> Result<()> {

@@ -1,12 +1,9 @@
-use std::rc::Rc;
-
 use vertex::*;
 
-use crate::{net, SharedMut};
+use crate::{Client, SharedMut};
 
 use super::{ClientUi, Result};
 use super::message::*;
-use super::user::*;
 
 pub trait RoomEntryWidget<Ui: ClientUi>: Clone {
     fn bind_events(&self, room: &RoomEntry<Ui>);
@@ -18,8 +15,7 @@ pub struct RoomState {
 
 #[derive(Clone)]
 pub struct RoomEntry<Ui: ClientUi> {
-    request: Rc<net::RequestSender>,
-    user: User,
+    pub client: Client<Ui>,
 
     pub widget: Ui::RoomEntryWidget,
 
@@ -33,29 +29,21 @@ pub struct RoomEntry<Ui: ClientUi> {
 
 impl<Ui: ClientUi> RoomEntry<Ui> {
     pub(super) fn new(
-        request: Rc<net::RequestSender>,
-        user: User,
-        message_list: MessageList<Ui>,
+        client: Client<Ui>,
         widget: Ui::RoomEntryWidget,
         community: CommunityId,
         id: RoomId,
         name: String,
     ) -> Self {
-        RoomEntry {
-            request,
-            user,
-            widget,
-            message_stream: MessageStream::new(message_list),
-            community,
-            id,
-            state: SharedMut::new(RoomState {
-                name
-            }),
-        }
+        let message_stream = MessageStream::new(client.message_list.clone());
+        let state = RoomState { name };
+        let state = SharedMut::new(state);
+
+        RoomEntry { client, widget, message_stream, community, id, state }
     }
 
     pub async fn send_message(&self, content: String) -> Result<()> {
-        let mut message = self.message_stream.push(self.user.id(), content.clone()).await;
+        let mut message = self.message_stream.push(self.client.user.id(), content.clone()).await;
         message.set_status(MessageStatus::Pending);
 
         let result = self.send_message_request(content).await;
@@ -74,7 +62,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
             content,
         });
 
-        let request = self.request.send(request).await?;
+        let request = self.client.request.send(request).await?;
         request.response().await?;
 
         Ok(())

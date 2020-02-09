@@ -143,6 +143,22 @@ impl CommunityEntryWidget {
 
 impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
     fn bind_events(&self, community_entry: &client::CommunityEntry<Ui>) {
+        self.room_list.connect_row_selected(
+            community_entry.connector()
+                .do_async(|community, (widget, room): (gtk::ListBox, Option<gtk::ListBoxRow>)| async move {
+                    match room {
+                        Some(room) => {
+                            // TODO: deselect previous room in ui
+                            let room = room.get_index() as usize;
+                            let room = community.get_room(room).await;
+                            community.client.select_room(room).await;
+                        }
+                        None => community.client.select_room(None).await,
+                    }
+                })
+                .build_widget_and_option_consumer()
+        );
+
         self.invite_button.connect_button_press_event(
             community_entry.connector()
                 .do_async(move |community_entry, (_widget, event)| async move {
@@ -252,8 +268,8 @@ impl GroupedMessageWidget {
 
     fn push_message(&self, content: String) -> MessageEntryWidget {
         let entry = MessageEntryWidget::build(content);
-        self.widget.add(&entry.label);
-        self.widget.show_all();
+        self.inner.add(&entry.label);
+        self.inner.show_all();
 
         entry
     }
