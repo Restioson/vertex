@@ -1,6 +1,6 @@
 use vertex::*;
 
-use crate::UiEntity;
+use crate::SharedMut;
 
 use super::ClientUi;
 
@@ -31,31 +31,40 @@ pub trait MessageEntryWidget<Ui: ClientUi> {
     fn set_status(&mut self, status: MessageStatus);
 }
 
+pub struct MessageListState<Ui: ClientUi> {
+    widget: Ui::MessageListWidget,
+}
+
+#[derive(Clone)]
 pub struct MessageList<Ui: ClientUi> {
-    pub widget: Ui::MessageListWidget,
+    state: SharedMut<MessageListState<Ui>>,
 }
 
 impl<Ui: ClientUi> MessageList<Ui> {
-    pub fn new(widget: Ui::MessageListWidget) -> UiEntity<Self> {
-        UiEntity::new(MessageList { widget })
+    pub fn new(widget: Ui::MessageListWidget) -> Self {
+        MessageList {
+            state: SharedMut::new(MessageListState { widget })
+        }
     }
 
-    pub fn push(&mut self, author: UserId, content: String) -> MessageHandle<Ui> {
-        let widget = self.widget.push_message(author, content);
+    pub async fn push(&self, author: UserId, content: String) -> MessageHandle<Ui> {
+        let mut state = self.state.write().await;
+        let widget = state.widget.push_message(author, content);
         MessageHandle { widget }
     }
 }
 
+#[derive(Clone)]
 pub struct MessageStream<Ui: ClientUi> {
-    pub list: UiEntity<MessageList<Ui>>,
+    pub list: MessageList<Ui>,
 }
 
 impl<Ui: ClientUi> MessageStream<Ui> {
-    pub fn new(list: UiEntity<MessageList<Ui>>) -> Self {
+    pub fn new(list: MessageList<Ui>) -> Self {
         MessageStream { list }
     }
 
-    pub async fn push(&mut self, author: UserId, content: String) -> MessageHandle<Ui> {
-        self.list.write().await.push(author, content)
+    pub async fn push(&self, author: UserId, content: String) -> MessageHandle<Ui> {
+        self.list.push(author, content).await
     }
 }

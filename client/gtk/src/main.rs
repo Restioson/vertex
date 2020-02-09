@@ -1,10 +1,12 @@
 #![feature(type_alias_impl_trait)]
 
+use std::ops;
 use std::rc::{Rc, Weak};
 
 use gio::prelude::*;
 use gtk::prelude::*;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
 pub use crate::client::Client;
 
@@ -17,6 +19,49 @@ pub mod net;
 pub mod screen;
 pub mod token_store;
 pub mod window;
+
+pub struct SharedMut<T>(Rc<RwLock<T>>);
+
+impl<T> Clone for SharedMut<T> {
+    #[inline]
+    fn clone(&self) -> Self { SharedMut(self.0.clone()) }
+}
+
+impl<T> SharedMut<T> {
+    #[inline]
+    pub fn new(value: T) -> Self {
+        SharedMut(Rc::new(RwLock::new(value)))
+    }
+
+    #[inline]
+    pub async fn read<'a>(&'a self) -> impl ops::Deref<Target = T> + 'a {
+        self.0.read().await
+    }
+
+    #[inline]
+    pub async fn write<'a>(&'a self) -> impl ops::Deref<Target = T> + ops::DerefMut + 'a {
+        self.0.write().await
+    }
+
+    #[inline]
+    pub fn downgrade(&self) -> WeakSharedMut<T> {
+        WeakSharedMut(Rc::downgrade(&self.0))
+    }
+}
+
+pub struct WeakSharedMut<T>(Weak<RwLock<T>>);
+
+impl<T> Clone for WeakSharedMut<T> {
+    #[inline]
+    fn clone(&self) -> Self { WeakSharedMut(self.0.clone()) }
+}
+
+impl<T> WeakSharedMut<T> {
+    #[inline]
+    pub fn upgrade(&self) -> Option<SharedMut<T>> {
+        self.0.upgrade().map(|upgrade| SharedMut(upgrade))
+    }
+}
 
 pub fn local_server() -> Server {
     Server("https://localhost:8080/client".to_owned())
@@ -39,54 +84,15 @@ impl Server {
     pub fn url(&self) -> &str { &self.0 }
 }
 
-pub struct UiEntity<T>(Rc<tokio::sync::RwLock<T>>);
-
-impl<T> Clone for UiEntity<T> {
-    #[inline]
-    fn clone(&self) -> Self { UiEntity(self.0.clone()) }
-}
-
-impl<T> UiEntity<T> {
-    #[inline]
-    pub fn new(value: T) -> Self {
-        UiEntity(Rc::new(tokio::sync::RwLock::new(value)))
-    }
-
-    #[inline]
-    pub async fn read(&self) -> tokio::sync::RwLockReadGuard<'_, T> { self.0.read().await }
-
-    #[inline]
-    pub async fn write(&self) -> tokio::sync::RwLockWriteGuard<'_, T> { self.0.write().await }
-
-    #[inline]
-    pub fn downgrade(&self) -> WeakUiEntity<T> {
-        WeakUiEntity(Rc::downgrade(&self.0))
-    }
-}
-
-pub struct WeakUiEntity<T>(Weak<tokio::sync::RwLock<T>>);
-
-impl<T> Clone for WeakUiEntity<T> {
-    #[inline]
-    fn clone(&self) -> Self { WeakUiEntity(self.0.clone()) }
-}
-
-impl<T> WeakUiEntity<T> {
-    #[inline]
-    pub fn upgrade(&self) -> Option<UiEntity<T>> {
-        self.0.upgrade().map(|upgrade| UiEntity(upgrade))
-    }
-}
-
 async fn start() {
     match try_login().await {
         Some(ws) => {
-            let screen = screen::active::start(ws).await;
-            window::set_screen(&screen.read().await.ui.main);
+            let client = screen::active::start(ws).await;
+            window::set_screen(&client.ui.main);
         }
         None => {
             let screen = screen::login::build().await;
-            window::set_screen(&screen.read().await.main);
+            window::set_screen(&screen.main);
         }
     }
 }
@@ -140,7 +146,7 @@ async fn main() {
         let ctx = glib::MainContext::ref_thread_default();
         ctx.spawn_local(async move {
             let screen = screen::loading::build();
-            window::set_screen(&*screen.read().await);
+            window::set_screen(&screen);
 
             start().await;
         });

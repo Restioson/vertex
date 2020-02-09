@@ -5,8 +5,8 @@ use gtk::prelude::*;
 use crate::{auth, local_server, token_store, TryGetText, window};
 use crate::connect::AsConnector;
 use crate::screen;
-use crate::UiEntity;
 
+#[derive(Clone)]
 pub struct Screen {
     pub main: gtk::Viewport,
     username_entry: gtk::Entry,
@@ -18,7 +18,7 @@ pub struct Screen {
     spinner: gtk::Spinner,
 }
 
-pub async fn build() -> UiEntity<Screen> {
+pub async fn build() -> Screen {
     let builder = gtk::Builder::new_from_file("res/glade/login/login.glade");
 
     let screen = Screen {
@@ -32,47 +32,42 @@ pub async fn build() -> UiEntity<Screen> {
         spinner: builder.get_object("spinner").unwrap(),
     };
 
-    let screen = UiEntity::new(screen);
     bind_events(&screen).await;
 
     screen
 }
 
-async fn bind_events(screen: &UiEntity<Screen>) {
-    let widgets = screen.read().await;
-
-    widgets.login_button.connect_button_press_event(
+async fn bind_events(screen: &Screen) {
+    screen.login_button.connect_button_press_event(
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
-                let widgets = screen.read().await;
+                let username = screen.username_entry.try_get_text().unwrap_or_default();
+                let password = screen.password_entry.try_get_text().unwrap_or_default();
 
-                let username = widgets.username_entry.try_get_text().unwrap_or_default();
-                let password = widgets.password_entry.try_get_text().unwrap_or_default();
-
-                widgets.status_stack.set_visible_child(&widgets.spinner);
-                widgets.error_label.set_text("");
+                screen.status_stack.set_visible_child(&screen.spinner);
+                screen.error_label.set_text("");
 
                 match login(username, password).await {
                     Ok(ws) => {
-                        let screen = screen::loading::build();
-                        window::set_screen(&*screen.read().await);
+                        let loading = screen::loading::build();
+                        window::set_screen(&loading);
 
-                        let screen = screen::active::start(ws).await;
-                        window::set_screen(&screen.read().await.ui.main);
+                        let client = screen::active::start(ws).await;
+                        window::set_screen(&client.ui.main);
                     }
-                    Err(err) => widgets.error_label.set_text(&format!("{}", err)),
+                    Err(err) => screen.error_label.set_text(&format!("{}", err)),
                 }
 
-                widgets.status_stack.set_visible_child(&widgets.error_label);
+                screen.status_stack.set_visible_child(&screen.error_label);
             })
             .build_widget_event()
     );
 
-    widgets.register_button.connect_button_press_event(
+    screen.register_button.connect_button_press_event(
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
                 let screen = screen::register::build().await;
-                window::set_screen(&screen.read().await.main);
+                window::set_screen(&screen.main);
             })
             .build_widget_event()
     );

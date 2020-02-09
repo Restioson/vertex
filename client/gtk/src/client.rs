@@ -8,7 +8,7 @@ pub use room::*;
 pub use user::*;
 use vertex::*;
 
-use crate::{net, UiEntity, WeakUiEntity};
+use crate::{net, SharedMut};
 
 mod community;
 mod room;
@@ -17,7 +17,7 @@ mod message;
 
 pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
 
-pub trait ClientUi: Sized {
+pub trait ClientUi: Sized + Clone + 'static {
     type CommunityEntryWidget: CommunityEntryWidget<Self>;
     type RoomEntryWidget: RoomEntryWidget<Self>;
 
@@ -35,18 +35,6 @@ pub struct RoomIndex {
     pub room: usize,
 }
 
-pub struct Client<Ui: ClientUi + 'static> {
-    request: Rc<net::RequestSender>,
-
-    pub ui: Ui,
-    pub user: UiEntity<User>,
-    pub message_list: UiEntity<MessageList<Ui>>,
-
-    pub communities: Vec<UiEntity<CommunityEntry<Ui>>>,
-
-    selected_room: Option<RoomIndex>,
-}
-
 async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
     where S: Stream<Item = net::Result<ServerEvent>> + Unpin
 {
@@ -61,8 +49,25 @@ async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
     }
 }
 
-impl<Ui: ClientUi + 'static> Client<Ui> {
-    pub async fn start(ws: net::AuthenticatedWs, ui: Ui) -> Result<UiEntity<Client<Ui>>> {
+pub struct ClientState<Ui: ClientUi> {
+    pub communities: Vec<CommunityEntry<Ui>>,
+
+    selected_room: Option<RoomIndex>,
+}
+
+#[derive(Clone)]
+pub struct Client<Ui: ClientUi> {
+    request: Rc<net::RequestSender>,
+
+    pub ui: Ui,
+    pub user: User,
+    pub message_list: MessageList<Ui>,
+
+    state: SharedMut<ClientState<Ui>>,
+}
+
+impl<Ui: ClientUi> Client<Ui> {
+    pub async fn start(ws: net::AuthenticatedWs, ui: Ui) -> Result<Client<Ui>> {
         let (sender, receiver) = net::from_ws(ws.stream);
 
         let req_manager = net::RequestManager::new();
@@ -85,37 +90,34 @@ impl<Ui: ClientUi + 'static> Client<Ui> {
 
         let message_list = MessageList::new(ui.build_message_list());
 
-        let client = UiEntity::new(Client {
-            ui,
-            request: request.clone(),
-            user,
-            message_list,
+        let state = SharedMut::new(ClientState {
             communities: vec![], // TODO
             selected_room: None,
         });
 
+        let client = Client { request, ui, user, message_list, state };
+
         let ctx = glib::MainContext::ref_thread_default();
         ctx.spawn_local(ClientLoop {
-            client: client.downgrade(),
-            request: request.clone(),
+            client: client.clone(),
             event_receiver,
         }.run());
 
         Ok(client)
     }
 
-    pub async fn handle_event(&mut self, event: ServerEvent) {
+    pub async fn handle_event(&self, event: ServerEvent) {
         // TODO
         match event {
             unexpected => println!("unhandled server event: {:?}", unexpected),
         }
     }
 
-    pub async fn handle_err(&mut self, err: net::Error) {
+    pub async fn handle_err(&self, err: net::Error) {
         println!("server error: {:?}", err);
     }
 
-    pub async fn create_community(&mut self, name: &str) -> Result<UiEntity<CommunityEntry<Ui>>> {
+    pub async fn create_community(&self, name: &str) -> Result<CommunityEntry<Ui>> {
         let request = ClientRequest::CreateCommunity { name: name.to_owned() };
         let request = self.request.send(request).await?;
 
@@ -125,7 +127,7 @@ impl<Ui: ClientUi + 'static> Client<Ui> {
         }
     }
 
-    pub async fn join_community(&mut self, invite: InviteCode) -> Result<UiEntity<CommunityEntry<Ui>>> {
+    pub async fn join_community(&self, invite: InviteCode) -> Result<CommunityEntry<Ui>> {
         let request = ClientRequest::JoinCommunity(invite);
         let request = self.request.send(request).await?;
 
@@ -135,10 +137,10 @@ impl<Ui: ClientUi + 'static> Client<Ui> {
         }
     }
 
-    async fn add_community(&mut self, community: CommunityStructure) -> UiEntity<CommunityEntry<Ui>> {
+    async fn add_community(&self, community: CommunityStructure) -> CommunityEntry<Ui> {
         let widget = self.ui.add_community(community.name.clone());
 
-        let entry: UiEntity<CommunityEntry<Ui>> = CommunityEntry::new(
+        let entry: CommunityEntry<Ui> = CommunityEntry::new(
             self.request.clone(),
             self.user.clone(),
             self.message_list.clone(),
@@ -147,28 +149,30 @@ impl<Ui: ClientUi + 'static> Client<Ui> {
             community.name,
         );
 
-        &entry.read().await.widget.bind_events(&entry);
+        entry.widget.bind_events(&entry);
 
         for room in community.rooms {
-            entry.write().await.add_room(room);
+            entry.add_room(room).await;
         }
 
-        self.communities.push(entry);
-        self.communities.last().unwrap().clone()
+        let mut state = self.state.write().await;
+        state.communities.push(entry);
+        state.communities.last().unwrap().clone()
     }
 
-    pub fn select_room(&mut self, index: Option<RoomIndex>) {
-        self.selected_room = index;
+    pub async fn select_room(&self, index: Option<RoomIndex>) {
+        let mut state = self.state.write().await;
+        state.selected_room = index;
     }
 
-    pub async fn selected_room(&self) -> Option<UiEntity<RoomEntry<Ui>>> {
-        match self.selected_room {
+    pub async fn selected_room(&self) -> Option<RoomEntry<Ui>> {
+        let state = self.state.read().await;
+        match state.selected_room {
             Some(RoomIndex { community, room }) => {
-                if let Some(community) = self.communities.get(community) {
-                    let community = community.read().await;
-                    return community.get_room(room).cloned();
+                if let Some(community) = state.communities.get(community) {
+                    return community.get_room(room).await.clone();
                 }
-            },
+            }
             _ => (),
         }
         None
@@ -181,29 +185,25 @@ impl<Ui: ClientUi + 'static> Client<Ui> {
     }
 }
 
-struct ClientLoop<Ui: ClientUi + 'static, S> {
-    client: WeakUiEntity<Client<Ui>>,
-    request: Rc<net::RequestSender>,
+struct ClientLoop<Ui: ClientUi, S> {
+    client: Client<Ui>,
     event_receiver: S,
 }
 
 impl<Ui: ClientUi, S> ClientLoop<Ui, S>
     where S: Stream<Item = net::Result<ServerEvent>> + Unpin
 {
+    // TODO: we need to be able to signal this to exit!
     async fn run(self) {
-        let ClientLoop { client, request, event_receiver } = self;
+        let ClientLoop { client, event_receiver } = self;
+        let request = client.request.clone();
 
         let receiver = Box::pin(async move {
             let mut event_receiver = event_receiver;
             while let Some(result) = event_receiver.next().await {
-                if let Some(client) = client.upgrade() {
-                    let mut client = client.write().await;
-                    match result {
-                        Ok(event) => client.handle_event(event).await,
-                        Err(err) => client.handle_err(err).await,
-                    }
-                } else {
-                    break;
+                match result {
+                    Ok(event) => client.handle_event(event).await,
+                    Err(err) => client.handle_err(err).await,
                 }
             }
         });

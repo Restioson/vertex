@@ -6,8 +6,8 @@ use crate::{Client, client, screen, TryGetText, window};
 use crate::auth;
 use crate::client::MessageStatus;
 use crate::connect::AsConnector;
-use crate::UiEntity;
 
+#[derive(Clone)]
 pub struct Ui {
     pub main: gtk::Viewport,
     communities: gtk::ListBox,
@@ -33,15 +33,11 @@ impl Ui {
         }
     }
 
-    fn bind_events(&self, screen: &UiEntity<Client<Ui>>) {
+    fn bind_events(&self, client: &Client<Ui>) {
         self.message_entry.connect_activate(
-            screen.connector()
-                .do_async(|screen, entry: gtk::Entry| async move {
-                    let mut client = screen.write().await;
-
+            client.connector()
+                .do_async(|client, entry: gtk::Entry| async move {
                     if let Some(selected_room) = client.selected_room().await {
-                        let mut selected_room = selected_room.write().await;
-
                         let content = entry.try_get_text().unwrap_or_default();
                         entry.set_text("");
 
@@ -53,16 +49,16 @@ impl Ui {
         );
 
         self.settings_button.connect_button_press_event(
-            screen.connector()
-                .do_async(|screen, (_button, _event)| async move {
-                    let screen = screen::settings::build(screen.clone());
-                    window::set_screen(&screen.read().await.main);
+            client.connector()
+                .do_async(|client, (_button, _event)| async move {
+                    let screen = screen::settings::build(client);
+                    window::set_screen(&screen.main);
                 })
                 .build_widget_event()
         );
 
         self.add_community_button.connect_button_press_event(
-            screen.connector()
+            client.connector()
                 .do_sync(|screen, _| show_add_community(screen))
                 .build_widget_event()
         );
@@ -89,6 +85,7 @@ impl client::ClientUi for Ui {
     }
 }
 
+#[derive(Clone)]
 pub struct CommunityEntryWidget {
     expander: gtk::Expander,
     room_list: gtk::ListBox,
@@ -145,13 +142,11 @@ impl CommunityEntryWidget {
 }
 
 impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
-    fn bind_events(&self, community_entry: &UiEntity<client::CommunityEntry<Ui>>) {
+    fn bind_events(&self, community_entry: &client::CommunityEntry<Ui>) {
         self.invite_button.connect_button_press_event(
             community_entry.connector()
-                .do_async(move |community_entry, (widget, event)| async move {
+                .do_async(move |community_entry, (_widget, event)| async move {
                     // TODO: error handling
-                    let community_entry = community_entry.read().await;
-
                     let invite = community_entry.create_invite(None).await.expect("failed to create invite");
 
                     let builder = gtk::Builder::new_from_file("res/glade/active/dialog/invite_community.glade");
@@ -186,6 +181,7 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
     }
 }
 
+#[derive(Clone)]
 pub struct RoomEntryWidget {
     label: gtk::Label,
 }
@@ -203,7 +199,7 @@ impl RoomEntryWidget {
 }
 
 impl client::RoomEntryWidget<Ui> for RoomEntryWidget {
-    fn bind_events(&self, room: &UiEntity<client::RoomEntry<Ui>>) {}
+    fn bind_events(&self, room: &client::RoomEntry<Ui>) {}
 }
 
 pub struct MessageListWidget {
@@ -293,17 +289,17 @@ impl client::MessageEntryWidget<Ui> for MessageEntryWidget {
     }
 }
 
-pub async fn start(ws: auth::AuthenticatedWs) -> UiEntity<Client<Ui>> {
+pub async fn start(ws: auth::AuthenticatedWs) -> Client<Ui> {
     // TODO: extract login process such that this error can be properly handled
-    let screen = Client::start(ws, Ui::build()).await
+    let client = Client::start(ws, Ui::build()).await
         .expect("client failed to start");
 
-    screen.read().await.ui.bind_events(&screen);
+    client.ui.bind_events(&client);
 
-    screen
+    client
 }
 
-fn show_add_community(client: UiEntity<Client<Ui>>) {
+fn show_add_community(client: Client<Ui>) {
     let builder = gtk::Builder::new_from_file("res/glade/active/dialog/add_community.glade");
     let main: gtk::Box = builder.get_object("main").unwrap();
 
@@ -337,7 +333,7 @@ fn show_add_community(client: UiEntity<Client<Ui>>) {
     );
 }
 
-fn show_create_community(client: UiEntity<Client<Ui>>) {
+fn show_create_community(client: Client<Ui>) {
     let builder = gtk::Builder::new_from_file("res/glade/active/dialog/create_community.glade");
     let main: gtk::Box = builder.get_object("main").unwrap();
 
@@ -354,9 +350,8 @@ fn show_create_community(client: UiEntity<Client<Ui>>) {
                 async move {
                     if let Ok(name) = name_entry.try_get_text() {
                         // TODO: error handling
-                        let community = client.write().await.create_community(&name).await.unwrap();
+                        let community = client.create_community(&name).await.unwrap();
 
-                        let mut community = community.write().await;
                         community.create_room("General").await.unwrap();
                         community.create_room("Off Topic").await.unwrap();
                     }
@@ -367,7 +362,7 @@ fn show_create_community(client: UiEntity<Client<Ui>>) {
     );
 }
 
-fn show_join_community(client: UiEntity<Client<Ui>>) {
+fn show_join_community(client: Client<Ui>) {
     let builder = gtk::Builder::new_from_file("res/glade/active/dialog/join_community.glade");
     let main: gtk::Box = builder.get_object("main").unwrap();
 
@@ -385,7 +380,7 @@ fn show_join_community(client: UiEntity<Client<Ui>>) {
                     if let Ok(code) = code_entry.try_get_text() {
                         let code = InviteCode(code);
                         // TODO: error handling
-                        client.write().await.join_community(code).await.unwrap();
+                        client.join_community(code).await.unwrap();
                     }
                     dialog.close();
                 }

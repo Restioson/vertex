@@ -5,9 +5,9 @@ use gtk::prelude::*;
 use crate::{auth, local_server, token_store, TryGetText, window};
 use crate::connect::AsConnector;
 use crate::screen;
-use crate::UiEntity;
 
-pub struct Model {
+#[derive(Clone)]
+pub struct Screen {
     pub main: gtk::Viewport,
     username_entry: gtk::Entry,
     password_entry_1: gtk::Entry,
@@ -19,10 +19,10 @@ pub struct Model {
     spinner: gtk::Spinner,
 }
 
-pub async fn build() -> UiEntity<Model> {
+pub async fn build() -> Screen {
     let builder = gtk::Builder::new_from_file("res/glade/register/register.glade");
 
-    let model = Model {
+    let screen = Screen {
         main: builder.get_object("viewport").unwrap(),
         username_entry: builder.get_object("username_entry").unwrap(),
         password_entry_1: builder.get_object("password_entry_1").unwrap(),
@@ -34,48 +34,43 @@ pub async fn build() -> UiEntity<Model> {
         spinner: builder.get_object("spinner").unwrap(),
     };
 
-    let screen = UiEntity::new(model);
     bind_events(&screen).await;
 
     screen
 }
 
-async fn bind_events(screen: &UiEntity<Model>) {
-    let widgets = screen.read().await;
-
-    widgets.login_button.connect_button_press_event(
+async fn bind_events(screen: &Screen) {
+    screen.login_button.connect_button_press_event(
         screen.connector()
-            .do_async(|screen, (_button, _event)| async move {
+            .do_async(|_screen, (_button, _event)| async move {
                 let screen = screen::login::build().await;
-                window::set_screen(&screen.read().await.main);
+                window::set_screen(&screen.main);
             })
             .build_widget_event()
     );
 
-    widgets.register_button.connect_button_press_event(
+    screen.register_button.connect_button_press_event(
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
-                let widgets = screen.read().await;
+                let username = screen.username_entry.try_get_text().unwrap_or_default();
+                let password_1 = screen.password_entry_1.try_get_text().unwrap_or_default();
+                let password_2 = screen.password_entry_2.try_get_text().unwrap_or_default();
 
-                let username = widgets.username_entry.try_get_text().unwrap_or_default();
-                let password_1 = widgets.password_entry_1.try_get_text().unwrap_or_default();
-                let password_2 = widgets.password_entry_2.try_get_text().unwrap_or_default();
-
-                widgets.status_stack.set_visible_child(&widgets.spinner);
-                widgets.error_label.set_text("");
+                screen.status_stack.set_visible_child(&screen.spinner);
+                screen.error_label.set_text("");
 
                 match register(username, password_1, password_2).await {
                     Ok(ws) => {
                         let screen = screen::loading::build();
-                        window::set_screen(&*screen.read().await);
+                        window::set_screen(&screen);
 
-                        let screen = screen::active::start(ws).await;
-                        window::set_screen(&screen.read().await.ui.main);
+                        let client = screen::active::start(ws).await;
+                        window::set_screen(&client.ui.main);
                     }
-                    Err(err) => widgets.error_label.set_text(&format!("{}", err)),
+                    Err(err) => screen.error_label.set_text(&format!("{}", err)),
                 }
 
-                widgets.status_stack.set_visible_child(&widgets.error_label);
+                screen.status_stack.set_visible_child(&screen.error_label);
             })
             .build_widget_event()
     );

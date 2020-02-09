@@ -2,19 +2,24 @@ use std::rc::Rc;
 
 use vertex::*;
 
-use crate::{net, UiEntity};
+use crate::{net, SharedMut};
 
 use super::{ClientUi, Result};
 use super::message::*;
 use super::user::*;
 
-pub trait RoomEntryWidget<Ui: ClientUi> {
-    fn bind_events(&self, room: &UiEntity<RoomEntry<Ui>>);
+pub trait RoomEntryWidget<Ui: ClientUi>: Clone {
+    fn bind_events(&self, room: &RoomEntry<Ui>);
 }
 
+pub struct RoomState {
+    name: String,
+}
+
+#[derive(Clone)]
 pub struct RoomEntry<Ui: ClientUi> {
     request: Rc<net::RequestSender>,
-    user: UiEntity<User>,
+    user: User,
 
     pub widget: Ui::RoomEntryWidget,
 
@@ -22,32 +27,35 @@ pub struct RoomEntry<Ui: ClientUi> {
 
     pub community: CommunityId,
     pub id: RoomId,
-    name: String,
+
+    state: SharedMut<RoomState>,
 }
 
 impl<Ui: ClientUi> RoomEntry<Ui> {
     pub(super) fn new(
         request: Rc<net::RequestSender>,
-        user: UiEntity<User>,
-        message_list: UiEntity<MessageList<Ui>>,
+        user: User,
+        message_list: MessageList<Ui>,
         widget: Ui::RoomEntryWidget,
         community: CommunityId,
         id: RoomId,
         name: String,
-    ) -> UiEntity<Self> {
-        UiEntity::new(RoomEntry {
+    ) -> Self {
+        RoomEntry {
             request,
             user,
             widget,
             message_stream: MessageStream::new(message_list),
             community,
             id,
-            name,
-        })
+            state: SharedMut::new(RoomState {
+                name
+            }),
+        }
     }
 
-    pub async fn send_message(&mut self, content: String) -> Result<()> {
-        let mut message = self.message_stream.push(self.user.read().await.id(), content.clone()).await;
+    pub async fn send_message(&self, content: String) -> Result<()> {
+        let mut message = self.message_stream.push(self.user.id(), content.clone()).await;
         message.set_status(MessageStatus::Pending);
 
         let result = self.send_message_request(content).await;
