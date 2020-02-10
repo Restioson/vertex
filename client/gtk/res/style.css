@@ -293,11 +293,11 @@ spinner:checked {
   padding-left: 2px;
 }
 
-#active #message label.pending {
+#active #message .pending {
   color: #a0a0a0;
 }
 
-#active #message label.error {
+#active #message .error {
   color: @error_color;
 }
 

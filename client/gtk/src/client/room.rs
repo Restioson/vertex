@@ -51,9 +51,9 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
     pub async fn send_message(&self, content: String) -> Result<()> {
         match self.message_stream.push(self.client.user.id(), content.clone()).await {
             Some(mut message) => {
-                let result = self.send_message_request(content).await;
-
                 message.set_status(MessageStatus::Pending);
+
+                let result = self.send_message_request(content).await;
                 match result {
                     Ok(_) => message.set_status(MessageStatus::Ok),
                     Err(_) => message.set_status(MessageStatus::Err),
