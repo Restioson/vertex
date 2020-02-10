@@ -3,6 +3,8 @@ use std::convert::TryFrom;
 use tokio_postgres::Row;
 use uuid::Uuid;
 use vertex::CommunityId;
+use futures::{Stream, TryStreamExt};
+use tokio_postgres::types::ToSql;
 
 pub(super) const CREATE_COMMUNITIES_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS communities (
@@ -54,5 +56,19 @@ impl Database {
         let stmt = conn.client.prepare(STMT).await?;
         conn.client.execute(&stmt, &[&id, &name]).await?;
         Ok(CommunityId(id))
+    }
+
+    pub async fn get_communities(&self) -> DbResult<impl Stream<Item = DbResult<CommunityRecord>>> {
+        const QUERY: &str = "SELECT * FROM communities";
+        let conn = self.pool.connection().await?;
+        let query = conn.client.prepare(QUERY).await?;
+        // I hate
+        let args = ([]: [u32; 0]).iter().map(|x| x as &dyn ToSql);
+
+        let stream = conn.client.query_raw(&query, args).await?;
+        let stream = stream
+            .and_then(|row| async move { CommunityRecord::try_from(row) })
+            .map_err(|e| e.into());
+        Ok(stream)
     }
 }

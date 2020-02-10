@@ -65,7 +65,7 @@ async fn bind_events(screen: &Screen) {
 
     screen.register_button.connect_button_press_event(
         screen.connector()
-            .do_async(|screen, (_button, _event)| async move {
+            .do_async(|_screen, (_button, _event)| async move {
                 let screen = screen::register::build().await;
                 window::set_screen(&screen.main);
             })

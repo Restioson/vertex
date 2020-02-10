@@ -3,6 +3,7 @@ use crate::*;
 pub type ResponseResult = Result<OkResponse, ErrResponse>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum OkResponse {
     NoData,
     AddCommunity { community: CommunityStructure },
@@ -14,6 +15,7 @@ pub enum OkResponse {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ErrResponse {
     Internal,
     UsernameAlreadyExists,
@@ -60,6 +62,7 @@ impl Into<Vec<u8>> for ClientMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ClientRequest {
     LogOut,
     SendMessage(ClientSentMessage),
@@ -90,6 +93,7 @@ pub enum ClientRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ServerMessage {
     Event(ServerEvent),
     Response {
@@ -100,6 +104,7 @@ pub enum ServerMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ServerEvent {
     ClientReady(ClientReady),
     AddMessage(ForwardedMessage),

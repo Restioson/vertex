@@ -168,6 +168,7 @@ pub struct RoomStructure {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum RemoveCommunityReason {
     /// The community was deleted
     Deleted,

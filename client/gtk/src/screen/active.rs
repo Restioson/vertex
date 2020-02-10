@@ -145,7 +145,7 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
     fn bind_events(&self, community_entry: &client::CommunityEntry<Ui>) {
         self.room_list.connect_row_selected(
             community_entry.connector()
-                .do_async(|community, (widget, room): (gtk::ListBox, Option<gtk::ListBoxRow>)| async move {
+                .do_async(|community, (_widget, room): (gtk::ListBox, Option<gtk::ListBoxRow>)| async move {
                     match room {
                         Some(room) => {
                             // TODO: deselect previous room in ui
@@ -161,7 +161,7 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
 
         self.invite_button.connect_button_press_event(
             community_entry.connector()
-                .do_async(move |community_entry, (_widget, event)| async move {
+                .do_async(move |community_entry, (_widget, _event)| async move {
                     // TODO: error handling
                     let invite = community_entry.create_invite(None).await.expect("failed to create invite");
 
@@ -215,7 +215,7 @@ impl RoomEntryWidget {
 }
 
 impl client::RoomEntryWidget<Ui> for RoomEntryWidget {
-    fn bind_events(&self, room: &client::RoomEntry<Ui>) {}
+    fn bind_events(&self, _room: &client::RoomEntry<Ui>) {}
 }
 
 pub struct MessageListWidget {

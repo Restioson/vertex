@@ -44,6 +44,7 @@ pub struct RegisterUserResponse {
 pub type AuthResult<T> = Result<T, AuthError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum AuthError {
     Internal,
     IncorrectCredentials,

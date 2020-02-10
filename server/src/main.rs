@@ -23,6 +23,7 @@ use crate::client::{session::WebSocketMessage, Authenticator};
 use crate::config::Config;
 use crate::database::{DbResult, MalformedInviteCode};
 use warp::reply::Reply;
+use crate::community::CommunityActor;
 
 mod auth;
 mod client;
@@ -128,6 +129,16 @@ fn setup_logging(config: &Config) {
     info!("Logging set up");
 }
 
+async fn load_communities(db: Database) {
+    let stream = db.get_communities().await.expect("Error loading communities");
+    futures::pin_mut!(stream);
+
+    while let Some(res) = stream.next().await {
+        let community_record = res.expect("Error loading community");
+        CommunityActor::load_and_spawn(community_record, db.clone());
+    }
+}
+
 #[tokio::main]
 async fn main() {
     println!("Vertex server starting...");
@@ -136,10 +147,7 @@ async fn main() {
     setup_logging(&config);
 
     let args = env::args().collect::<Vec<_>>();
-    let addr = args
-        .get(1)
-        .cloned()
-        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
+    let addr = args.get(1).cloned().unwrap_or_else(|| "127.0.0.1:8080".to_string());
 
     create_files_directories(&config);
 
@@ -154,10 +162,13 @@ async fn main() {
             .clone()
             .sweep_invite_codes_loop(Duration::from_secs(config.invite_codes_sweep_interval_secs)),
     );
-    let config = Arc::new(config);
 
+    load_communities(database.clone()).await;
+
+    let config = Arc::new(config);
     let global = Global { database, config };
     let global = warp::any().map(move || global.clone());
+
 
     let authenticate = warp::path("authenticate")
         .and(global.clone())
