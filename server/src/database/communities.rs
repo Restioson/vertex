@@ -58,7 +58,7 @@ impl Database {
         Ok(CommunityId(id))
     }
 
-    pub async fn get_communities(&self) -> DbResult<impl Stream<Item = DbResult<CommunityRecord>>> {
+    pub async fn get_all_communities(&self) -> DbResult<impl Stream<Item = DbResult<CommunityRecord>>> {
         const QUERY: &str = "SELECT * FROM communities";
         let conn = self.pool.connection().await?;
         let query = conn.client.prepare(QUERY).await?;

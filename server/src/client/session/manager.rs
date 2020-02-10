@@ -5,9 +5,34 @@ use lazy_static::lazy_static;
 use vertex::*;
 
 use super::*;
+use std::collections::{HashMap, HashSet};
 
 lazy_static! {
-    static ref SESSIONS: DashMap<UserId, Vec<(DeviceId, Session)>> = DashMap::new();
+    static ref USERS: DashMap<UserId, ActiveUser> = DashMap::new();
+}
+
+pub struct ActiveUser {
+    pub communities: HashSet<CommunityId>, // Community ID to community name
+    pub sessions: HashMap<DeviceId, Session>,
+}
+
+impl ActiveUser {
+    pub async fn load_with_new_session(
+        db: Database,
+        user: UserId,
+        device: DeviceId,
+        session: Session
+    ) -> DbResult<Self> {
+        let communities = db.get_communities_for_user(user).await?;
+        let communities = communities.iter().map(|c| c.id).collect();
+        let mut sessions = HashMap::new();
+        sessions.insert(device, session);
+
+        Ok(ActiveUser {
+            communities,
+            sessions,
+        })
+    }
 }
 
 pub enum Session {
@@ -15,23 +40,28 @@ pub enum Session {
     Active(Address<ActiveSession>),
 }
 
-pub fn insert(user: UserId, device: DeviceId) -> Result<(), ()> {
-    if let Some(mut sessions) = SESSIONS.get_mut(&user) {
-        let existing_session = sessions.iter().any(|(cmp_device, _)| *cmp_device == device);
-        if existing_session {
-            return Err(());
+pub async fn insert(db: Database, user: UserId, device: DeviceId) -> DbResult<Result<(), ()>> {
+    if let Some(mut active_user) = USERS.get_mut(&user) {
+        if active_user.sessions.contains_key(&device) {
+            return Ok(Err(()));
         }
 
-        sessions.push((device, Session::Upgrading));
+        active_user.sessions.insert(device, Session::Upgrading);
     } else {
-        SESSIONS.insert(user, vec![(device, Session::Upgrading)]);
+        let active_user = ActiveUser::load_with_new_session(db, user, device, Session::Upgrading).await?;
+        USERS.insert(user, active_user);
     }
 
-    Ok(())
+    Ok(Ok(()))
 }
 
 pub fn upgrade(user: UserId, device: DeviceId, addr: Address<ActiveSession>) -> Result<(), ()> {
-    match get(user, device) {
+    let mut user = match get_active_user_mut(user) {
+        Some(user) => user,
+        None => return Err(()),
+    };
+
+    match user.sessions.get_mut(&device) {
         Some(mut session) => {
             *session = Session::Active(addr);
             Ok(())
@@ -50,16 +80,14 @@ pub fn remove_and_notify(user: UserId, device: DeviceId) -> Option<Session> {
 }
 
 pub fn remove(user: UserId, device: DeviceId) -> Option<Session> {
-    if let Some(mut sessions) = SESSIONS.get_mut(&user) {
-        if let Some(idx) = sessions
-            .iter()
-            .position(|(cmp_device, _)| *cmp_device == device)
-        {
-            let (_, session) = sessions.remove(idx);
+    let mut lock = USERS.get_mut(&user);
+    if let Some(ref mut active_user) = lock {
+        let sessions = &mut active_user.sessions;
+        if let Some(session) = sessions.remove(&device) {
             if sessions.is_empty() {
-                // drop the lock on sessions so that we can remove it without deadlocking
-                drop(sessions);
-                SESSIONS.remove(&user);
+                // Drop the lock so that we can remove it without deadlocking
+                drop(lock);
+                USERS.remove(&user);
             }
 
             return Some(session);
@@ -70,8 +98,8 @@ pub fn remove(user: UserId, device: DeviceId) -> Option<Session> {
 }
 
 pub fn remove_all(user: UserId) {
-    if let Some((_, sessions)) = SESSIONS.remove(&user) {
-        for (_, session) in &sessions {
+    if let Some((_, active_user)) = USERS.remove(&user) {
+        for session in active_user.sessions.values() {
             if let Session::Active(addr) = session {
                  addr.do_send(LogoutThisSession).unwrap()
             }
@@ -79,54 +107,13 @@ pub fn remove_all(user: UserId) {
     }
 }
 
-pub fn get_all<'a>(user: UserId) -> SessionsRef<'a> {
-    SessionsRef {
-        sessions: SESSIONS.get(&user),
-    }
+pub fn get_active_user<'a>(user: UserId) -> Option<ActiveUserRef<'a>> {
+    USERS.get(&user)
 }
 
-pub fn get<'a>(user: UserId, device: DeviceId) -> Option<SessionRef<'a>> {
-    SESSIONS.get_mut(&user).and_then(|sessions| {
-        sessions
-            .iter()
-            .position(|(cmp_device, _)| *cmp_device == device)
-            .map(|idx| SessionRef { sessions, idx })
-    })
+pub fn get_active_user_mut<'a>(user: UserId) -> Option<ActiveUserRefMut<'a>> {
+    USERS.get_mut(&user)
 }
 
-pub struct SessionRef<'a> {
-    sessions: dashmap::mapref::one::RefMut<'a, UserId, Vec<(DeviceId, Session)>>,
-    idx: usize,
-}
-
-impl<'a> Deref for SessionRef<'a> {
-    type Target = Session;
-
-    #[inline]
-    fn deref(&self) -> &Session {
-        &self.sessions[self.idx].1
-    }
-}
-
-impl<'a> DerefMut for SessionRef<'a> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Session {
-        &mut self.sessions[self.idx].1
-    }
-}
-
-pub struct SessionsRef<'a> {
-    sessions: Option<dashmap::mapref::one::Ref<'a, UserId, Vec<(DeviceId, Session)>>>,
-}
-
-impl<'a> Deref for SessionsRef<'a> {
-    type Target = [(DeviceId, Session)];
-
-    #[inline]
-    fn deref(&self) -> &[(DeviceId, Session)] {
-        match &self.sessions {
-            Some(sessions) => sessions.as_slice(),
-            None => &[],
-        }
-    }
-}
+type ActiveUserRef<'a> = dashmap::mapref::one::Ref<'a, UserId, ActiveUser>;
+type ActiveUserRefMut<'a> = dashmap::mapref::one::RefMut<'a, UserId, ActiveUser>;

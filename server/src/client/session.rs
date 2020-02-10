@@ -1,4 +1,3 @@
-use std::ops::{Deref, DerefMut};
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
@@ -41,7 +40,6 @@ pub struct ActiveSession {
     ws: SplitSink<WebSocket, ws::Message>,
     global: crate::Global,
     heartbeat: Instant,
-    communities: Vec<CommunityId>,
     user: UserId,
     device: DeviceId,
     perms: TokenPermissionFlags,
@@ -59,7 +57,6 @@ impl ActiveSession {
             ws,
             global,
             heartbeat: Instant::now(),
-            communities: Vec::new(),
             user,
             device,
             perms,
@@ -159,6 +156,10 @@ impl ActiveSession {
         manager::remove(self.user, self.device);
     }
 
+    fn in_community(&self, id: &CommunityId) -> bool {
+        manager::get_active_user(self.user).unwrap().communities.contains(&id)
+    }
+
     async fn send_ready_event(&mut self) -> Result<(), ()> {
         // TODO: handle errors better
 
@@ -166,16 +167,16 @@ impl ActiveSession {
             .map_err(|_| ())?
             .ok_or(())?;
 
-        let communities = self.global.database.get_communities_for_user(self.user).await
-            .map_err(|_| ())?;
-
-        let communities = communities.into_iter()
-            .map(|community| CommunityStructure {
-                id: community.id,
-                name: community.name,
+        let communities = manager::get_active_user(self.user)
+            .unwrap()
+            .communities
+            .iter()
+            .filter_map(|id| Some(CommunityStructure {
+                id: *id,
+                name: COMMUNITIES.get(id)?.name.clone(),
                 // TODO: rooms
                 rooms: vec![],
-            })
+            }))
             .collect();
 
         let ready = ClientReady {
@@ -294,7 +295,7 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::AccessDenied);
         }
 
-        if !self.session.communities.contains(&message.to_community) {
+        if !self.session.in_community(&message.to_community) {
             return Err(ErrResponse::InvalidCommunity);
         }
 
@@ -306,6 +307,7 @@ impl<'a> RequestHandler<'a> {
                     message,
                 };
                 let id = community
+                    .actor
                     .send(message)
                     .await
                     .map_err(handle_disconnected("Community"))??;
@@ -321,7 +323,7 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::AccessDenied);
         }
 
-        if !self.session.communities.contains(&edit.community) {
+        if !self.session.in_community(&edit.community) {
             return Err(ErrResponse::InvalidCommunity);
         }
 
@@ -332,6 +334,7 @@ impl<'a> RequestHandler<'a> {
                 message: edit,
             };
             community
+                .actor
                 .send(message)
                 .await
                 .map_err(handle_disconnected("Community"))??;
@@ -439,8 +442,8 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::AccessDenied);
         }
 
-        let id = self.session.global.database.create_community(name).await?;
-        CommunityActor::create_and_spawn(id, self.session.global.database.clone(), self.user);
+        let id = self.session.global.database.create_community(name.clone()).await?;
+        CommunityActor::create_and_spawn(name, id, self.session.global.database.clone(), self.user);
 
         self.join_community_by_id(id).await
     }
@@ -474,13 +477,15 @@ impl<'a> RequestHandler<'a> {
             };
 
             let res = community
+                .actor
                 .send(join)
                 .await
                 .map_err(handle_disconnected("Community"))??;
 
             match res {
                 Ok(community) => {
-                    self.session.communities.push(community.id);
+                    let mut user = manager::get_active_user_mut(self.user).unwrap();
+                    user.communities.insert(community.id);
                     Ok(OkResponse::AddCommunity { community })
                 }
                 Err(AddToCommunityError::AlreadyInCommunity) => {
@@ -499,7 +504,7 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::AccessDenied);
         }
 
-        if !self.session.communities.contains(&community_id) {
+        if !self.session.in_community(&community_id) {
             return Err(ErrResponse::InvalidCommunity);
         }
 
@@ -509,6 +514,7 @@ impl<'a> RequestHandler<'a> {
                 name: name.clone(),
             };
             let id = community
+                .actor
                 .send(create)
                 .await
                 .map_err(handle_disconnected("Community"))?;
@@ -531,7 +537,7 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::AccessDenied);
         }
 
-        if !self.session.communities.contains(&id) {
+        if !self.session.in_community(&id) {
             return Err(ErrResponse::InvalidCommunity);
         }
 

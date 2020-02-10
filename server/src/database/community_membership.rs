@@ -109,9 +109,9 @@ pub enum AddToCommunityError {
 
 impl Database {
     pub async fn get_communities_for_user(&self, user: UserId) -> DbResult<Vec<CommunityRecord>> {
-        const QUERY: &str = "\
-        SELECT * FROM communities WHERE id IN\
-        (SELECT (community) from community_membership WHERE user_id = $1)\
+        const QUERY: &str = "
+            SELECT * FROM communities WHERE id IN
+                (SELECT (community) from community_membership WHERE user_id = $1)
         ";
 
         let conn = self.pool.connection().await?;

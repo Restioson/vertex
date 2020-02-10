@@ -130,7 +130,7 @@ fn setup_logging(config: &Config) {
 }
 
 async fn load_communities(db: Database) {
-    let stream = db.get_communities().await.expect("Error loading communities");
+    let stream = db.get_all_communities().await.expect("Error loading communities");
     futures::pin_mut!(stream);
 
     while let Some(res) = stream.next().await {
@@ -251,7 +251,7 @@ async fn authenticate(
         .authenticate(authenticate.device, authenticate.token)
         .await?;
 
-    match client::session::insert(user, device) {
+    match client::session::insert(global.database.clone(), user, device).await? {
         Ok(_) => {
             let upgrade = ws.on_upgrade(move |websocket| {
                 let (sink, stream) = websocket.split();

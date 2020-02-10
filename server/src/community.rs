@@ -14,7 +14,12 @@ use crate::client::{self, ActiveSession, Session};
 use crate::database::{AddToCommunityError, CommunityRecord, Database, DbResult};
 
 lazy_static! {
-    pub static ref COMMUNITIES: DashMap<CommunityId, Address<CommunityActor>> = DashMap::new();
+    pub static ref COMMUNITIES: DashMap<CommunityId, Community> = DashMap::new();
+}
+
+pub struct Community {
+    pub actor: Address<CommunityActor>,
+    pub name: String,
 }
 
 pub struct Connect {
@@ -76,9 +81,18 @@ impl CommunityActor {
         }
     }
 
-    pub fn create_and_spawn(id: CommunityId, database: Database, creator: UserId) {
+    pub fn create_and_spawn(
+        name: String,
+        id: CommunityId,
+        database: Database,
+        creator: UserId
+    ) {
         let addr = CommunityActor::new(id, database, creator).spawn();
-        COMMUNITIES.insert(id, addr);
+        let community = Community {
+            actor: addr,
+            name,
+        };
+        COMMUNITIES.insert(id, community);
     }
 
     pub fn load_and_spawn(record: CommunityRecord, database: Database) {
@@ -90,7 +104,12 @@ impl CommunityActor {
         }
         .spawn();
 
-        COMMUNITIES.insert(record.id, addr);
+        let community = Community {
+            actor: addr,
+            name: record.name,
+        };
+
+        COMMUNITIES.insert(record.id, community);
     }
 
     fn for_each_online_device_except<F>(&mut self, mut f: F, except: Option<DeviceId>)
@@ -98,7 +117,12 @@ impl CommunityActor {
         F: FnMut(&Address<ActiveSession>) -> Result<(), Disconnected>,
     {
         for member in self.online_members.iter() {
-            for (device, session) in client::session::get_all(*member).iter() {
+            let user = match client::session::get_active_user(*member) {
+                Some(user) => user,
+                None => continue, // Assume that this is a timing anomaly which will be corrected soon
+            };
+
+            for (device, session) in user.sessions.iter() {
                 if let Session::Active(session) = session {
                     let disconnect = match except {
                         Some(except) => except != *device,
@@ -179,7 +203,7 @@ impl Handler<Join> for CommunityActor {
 
             Ok(Ok(CommunityStructure {
                 id: self.id,
-                name: "".to_string(), // TODO: name
+                name: COMMUNITIES.get(&self.id).unwrap().name.clone(),
                 rooms: self.rooms.iter()
                     .map(|(id, room)| RoomStructure {
                         id: *id,
