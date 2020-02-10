@@ -132,6 +132,8 @@ impl CommunityEntryWidget {
             ).unwrap()
         ));
 
+        expander.set_expanded(false);
+
         CommunityEntryWidget {
             expander,
             room_list,
@@ -239,6 +241,13 @@ impl MessageListWidget {
 }
 
 impl client::MessageListWidget<Ui> for MessageListWidget {
+    fn clear(&mut self) {
+        for child in self.list.get_children() {
+            self.list.remove(&child);
+        }
+        self.last_group = None;
+    }
+
     fn push_message(&mut self, author: UserId, content: String) -> MessageEntryWidget {
         let group = self.next_group(author);
         group.push_message(content)

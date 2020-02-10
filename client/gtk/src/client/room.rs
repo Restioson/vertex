@@ -35,7 +35,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
         id: RoomId,
         name: String,
     ) -> Self {
-        let message_stream = MessageStream::new(client.message_list.clone());
+        let message_stream = MessageStream::new(id.0, client.message_list.clone());
         let state = RoomState { name };
         let state = SharedMut::new(state);
 
@@ -43,21 +43,26 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
     }
 
     pub async fn add_message(&self, author: UserId, content: String) {
-        let mut message = self.message_stream.push(author, content).await;
-        message.set_status(MessageStatus::Ok);
+        if let Some(mut message) = self.message_stream.push(author, content).await {
+            message.set_status(MessageStatus::Ok);
+        }
     }
 
     pub async fn send_message(&self, content: String) -> Result<()> {
-        let mut message = self.message_stream.push(self.client.user.id(), content.clone()).await;
-        message.set_status(MessageStatus::Pending);
+        match self.message_stream.push(self.client.user.id(), content.clone()).await {
+            Some(mut message) => {
+                let result = self.send_message_request(content).await;
 
-        let result = self.send_message_request(content).await;
-        match result {
-            Ok(_) => message.set_status(MessageStatus::Ok),
-            Err(_) => message.set_status(MessageStatus::Err),
+                message.set_status(MessageStatus::Pending);
+                match result {
+                    Ok(_) => message.set_status(MessageStatus::Ok),
+                    Err(_) => message.set_status(MessageStatus::Err),
+                }
+
+                result
+            }
+            None => self.send_message_request(content).await
         }
-
-        result
     }
 
     async fn send_message_request(&self, content: String) -> Result<()> {

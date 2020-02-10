@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use vertex::*;
 
 use crate::SharedMut;
@@ -24,6 +26,8 @@ impl<Ui: ClientUi> MessageHandle<Ui> {
 }
 
 pub trait MessageListWidget<Ui: ClientUi> {
+    fn clear(&mut self);
+
     fn push_message(&mut self, author: UserId, content: String) -> Ui::MessageEntryWidget;
 }
 
@@ -33,6 +37,7 @@ pub trait MessageEntryWidget<Ui: ClientUi> {
 
 pub struct MessageListState<Ui: ClientUi> {
     widget: Ui::MessageListWidget,
+    stream: Option<MessageStream<Ui>>,
 }
 
 #[derive(Clone)]
@@ -42,8 +47,39 @@ pub struct MessageList<Ui: ClientUi> {
 
 impl<Ui: ClientUi> MessageList<Ui> {
     pub fn new(widget: Ui::MessageListWidget) -> Self {
-        MessageList {
-            state: SharedMut::new(MessageListState { widget })
+        let state = SharedMut::new(MessageListState {
+            widget,
+            stream: None,
+        });
+        MessageList { state }
+    }
+
+    pub async fn attach_stream(&self, stream: MessageStream<Ui>) {
+        let mut state = self.state.write().await;
+
+        let stream_changed = match &state.stream {
+            Some(last_stream) => last_stream.id != stream.id,
+            None => true,
+        };
+
+        if stream_changed {
+            state.widget.clear();
+        }
+
+        state.stream = Some(stream);
+    }
+
+    pub async fn detach_stream(&self) {
+        let mut state = self.state.write().await;
+        state.stream = None;
+        state.widget.clear();
+    }
+
+    pub async fn accepts(&self, accepts: &MessageStream<Ui>) -> bool {
+        let state = self.state.read().await;
+        match &state.stream {
+            Some(stream) => stream.id == accepts.id,
+            None => false,
         }
     }
 
@@ -56,15 +92,20 @@ impl<Ui: ClientUi> MessageList<Ui> {
 
 #[derive(Clone)]
 pub struct MessageStream<Ui: ClientUi> {
-    pub list: MessageList<Ui>,
+    id: Uuid,
+    list: MessageList<Ui>,
 }
 
 impl<Ui: ClientUi> MessageStream<Ui> {
-    pub fn new(list: MessageList<Ui>) -> Self {
-        MessageStream { list }
+    pub fn new(id: Uuid, list: MessageList<Ui>) -> Self {
+        MessageStream { id, list }
     }
 
-    pub async fn push(&self, author: UserId, content: String) -> MessageHandle<Ui> {
-        self.list.push(author, content).await
+    pub async fn push(&self, author: UserId, content: String) -> Option<MessageHandle<Ui>> {
+        if self.list.accepts(&self).await {
+            Some(self.list.push(author, content).await)
+        } else {
+            None
+        }
     }
 }
