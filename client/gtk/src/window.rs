@@ -48,25 +48,25 @@ fn build_dialog_bg() -> gtk::Widget {
         .upcast()
 }
 
-pub fn show_dialog<W: glib::IsA<gtk::Widget>>(dialog: W) -> Dialog {
+pub fn show_dialog<W: glib::IsA<gtk::Widget>>(widget: W) -> Dialog {
     WINDOW.with(|window| {
         let window = window.get().expect("window not initialized on this thread");
 
         let background = build_dialog_bg();
 
-        let dialog = dialog.upcast();
-        dialog.get_style_context().add_class("dialog");
+        let widget = widget.upcast();
+        widget.get_style_context().add_class("dialog");
 
         window.overlay.add_overlay(&background);
-        window.overlay.add_overlay(&dialog);
+        window.overlay.add_overlay(&widget);
 
         let dialog = Dialog {
             overlay: window.overlay.clone(),
-            background: background.clone(),
-            dialog: dialog.clone(),
+            background,
+            widget,
         };
 
-        background.connect_button_release_event({
+        dialog.background.connect_button_release_event({
             let dialog = dialog.clone();
             move |_, _| {
                 dialog.close();
@@ -82,12 +82,12 @@ pub fn show_dialog<W: glib::IsA<gtk::Widget>>(dialog: W) -> Dialog {
 pub struct Dialog {
     overlay: gtk::Overlay,
     background: gtk::Widget,
-    dialog: gtk::Widget,
+    widget: gtk::Widget,
 }
 
 impl Dialog {
     pub fn close(&self) {
         self.overlay.remove(&self.background);
-        self.overlay.remove(&self.dialog);
+        self.overlay.remove(&self.widget);
     }
 }

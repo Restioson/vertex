@@ -39,10 +39,10 @@ impl Ui {
                 .do_async(|client, entry: gtk::Entry| async move {
                     if let Some(selected_room) = client.selected_room().await {
                         let content = entry.try_get_text().unwrap_or_default();
-                        entry.set_text("");
-
-                        // TODO: error handling
-                        selected_room.send_message(content).await.unwrap();
+                        if !content.trim().is_empty() {
+                            entry.set_text("");
+                            let _ = selected_room.send_message(content).await;
+                        }
                     }
                 })
                 .build_cloned_consumer()
