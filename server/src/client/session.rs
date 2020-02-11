@@ -506,8 +506,19 @@ impl<'a> RequestHandler<'a> {
 
             match res {
                 Ok(community) => {
-                    let mut user = manager::get_active_user_mut(self.user).unwrap();
-                    user.communities.insert(community.id);
+                    if let Some(mut user) = manager::get_active_user_mut(self.user) {
+                        user.communities.insert(community.id);
+                        let community = community.clone();
+                        let send = ServerMessage::Event(ServerEvent::AddCommunity(community));
+                        let sessions = user.sessions.iter();
+                        sessions
+                            .filter(|(id, _)| **id != self.device)
+                            .filter_map(|(_, session)| session.as_active())
+                            .for_each(|addr| {
+                                let _ = addr.do_send(SendMessage(send.clone()));
+                            });
+                    }
+
                     Ok(OkResponse::AddCommunity { community })
                 }
                 Err(AddToCommunityError::AlreadyInCommunity) => {

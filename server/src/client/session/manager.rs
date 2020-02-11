@@ -40,6 +40,15 @@ pub enum Session {
     Active(Address<ActiveSession>),
 }
 
+impl Session {
+    pub fn as_active(&self) -> Option<Address<ActiveSession>> {
+        match self {
+            Session::Upgrading => None,
+            Session::Active(addr) => Some(addr.clone()),
+        }
+    }
+}
+
 pub async fn insert(db: Database, user: UserId, device: DeviceId) -> DbResult<Result<(), ()>> {
     if let Some(mut active_user) = USERS.get_mut(&user) {
         if active_user.sessions.contains_key(&device) {
