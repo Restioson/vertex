@@ -10,7 +10,7 @@ use xtra::prelude::*;
 pub use manager::*;
 use vertex::*;
 
-use crate::community::{CommunityActor, CreateRoom, GetRoomStructures, Join, COMMUNITIES};
+use crate::community::{CommunityActor, CreateRoom, GetRoomStructures, Join, COMMUNITIES, Connect};
 use crate::database::*;
 use crate::{auth, handle_disconnected, IdentifiedMessage, SendMessage};
 
@@ -112,7 +112,7 @@ impl Handler<NotifyClientReady> for ActiveSession {
         ctx: &'a mut Context<Self>,
     ) -> Self::Responder<'a> {
         async move {
-            if self.send_ready_event().await.is_err() {
+            if self.ready(ctx).await.is_err() {
                 ctx.stop();
             }
         }
@@ -167,7 +167,7 @@ impl ActiveSession {
             .contains(&id)
     }
 
-    async fn send_ready_event(&mut self) -> Result<(), ()> {
+    async fn ready(&mut self, ctx: &mut Context<Self>) -> Result<(), ()> {
         // TODO: handle errors better
 
         let user = self
@@ -184,6 +184,11 @@ impl ActiveSession {
         for id in active.communities.iter() {
             let addr = COMMUNITIES.get(id).unwrap().actor.clone();
             let rooms = addr.send(GetRoomStructures).await.unwrap(); // TODO errors thing
+            addr.do_send(Connect {
+                user: self.user,
+                device: self.device,
+                session: ctx.address().unwrap(),
+            }).unwrap();
 
             let structure = CommunityStructure {
                 id: *id,

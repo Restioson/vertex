@@ -128,12 +128,12 @@ impl CommunityActor {
 
             for (device, session) in user.sessions.iter() {
                 if let Session::Active(session) = session {
-                    let disconnect = match except {
+                    let send_to_this_device = match except {
                         Some(except) => except != *device,
                         None => true,
                     };
 
-                    if disconnect {
+                    if send_to_this_device {
                         if let Err(d) = f(session) {
                             handle_disconnected("ClientSession")(d);
                         }
