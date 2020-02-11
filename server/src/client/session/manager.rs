@@ -62,7 +62,7 @@ pub fn upgrade(user: UserId, device: DeviceId, addr: Address<ActiveSession>) -> 
     };
 
     match user.sessions.get_mut(&device) {
-        Some(mut session) => {
+        Some(session) => {
             *session = Session::Active(addr);
             Ok(())
         }
