@@ -187,7 +187,7 @@ impl<Ui: ClientUi> Client<Ui> {
         let mut state = self.state.write().await;
 
         match &room {
-            Some(room) => self.message_list.attach_stream(room.message_stream.clone()).await,
+            Some(room) => self.message_list.set_stream(room.message_stream.clone()).await,
             None => self.message_list.detach_stream().await,
         }
 
