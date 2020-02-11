@@ -1,11 +1,11 @@
 use crate::database::{Database, DbResult};
+use futures::{Stream, TryStreamExt};
 use std::convert::TryFrom;
-use tokio_postgres::Row;
+use std::iter;
 use tokio_postgres::types::ToSql;
+use tokio_postgres::Row;
 use uuid::Uuid;
 use vertex::{CommunityId, RoomId};
-use futures::{Stream, TryStreamExt};
-use std::iter;
 
 pub(super) const CREATE_ROOMS_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS rooms (
@@ -36,10 +36,7 @@ impl TryFrom<Row> for RoomRecord {
 
 impl Database {
     // TODO(room_persistence): load at boot
-    pub async fn get_room(
-        &self,
-        id: RoomId,
-    ) -> DbResult<Option<RoomRecord>> {
+    pub async fn get_room(&self, id: RoomId) -> DbResult<Option<RoomRecord>> {
         let conn = self.pool.connection().await?;
         let query = conn
             .client
@@ -54,22 +51,20 @@ impl Database {
         }
     }
 
-    pub async fn create_room(
-        &self,
-        community: CommunityId,
-        name: String
-    ) -> DbResult<RoomId> {
+    pub async fn create_room(&self, community: CommunityId, name: String) -> DbResult<RoomId> {
         const STMT: &str = "INSERT INTO rooms (id, community, name) VALUES ($1, $2, $3)";
         let id = Uuid::new_v4();
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(STMT).await?;
-        conn.client.execute(&stmt, &[&id, &community.0, &name]).await?;
+        conn.client
+            .execute(&stmt, &[&id, &community.0, &name])
+            .await?;
         Ok(RoomId(id))
     }
 
     pub async fn get_rooms_in_community(
         &self,
-        community: CommunityId
+        community: CommunityId,
     ) -> DbResult<impl Stream<Item = DbResult<RoomRecord>>> {
         const QUERY: &str = "SELECT * FROM rooms WHERE community = $1";
         let conn = self.pool.connection().await?;

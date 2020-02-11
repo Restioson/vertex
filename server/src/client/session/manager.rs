@@ -21,7 +21,7 @@ impl ActiveUser {
         db: Database,
         user: UserId,
         device: DeviceId,
-        session: Session
+        session: Session,
     ) -> DbResult<Self> {
         let communities = db.get_communities_for_user(user).await?;
         let communities = communities.iter().map(|c| c.id).collect();
@@ -48,7 +48,8 @@ pub async fn insert(db: Database, user: UserId, device: DeviceId) -> DbResult<Re
 
         active_user.sessions.insert(device, Session::Upgrading);
     } else {
-        let active_user = ActiveUser::load_with_new_session(db, user, device, Session::Upgrading).await?;
+        let active_user =
+            ActiveUser::load_with_new_session(db, user, device, Session::Upgrading).await?;
         USERS.insert(user, active_user);
     }
 
@@ -101,7 +102,7 @@ pub fn remove_all(user: UserId) {
     if let Some((_, active_user)) = USERS.remove(&user) {
         for session in active_user.sessions.values() {
             if let Session::Active(addr) = session {
-                 addr.do_send(LogoutThisSession).unwrap()
+                addr.do_send(LogoutThisSession).unwrap()
             }
         }
     }

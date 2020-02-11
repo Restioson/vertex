@@ -1,15 +1,15 @@
-use std::collections::{BTreeSet, HashMap};
-use futures::TryStreamExt;
-use dashmap::DashMap;
-use futures::Future;
-use uuid::Uuid;
-use xtra::Disconnected;
-use xtra::prelude::*;
-use lazy_static::lazy_static;
-use vertex::*;
-use crate::{handle_disconnected, IdentifiedMessage, SendMessage};
 use crate::client::{self, ActiveSession, Session};
 use crate::database::{AddToCommunityError, CommunityRecord, Database, DbResult};
+use crate::{handle_disconnected, IdentifiedMessage, SendMessage};
+use dashmap::DashMap;
+use futures::Future;
+use futures::TryStreamExt;
+use lazy_static::lazy_static;
+use std::collections::{BTreeSet, HashMap};
+use uuid::Uuid;
+use vertex::*;
+use xtra::prelude::*;
+use xtra::Disconnected;
 
 lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Community> = DashMap::new();
@@ -53,6 +53,12 @@ impl Message for CreateRoom {
     type Result = DbResult<RoomId>;
 }
 
+pub struct GetRoomStructures;
+
+impl Message for GetRoomStructures {
+    type Result = Vec<RoomStructure>;
+}
+
 /// A community is a collection (or "house", if you will) of rooms, as well as some metadata.
 /// It is similar to a "server" in Discord.
 pub struct CommunityActor {
@@ -79,17 +85,9 @@ impl CommunityActor {
         }
     }
 
-    pub fn create_and_spawn(
-        name: String,
-        id: CommunityId,
-        database: Database,
-        creator: UserId
-    ) {
+    pub fn create_and_spawn(name: String, id: CommunityId, database: Database, creator: UserId) {
         let addr = CommunityActor::new(id, database, creator).spawn();
-        let community = Community {
-            actor: addr,
-            name,
-        };
+        let community = Community { actor: addr, name };
         COMMUNITIES.insert(id, community);
     }
 
@@ -197,7 +195,8 @@ impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
 }
 
 impl Handler<Join> for CommunityActor {
-    type Responder<'a> = impl Future<Output = DbResult<Result<CommunityStructure, AddToCommunityError>>>;
+    type Responder<'a> =
+        impl Future<Output = DbResult<Result<CommunityStructure, AddToCommunityError>>>;
 
     fn handle(&mut self, join: Join, _: &mut Context<Self>) -> Self::Responder<'_> {
         async move {
@@ -210,7 +209,9 @@ impl Handler<Join> for CommunityActor {
             Ok(Ok(CommunityStructure {
                 id: self.id,
                 name: COMMUNITIES.get(&self.id).unwrap().name.clone(),
-                rooms: self.rooms.iter()
+                rooms: self
+                    .rooms
+                    .iter()
                     .map(|(id, room)| RoomStructure {
                         id: *id,
                         name: room.name.clone(),
@@ -226,7 +227,10 @@ impl Handler<CreateRoom> for CommunityActor {
 
     fn handle(&mut self, create: CreateRoom, _: &mut Context<Self>) -> Self::Responder<'_> {
         async move {
-            let id = self.database.create_room(self.id, create.name.clone()).await?;
+            let id = self
+                .database
+                .create_room(self.id, create.name.clone())
+                .await?;
 
             self.rooms.insert(
                 id,
@@ -243,14 +247,30 @@ impl Handler<CreateRoom> for CommunityActor {
                 },
             }));
 
-            self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(create.creator));
+            self.for_each_online_device_except(
+                |addr| addr.do_send(send.clone()),
+                Some(create.creator),
+            );
 
             Ok(id)
         }
     }
 }
 
+impl SyncHandler<GetRoomStructures> for CommunityActor {
+    fn handle(&mut self, _get: GetRoomStructures, _: &mut Context<Self>) -> Vec<RoomStructure> {
+        self.rooms
+            .iter()
+            .map(move |(id, room)| RoomStructure {
+                id: *id,
+                name: room.name.clone(),
+            })
+            .collect()
+    }
+}
+
 /// A room, loaded into memory
+#[derive(Debug)]
 struct Room {
     name: String,
 }

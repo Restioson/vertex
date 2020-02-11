@@ -1,9 +1,9 @@
 use crate::database::{Database, DbResult};
+use futures::{Stream, TryStreamExt};
 use std::convert::TryFrom;
 use tokio_postgres::Row;
 use uuid::Uuid;
 use vertex::CommunityId;
-use futures::{Stream, TryStreamExt};
 
 pub(super) const CREATE_COMMUNITIES_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS communities (
@@ -57,7 +57,9 @@ impl Database {
         Ok(CommunityId(id))
     }
 
-    pub async fn get_all_communities(&self) -> DbResult<impl Stream<Item = DbResult<CommunityRecord>>> {
+    pub async fn get_all_communities(
+        &self,
+    ) -> DbResult<impl Stream<Item = DbResult<CommunityRecord>>> {
         const QUERY: &str = "SELECT * FROM communities";
         let conn = self.pool.connection().await?;
         let query = conn.client.prepare(QUERY).await?;

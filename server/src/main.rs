@@ -20,10 +20,10 @@ use database::Database;
 use vertex::*;
 
 use crate::client::{session::WebSocketMessage, Authenticator};
+use crate::community::CommunityActor;
 use crate::config::Config;
 use crate::database::{DbResult, MalformedInviteCode};
 use warp::reply::Reply;
-use crate::community::CommunityActor;
 
 mod auth;
 mod client;
@@ -130,7 +130,10 @@ fn setup_logging(config: &Config) {
 }
 
 async fn load_communities(db: Database) {
-    let stream = db.get_all_communities().await.expect("Error loading communities");
+    let stream = db
+        .get_all_communities()
+        .await
+        .expect("Error loading communities");
     futures::pin_mut!(stream);
 
     while let Some(res) = stream.next().await {
@@ -149,7 +152,10 @@ async fn main() {
     setup_logging(&config);
 
     let args = env::args().collect::<Vec<_>>();
-    let addr = args.get(1).cloned().unwrap_or_else(|| "127.0.0.1:8080".to_string());
+    let addr = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
 
     create_files_directories(&config);
 
@@ -170,7 +176,6 @@ async fn main() {
     let config = Arc::new(config);
     let global = Global { database, config };
     let global = warp::any().map(move || global.clone());
-
 
     let authenticate = warp::path("authenticate")
         .and(global.clone())
@@ -218,7 +223,7 @@ async fn main() {
         );
 
     let invite = warp::path!("invite" / String)
-    //  .and(warp::header::<String>("host")) // https://github.com/seanmonstar/warp/issues/432
+        //  .and(warp::header::<String>("host")) // https://github.com/seanmonstar/warp/issues/432
         .and(global.clone())
         .and_then(|invite, global| self::invite_reply(global, invite));
 
@@ -320,8 +325,8 @@ async fn revoke_token(global: Global, bytes: bytes::Bytes) -> AuthResult<()> {
 
 async fn invite_reply(
     global: Global,
-//  hostname: String, // https://github.com/seanmonstar/warp/issues/432
-    invite_code: String
+    //  hostname: String, // https://github.com/seanmonstar/warp/issues/432
+    invite_code: String,
 ) -> Result<Box<dyn Reply>, Infallible> {
     let res = invite(global, invite_code).await;
 
@@ -333,14 +338,14 @@ async fn invite_reply(
                 .body("")
                 .unwrap();
             Ok(Box::new(response))
-        },
+        }
     }
 }
 
 async fn invite(
     global: Global,
-//  hostname: String, // https://github.com/seanmonstar/warp/issues/432
-    invite_code: String
+    //  hostname: String, // https://github.com/seanmonstar/warp/issues/432
+    invite_code: String,
 ) -> DbResult<Result<String, MalformedInviteCode>> {
     let code = InviteCode(invite_code.clone());
     let id = match global.database.get_community_from_invite_code(code).await? {
@@ -366,8 +371,8 @@ async fn invite(
                 </script>
             </script>
         "#,
-//        hostname = hostname, // TODO https://github.com/seanmonstar/warp/issues/432
-                               // We just use JS as a workaround
+        //        hostname = hostname, // TODO https://github.com/seanmonstar/warp/issues/432
+        // We just use JS as a workaround
         community = community_record.name,
     );
 

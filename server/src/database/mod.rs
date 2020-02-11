@@ -10,9 +10,9 @@ use tokio_postgres::NoTls;
 pub use communities::*;
 pub use community_membership::*;
 pub use invite_code::*;
+pub use rooms::*;
 pub use token::*;
 pub use user::*;
-pub use rooms::*;
 use vertex::{AuthError, DeviceId, ErrResponse, UserId};
 
 use crate::client;
@@ -20,9 +20,9 @@ use crate::client;
 mod communities;
 mod community_membership;
 mod invite_code;
+mod rooms;
 mod token;
 mod user;
-mod rooms;
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 

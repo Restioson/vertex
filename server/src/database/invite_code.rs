@@ -31,7 +31,9 @@ impl InviteCodeRecord {
         let bytes = base64::decode_config(&code.0, base64::URL_SAFE_NO_PAD)
             .map_err(|_| MalformedInviteCode)?;
 
-        Cursor::new(bytes).read_i64::<LittleEndian>().map_err(|_| MalformedInviteCode)
+        Cursor::new(bytes)
+            .read_i64::<LittleEndian>()
+            .map_err(|_| MalformedInviteCode)
     }
 }
 
@@ -70,17 +72,13 @@ impl Database {
 
         let id = loop {
             let id = rand::thread_rng().gen::<i64>();
-            let args: &[&(dyn ToSql + Sync)] = &[
-                &id,
-                &community.0,
-                &expiration_date,
-                &max_per_community
-            ];
+            let args: &[&(dyn ToSql + Sync)] =
+                &[&id, &community.0, &expiration_date, &max_per_community];
 
             let builder = conn.client.build_transaction();
             let insert_transaction = builder
                 .isolation_level(IsolationLevel::Serializable) // Needed for our query but doesn't
-                                                               // lock too much
+                // lock too much
                 .start()
                 .await?;
             let insert_stmt = insert_transaction.prepare(INSERT).await?;
@@ -91,19 +89,28 @@ impl Database {
             // If 1 row modified, then it was successful
             if ret == 1 {
                 break id; // If we successfully inserted the id, it must be unique: return it
-            } else { // Something went wrong...
+            } else {
+                // Something went wrong...
                 // Note: we can spuriously fail here, but spurious failure is okay in the grand
                 // scheme of things. It's far better than spurious success...
-                let row = conn.client.query_opt(COUNT, &[&community.0]).await?.unwrap();
+                let row = conn
+                    .client
+                    .query_opt(COUNT, &[&community.0])
+                    .await?
+                    .unwrap();
                 let count: i64 = row.try_get(0)?;
 
-                if count >= max_per_community { // Failed because of many invite codes
+                if count >= max_per_community {
+                    // Failed because of many invite codes
                     return Ok(Err(TooManyInviteCodes));
                 } // ... or else it failed because of conflicting ID
             }
         };
 
-        let record = InviteCodeRecord { id, expiration_date };
+        let record = InviteCodeRecord {
+            id,
+            expiration_date,
+        };
         Ok(Ok(InviteCode(record.into())))
     }
 

@@ -1,8 +1,8 @@
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
-use futures::{Future, SinkExt};
 use futures::stream::SplitSink;
+use futures::{Future, SinkExt};
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
@@ -10,9 +10,9 @@ use xtra::prelude::*;
 pub use manager::*;
 use vertex::*;
 
-use crate::{auth, handle_disconnected, IdentifiedMessage, SendMessage};
-use crate::community::{COMMUNITIES, CommunityActor, CreateRoom, Join};
+use crate::community::{CommunityActor, CreateRoom, GetRoomStructures, Join, COMMUNITIES};
 use crate::database::*;
+use crate::{auth, handle_disconnected, IdentifiedMessage, SendMessage};
 
 use super::*;
 
@@ -106,7 +106,11 @@ impl Handler<WebSocketMessage> for ActiveSession {
 impl Handler<NotifyClientReady> for ActiveSession {
     type Responder<'a> = impl Future<Output = ()> + 'a;
 
-    fn handle<'a>(&'a mut self, _: NotifyClientReady, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
+    fn handle<'a>(
+        &'a mut self,
+        _: NotifyClientReady,
+        ctx: &'a mut Context<Self>,
+    ) -> Self::Responder<'a> {
         async move {
             if self.send_ready_event().await.is_err() {
                 ctx.stop();
@@ -157,27 +161,38 @@ impl ActiveSession {
     }
 
     fn in_community(&self, id: &CommunityId) -> bool {
-        manager::get_active_user(self.user).unwrap().communities.contains(&id)
+        manager::get_active_user(self.user)
+            .unwrap()
+            .communities
+            .contains(&id)
     }
 
     async fn send_ready_event(&mut self) -> Result<(), ()> {
         // TODO: handle errors better
 
-        let user = self.global.database.get_user_by_id(self.user).await
+        let user = self
+            .global
+            .database
+            .get_user_by_id(self.user)
+            .await
             .map_err(|_| ())?
             .ok_or(())?;
 
-        let communities = manager::get_active_user(self.user)
-            .unwrap()
-            .communities
-            .iter()
-            .filter_map(|id| Some(CommunityStructure {
+        let active = manager::get_active_user(self.user).unwrap();
+        let mut communities = Vec::with_capacity(active.communities.len());
+
+        for id in active.communities.iter() {
+            let addr = COMMUNITIES.get(id).unwrap().actor.clone();
+            let rooms = addr.send(GetRoomStructures).await.unwrap(); // TODO errors thing
+
+            let structure = CommunityStructure {
                 id: *id,
-                name: COMMUNITIES.get(id)?.name.clone(),
-                // TODO: rooms
-                rooms: vec![],
-            }))
-            .collect();
+                name: COMMUNITIES.get(id).unwrap().name.clone(),
+                rooms,
+            };
+
+            communities.push(structure);
+        }
 
         let ready = ClientReady {
             user: self.user,
@@ -186,7 +201,9 @@ impl ActiveSession {
             communities,
         };
 
-        self.send(ServerMessage::Event(ServerEvent::ClientReady(ready))).await.map_err(|_| ())
+        self.send(ServerMessage::Event(ServerEvent::ClientReady(ready)))
+            .await
+            .map_err(|_| ())
     }
 
     async fn handle_ws_message(
@@ -216,14 +233,14 @@ impl ActiveSession {
                 device,
                 perms,
             }
-                .handle_request(msg.request)
-                .await;
+            .handle_request(msg.request)
+            .await;
 
             self.send(ServerMessage::Response {
                 id: msg.id,
                 result: response,
             })
-                .await?;
+            .await?;
         } else if message.is_close() {
             ctx.stop();
         } else {
@@ -442,7 +459,12 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::AccessDenied);
         }
 
-        let id = self.session.global.database.create_community(name.clone()).await?;
+        let id = self
+            .session
+            .global
+            .database
+            .create_community(name.clone())
+            .await?;
         CommunityActor::create_and_spawn(name, id, self.session.global.database.clone(), self.user);
 
         self.join_community_by_id(id).await
@@ -522,7 +544,10 @@ impl<'a> RequestHandler<'a> {
             // TODO: needs to send ServerAction::AddRoom to other devices
 
             let room = RoomStructure { id, name };
-            Ok(OkResponse::AddRoom { community: *community.key(), room })
+            Ok(OkResponse::AddRoom {
+                community: *community.key(),
+                room,
+            })
         } else {
             Err(ErrResponse::InvalidCommunity)
         }
@@ -548,7 +573,7 @@ impl<'a> RequestHandler<'a> {
 
             match res {
                 Ok(code) => Ok(OkResponse::Invite { code }),
-                Err(_) => Err(ErrResponse::TooManyInviteCodes)
+                Err(_) => Err(ErrResponse::TooManyInviteCodes),
             }
         } else {
             Err(ErrResponse::InvalidCommunity)
