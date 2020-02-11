@@ -517,7 +517,7 @@ impl<'a> RequestHandler<'a> {
                 .actor
                 .send(create)
                 .await
-                .map_err(handle_disconnected("Community"))?;
+                .map_err(handle_disconnected("Community"))??;
 
             // TODO: needs to send ServerAction::AddRoom to other devices
 

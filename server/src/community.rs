@@ -1,14 +1,12 @@
 use std::collections::{BTreeSet, HashMap};
-
+use futures::TryStreamExt;
 use dashmap::DashMap;
 use futures::Future;
 use uuid::Uuid;
 use xtra::Disconnected;
 use xtra::prelude::*;
-
 use lazy_static::lazy_static;
 use vertex::*;
-
 use crate::{handle_disconnected, IdentifiedMessage, SendMessage};
 use crate::client::{self, ActiveSession, Session};
 use crate::database::{AddToCommunityError, CommunityRecord, Database, DbResult};
@@ -52,7 +50,7 @@ pub struct CreateRoom {
 }
 
 impl Message for CreateRoom {
-    type Result = RoomId;
+    type Result = DbResult<RoomId>;
 }
 
 /// A community is a collection (or "house", if you will) of rooms, as well as some metadata.
@@ -95,11 +93,17 @@ impl CommunityActor {
         COMMUNITIES.insert(id, community);
     }
 
-    pub fn load_and_spawn(record: CommunityRecord, database: Database) {
+    pub async fn load_and_spawn(record: CommunityRecord, database: Database) -> DbResult<()> {
+        let rooms = database.get_rooms_in_community(record.id).await?;
+        let rooms = rooms
+            .map_ok(|record| (record.id, Room { name: record.name }))
+            .try_collect()
+            .await?;
+
         let addr = CommunityActor {
             id: record.id,
             database,
-            rooms: HashMap::new(), // TODO(room_persistence) load rooms
+            rooms,
             online_members: BTreeSet::new(),
         }
         .spawn();
@@ -110,6 +114,8 @@ impl CommunityActor {
         };
 
         COMMUNITIES.insert(record.id, community);
+
+        Ok(())
     }
 
     fn for_each_online_device_except<F>(&mut self, mut f: F, except: Option<DeviceId>)
@@ -215,26 +221,32 @@ impl Handler<Join> for CommunityActor {
     }
 }
 
-impl SyncHandler<CreateRoom> for CommunityActor {
-    fn handle(&mut self, create: CreateRoom, _: &mut Context<Self>) -> RoomId {
-        let id = RoomId(Uuid::new_v4());
-        self.rooms.insert(
-            id,
-            Room {
-                name: create.name.clone(),
-            },
-        );
+impl Handler<CreateRoom> for CommunityActor {
+    type Responder<'a> = impl Future<Output = DbResult<RoomId>> + 'a;
 
-        let send = SendMessage(ServerMessage::Event(ServerEvent::AddRoom {
-            community: self.id,
-            structure: RoomStructure {
+    fn handle(&mut self, create: CreateRoom, _: &mut Context<Self>) -> Self::Responder<'_> {
+        async move {
+            let id = self.database.create_room(self.id, create.name.clone()).await?;
+
+            self.rooms.insert(
                 id,
-                name: create.name.clone(),
-            },
-        }));
+                Room {
+                    name: create.name.clone(),
+                },
+            );
 
-        self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(create.creator));
-        id
+            let send = SendMessage(ServerMessage::Event(ServerEvent::AddRoom {
+                community: self.id,
+                structure: RoomStructure {
+                    id,
+                    name: create.name.clone(),
+                },
+            }));
+
+            self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(create.creator));
+
+            Ok(id)
+        }
     }
 }
 

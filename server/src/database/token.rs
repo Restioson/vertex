@@ -12,7 +12,7 @@ pub(super) const CREATE_TOKENS_TABLE: &str = "
         device_name          VARCHAR,
         token_hash           VARCHAR NOT NULL,
         hash_scheme_version  SMALLINT NOT NULL,
-        user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id              UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         last_used            TIMESTAMP WITH TIME ZONE NOT NULL,
         expiration_date      TIMESTAMP WITH TIME ZONE,
         permission_flags     BIGINT NOT NULL

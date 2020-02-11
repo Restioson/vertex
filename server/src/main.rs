@@ -135,7 +135,9 @@ async fn load_communities(db: Database) {
 
     while let Some(res) = stream.next().await {
         let community_record = res.expect("Error loading community");
-        CommunityActor::load_and_spawn(community_record, db.clone());
+        CommunityActor::load_and_spawn(community_record, db.clone())
+            .await
+            .expect("Error loading community!");
     }
 }
 

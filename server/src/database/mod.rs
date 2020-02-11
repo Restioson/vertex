@@ -12,6 +12,7 @@ pub use community_membership::*;
 pub use invite_code::*;
 pub use token::*;
 pub use user::*;
+pub use rooms::*;
 use vertex::{AuthError, DeviceId, ErrResponse, UserId};
 
 use crate::client;
@@ -21,6 +22,7 @@ mod community_membership;
 mod invite_code;
 mod token;
 mod user;
+mod rooms;
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 
@@ -91,6 +93,7 @@ impl Database {
             CREATE_TOKENS_TABLE,
             CREATE_COMMUNITIES_TABLE,
             CREATE_COMMUNITY_MEMBERSHIP_TABLE,
+            CREATE_ROOMS_TABLE,
             CREATE_INVITE_CODES_TABLE,
         ];
 
