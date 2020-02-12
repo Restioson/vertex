@@ -25,7 +25,7 @@ Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, feder
 3. Copy your certificate and key files to `server/docker/` (named `cert.pem` and `key.pem` respectively).
 4. Run `docker-compose up` in the main directory `vertex/` (if this does not work, try `sudo docker-compose up`).
    Run `docker-compose up --build` to rebuild for new changes. To set the password for `key.pem`, edit the values in 
-   `vertex/docker_env.env`
+   `server/docker/env.env`
 
 **Warning:** *First time* (and in general on Docker) compilation may take very long for the server (~10min). Grab a cup 
 of coffee ;).
