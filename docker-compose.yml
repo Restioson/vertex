@@ -4,10 +4,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.server
+    environment:
+      - VERTEX_SERVER_PORT
     ports:
-      - "8080:8080"
+      - "${VERTEX_SERVER_PORT}:443"
     expose:
-      - "8080"
+      - "${VERTEX_SERVER_PORT}/tcp"
     labels:
       - "net.gegy1000.vertex=server"
     volumes:

@@ -1,5 +1,4 @@
 #!/bin/sh
-# wait-for-postgres.sh
 # Modified from https://docs.docker.com/compose/startup-order/
 
 set -e
@@ -7,7 +6,6 @@ set -e
 host="$1"
 port="$2"
 shift 2
-cmd="$@"
 times=0
 
 while [ $times -lt 2 ]; do
@@ -22,5 +20,5 @@ while [ $times -lt 2 ]; do
 done
 
 echo "Postgres is up - executing command $cmd"
-$cmd
+./vertex_server $VERTEX_SERVER_IP
 echo "Command executed"

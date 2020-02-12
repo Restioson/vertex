@@ -23,11 +23,12 @@ RUN echo "Installing psql" && apt-get update > /dev/null && apt-get install post
 COPY --from=build /vertex/server/target/release/vertex_server ./vertex_server
 
 # Copy config files
-COPY server/docker/db.conf db.conf
-COPY server/docker/cert.pem /root/.config/vertex_server/cert.pem
-COPY server/docker/key.pem /root/.config/vertex_server/key.pem
-COPY server/docker/config.toml /root/.config/vertex_server/
+COPY server/docker/config.toml server/docker/key.pe[m] server/docker/cert.pe[m] /root/.config/vertex_server/
+COPY server/docker/db.conf .
+
+ARG VERTEX_SERVER_PORT
+ENV VERTEX_SERVER_PORT=$VERTEX_SERVER_PORT
 
 COPY wait-for-postgres.sh .
-EXPOSE 8080/tcp
-CMD ["./wait-for-postgres.sh", "db", "5342", "./vertex_server", $VERTEX_SERVER_IP]
+EXPOSE 443
+CMD ["/bin/sh", "wait-for-postgres.sh", "db", "5342"]

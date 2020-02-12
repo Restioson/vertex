@@ -19,20 +19,19 @@ Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, feder
       [guide](https://www.ibm.com/support/knowledgecenter/SSMNED_5.0.0/com.ibm.apic.cmc.doc/task_apionprem_gernerate_self_signed_openSSL.html).
       This currently works for the client, but in the future, it will trigger a warning or cause an error.
    2. You can get a verified certificate for free with LetsEncrypt through its [Certbot](https://certbot.eff.org/instructions). 
-      You may also want to put an Nginx reverse proxy in front of Vertex 
-      so that you don't have to restart it every time to renew a certificate 
+      You may also want to put an Nginx reverse proxy in front of Vertex so that you don't have to restart it every time 
+      to renew a certificate 
       [(guide)](https://medium.com/@mightywomble/how-to-set-up-nginx-reverse-proxy-with-lets-encrypt-8ef3fd6b79e5).
 3. Copy your certificate and key files to `server/docker/` (named `cert.pem` and `key.pem` respectively).
-4. Run `docker-compose up` in the main directory `vertex/` (if this does not work, try `sudo docker-compose up`).
-   Run `docker-compose up --build` to rebuild for new changes. To set the password for `key.pem`, edit the values in 
-   `server/docker/env.env`
+4. Run `VERTEX_SERVER_PORT=.. docker-compose up` in the main directory `vertex/` (if this does not work, 
+   try `VERTEX_SERVER_PORT=.. sudo docker-compose up`). Run `docker-compose up --build` to rebuild for new changes. 
+   To set the password for `key.pem`, edit the values in `vertex/.env`. 
 
 **Warning:** *First time* (and in general on Docker) compilation may take very long for the server (~10min). Grab a cup 
 of coffee ;).
 
 ## Running
-To run the server, do `cargo run` in the `server/` directory. You can pass it a port to run on,
-e.g `cargo run -- 8081`.
+To run the server, do `cargo run` in the `server/` directory.
 
 To run the client, do `cargo run -- --ip <ip of server>` in the `client/gtk` directory.
 
@@ -69,8 +68,10 @@ It is written in TOML.
 The server must also be provided with a certificate and private key pair if `https` is set to true. They should be named `cert.pem` and `key.pem`
 respectively, and be contained in the standard configuration directories, as is the config file. The private key must be
 encrypted, and it must not have a passphrase.
+
 When using Docker, put the `cert.pem` and `key.pem` in the `server/docker/` folder. Upon changing these, please make
-sure to rebuild the docker image with `docker-compose up --build`. 
+sure to rebuild the docker image with `docker-compose up --build`. Furthermore, the port must be provided through the 
+`VERTEX_SERVER_PORT` environment variable.
 
 The server's log files can be found in the log folder, under the standard data directories:
 
