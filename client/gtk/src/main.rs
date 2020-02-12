@@ -64,7 +64,7 @@ impl<T> WeakSharedMut<T> {
 }
 
 pub fn local_server() -> Server {
-    Server("https://localhost:8080/client".to_owned())
+    Server("https://localhost:8443/client".to_owned())
 }
 
 pub trait TryGetText {

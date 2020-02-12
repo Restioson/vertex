@@ -7,6 +7,7 @@ use std::fs::{self, File};
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::net::SocketAddr;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -22,8 +23,6 @@ pub struct Config {
     pub max_display_name_len: u16,
     #[serde(default = "min_display_name_len")]
     pub min_display_name_len: u16,
-    #[serde(default = "profile_pictures")]
-    pub profile_pictures: PathBuf,
     #[serde(default = "tokens_sweep_interval_secs")]
     pub tokens_sweep_interval_secs: u64,
     #[serde(default = "token_stale_days")]
@@ -36,6 +35,10 @@ pub struct Config {
     pub invite_codes_sweep_interval_secs: u64,
     #[serde(default = "log_level")]
     pub log_level: String,
+    #[serde(default = "https")]
+    pub https: bool,
+    #[serde(default = "ip")]
+    pub ip: SocketAddr,
 }
 
 fn max_password_len() -> u16 {
@@ -62,8 +65,12 @@ fn min_display_name_len() -> u16 {
     1
 }
 
-fn profile_pictures() -> PathBuf {
-    PathBuf::from("./files/images/profile_pictures/")
+fn https() -> bool {
+    true
+}
+
+fn ip() -> SocketAddr {
+    "127.0.0.1:8443".parse().unwrap()
 }
 
 fn tokens_sweep_interval_secs() -> u64 {

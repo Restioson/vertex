@@ -24,11 +24,11 @@ Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, feder
       [(guide)](https://medium.com/@mightywomble/how-to-set-up-nginx-reverse-proxy-with-lets-encrypt-8ef3fd6b79e5).
 3. Copy your certificate and key files to `server/docker/` (named `cert.pem` and `key.pem` respectively).
 4. Run `docker-compose up` in the main directory `vertex/` (if this does not work, try `sudo docker-compose up`).
-   Run `docker-compose up --build` to rebuild for new changes. To set the server IP and password for `key.pem`, edit the
-   values in `vertex/docker_env.env`
+   Run `docker-compose up --build` to rebuild for new changes. To set the password for `key.pem`, edit the values in 
+   `vertex/docker_env.env`
 
-**Warning:** *First time* compilation may take very long for the server (~10min). Grab a cup of coffee ;).
-Luckily, you only need to do this once, except *if* the dependencies change *and* you are using Docker.
+**Warning:** *First time* (and in general on Docker) compilation may take very long for the server (~10min). Grab a cup 
+of coffee ;).
 
 ## Running
 To run the server, do `cargo run` in the `server/` directory. You can pass it a port to run on,
@@ -61,10 +61,12 @@ rebuild the docker image with `docker-compose up --build`.
 | `max_invite_codes_per_community`   | The maximum allowed number of invite codes per community. They are limited to prevent DOS attacks.                                                                                                                                  | 100                                |
 | `invite_codes_sweep_interval_secs` | How often to sweep the database for possibly expired invite codes in seconds. A warning will be printed if this is less than the time taken to complete a single sweep.                                                             | 1800 (30min)                       |
 | `log_level`                        | The minimum log level to display log statements for. Valid options are `trace`, `debug`, `info`, `warn`, and `error`. It must be written in quotation marks (e.g `"info"`).                                                         | `"info"`                           |
+| `https`                            | Whether to use HTTPS on the Vertex server. This is useful to disable TLS for reverse proxied servers.                                                                                                                               | true                               |
+| `ip`                               | The IP and port to bind the server to. It is recommended that this value be changed appropriately.                                                                                                                                  | 127.0.0.1:8443                     |
 
 It is written in TOML. 
 
-The server must also be provided with a certificate and private key pair. They should be named `cert.pem` and `key.pem`
+The server must also be provided with a certificate and private key pair if `https` is set to true. They should be named `cert.pem` and `key.pem`
 respectively, and be contained in the standard configuration directories, as is the config file. The private key must be
 encrypted, and it must not have a passphrase.
 When using Docker, put the `cert.pem` and `key.pem` in the `server/docker/` folder. Upon changing these, please make

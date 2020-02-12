@@ -26,8 +26,7 @@ COPY --from=build /vertex/server/target/release/vertex_server ./vertex_server
 COPY server/docker/db.conf db.conf
 COPY server/docker/cert.pem /root/.config/vertex_server/cert.pem
 COPY server/docker/key.pem /root/.config/vertex_server/key.pem
-# Dummy file is copied to allow for the config.toml to be copied only if it is present
-COPY server/docker/.dummy.ignore server/docker/config.tom[l] /root/.config/vertex_server/
+COPY server/docker/config.toml /root/.config/vertex_server/
 
 COPY wait-for-postgres.sh .
 EXPOSE 8080/tcp

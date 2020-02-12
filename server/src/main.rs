@@ -81,15 +81,6 @@ fn handle_disconnected(actor_name: &'static str) -> impl Fn(Disconnected) -> Err
     }
 }
 
-fn create_files_directories(config: &Config) {
-    let dirs = [config.profile_pictures.clone()];
-
-    for dir in &dirs {
-        fs::create_dir_all(dir)
-            .unwrap_or_else(|_| panic!("Error creating directory {}", dir.to_string_lossy()));
-    }
-}
-
 fn setup_logging(config: &Config) {
     let dirs = ProjectDirs::from("", "vertex_chat", "vertex_server")
         .expect("Error getting project directories");
@@ -151,14 +142,6 @@ async fn main() {
     let config = config::load_config();
     setup_logging(&config);
 
-    let args = env::args().collect::<Vec<_>>();
-    let addr = args
-        .get(1)
-        .cloned()
-        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
-
-    create_files_directories(&config);
-
     let (cert_path, key_path) = config::ssl_config();
     let database = Database::new().await.expect("Error in database setup");
     tokio::spawn(database.clone().sweep_tokens_loop(
@@ -174,7 +157,7 @@ async fn main() {
     load_communities(database.clone()).await;
 
     let config = Arc::new(config);
-    let global = Global { database, config };
+    let global = Global { database, config: config.clone() };
     let global = warp::any().map(move || global.clone());
 
     let authenticate = warp::path("authenticate")
@@ -231,13 +214,18 @@ async fn main() {
     let client = warp::path("client").and(authenticate.or(register.or(token)));
     let routes = invite.or(client);
 
-    info!("Vertex server starting on addr {}", addr);
-    warp::serve(routes)
-        .tls()
-        .cert_path(cert_path)
-        .key_path(key_path)
-        .run(addr.parse::<SocketAddr>().unwrap())
-        .await;
+    info!("Vertex server starting on addr {}", config.ip);
+
+    if config.https {
+        warp::serve(routes)
+            .tls()
+            .cert_path(cert_path)
+            .key_path(key_path)
+            .run(config.ip)
+            .await;
+    } else {
+        warp::serve(routes).run(config.ip).await;
+    }
 }
 
 #[inline]
