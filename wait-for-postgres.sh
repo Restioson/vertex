@@ -20,5 +20,5 @@ while [ $times -lt 2 ]; do
 done
 
 echo "Postgres is up - executing command $cmd"
-./vertex_server $VERTEX_SERVER_IP
+./vertex_server "0.0.0.0:443"
 echo "Command executed"
