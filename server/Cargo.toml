@@ -8,8 +8,8 @@ edition = "2018"
 xtra = { version = "0.2.5", features = ["with-tokio-0_2"] }
 warp = { version = "^0.2", features = ["tls"] }
 http = "^0.2"
-serde = "^1"
-serde_cbor = "^0.10"
+serde = "1.0"
+serde_cbor = "0.11"
 url = "^2"
 futures = "^0.3"
 l337 = { git = "https://github.com/OneSignal/L3-37", rev = "a970fe669787c4caf8ae699870b97ed1d7616f00" }
