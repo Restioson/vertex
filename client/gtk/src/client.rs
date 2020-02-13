@@ -220,16 +220,18 @@ impl<Ui: ClientUi> Client<Ui> {
                 icon_path.push("res");
                 icon_path.push("icon.png");
 
-                let res = notify_rust::Notification::new()
-                    .summary("Vertex")
-                    .appname("Vertex")
-                    .icon(&icon_path.to_str().unwrap())
-                    .body(&msg)
-                    .show();
+                tokio::task::spawn_blocking(move || {
+                    let res = notify_rust::Notification::new()
+                        .summary("Vertex")
+                        .appname("Vertex")
+                        .icon(&icon_path.to_str().unwrap())
+                        .body(&msg)
+                        .show();
 
-                if let Ok(handle) = res {
-                    handle.on_close(|| {}); // Needed to prevent it from going away
-                }  // We don't really care if this fails
+                    if let Ok(handle) = res {
+                        handle.on_close(|| {});
+                    }
+                });
             };
         }
     }
