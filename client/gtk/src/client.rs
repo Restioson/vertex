@@ -228,7 +228,7 @@ impl<Ui: ClientUi> Client<Ui> {
                     .show();
 
                 if let Ok(handle) = res {
-                    handle.unwrap().on_close(|| {}); // Needed to prevent it from going away
+                    handle.on_close(|| {}); // Needed to prevent it from going away
                 }  // We don't really care if this fails
             };
         }
