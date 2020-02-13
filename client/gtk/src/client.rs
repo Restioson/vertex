@@ -9,6 +9,7 @@ pub use user::*;
 use vertex::*;
 
 use crate::{net, SharedMut};
+use std::env;
 
 mod community;
 mod room;
@@ -105,7 +106,7 @@ impl<Ui: ClientUi> Client<Ui> {
     }
 
     pub async fn handle_event(&self, event: ServerEvent) {
-        match event {
+        match event.clone() {
             ServerEvent::AddCommunity(structure) => {
                 self.add_community(structure).await;
             }
@@ -124,6 +125,7 @@ impl<Ui: ClientUi> Client<Ui> {
 
                 if let Some(room) = room {
                     room.add_message(message.author, message.content).await;
+                    self.display_notification(&event);
                 } else {
                     println!("received message for invalid room: {:?}#{:?}", message.community, message.room);
                 }
@@ -203,6 +205,33 @@ impl<Ui: ClientUi> Client<Ui> {
         let request = self.request.send(ClientRequest::LogOut).await?;
         request.response().await?;
         Ok(())
+    }
+
+    pub fn display_notification(&self, event: &ServerEvent) {
+        if let ServerEvent::AddMessage(message) = event {
+            let msg = format!("{:?}: {}", message.author, message.content);
+
+            #[cfg(windows)]
+            notifica::notify("Vertex", &msg);
+
+            # [cfg(unix)]
+            {
+                let mut icon_path = env::current_dir().unwrap();
+                icon_path.push("res");
+                icon_path.push("icon.png");
+
+                let res = notify_rust::Notification::new()
+                    .summary("Vertex")
+                    .appname("Vertex")
+                    .icon(&icon_path.to_str().unwrap())
+                    .body(&msg)
+                    .show();
+
+                if let Ok(handle) = res {
+                    handle.unwrap().on_close(|| {}); // Needed to prevent it from going away
+                }  // We don't really care if this fails
+            };
+        }
     }
 }
 

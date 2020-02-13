@@ -54,3 +54,9 @@ tokio-tls = "0.3"
 once_cell = "1.3"
 
 vertex = { path = "../../common" }
+
+[target.'cfg(unix)'.dependencies]
+notify-rust = "4.0.0-beta.2"
+
+[target.'cfg(windows)'.dependencies]
+notifica = "1"
