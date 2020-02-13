@@ -294,7 +294,7 @@ impl GroupedMessageWidget {
 
     fn push_message(&self, content: String) -> MessageEntryWidget {
         let entry = MessageEntryWidget::build(content);
-        self.inner.add(&entry.label);
+        self.inner.add(&entry.widget);
         self.inner.show_all();
 
         entry
@@ -302,24 +302,44 @@ impl GroupedMessageWidget {
 }
 
 pub struct MessageEntryWidget {
-    label: gtk::Label,
+    widget: gtk::Widget,
 }
 
 impl MessageEntryWidget {
     fn build(content: String) -> MessageEntryWidget {
+        if content.contains("invite") {
+            MessageEntryWidget::build_invite()
+        } else {
+            MessageEntryWidget::build_label(content)
+        }
+    }
+
+    fn build_invite() -> MessageEntryWidget {
+        let builder = gtk::Builder::new_from_file("res/glade/active/message_invite.glade");
+        let invite: gtk::Box = builder.get_object("invite").unwrap();
+        let community_name: gtk::Label = builder.get_object("community_name").unwrap();
+        let community_motd: gtk::Label = builder.get_object("community_motd").unwrap();
+
+        community_name.set_text("Community");
+        community_motd.set_text("5 members");
+
+        MessageEntryWidget { widget: invite.upcast() }
+    }
+
+    fn build_label(content: String) -> MessageEntryWidget {
         let label = gtk::LabelBuilder::new()
             .name("message_content")
             .label(content.trim())
             .halign(gtk::Align::Start)
             .build();
 
-        MessageEntryWidget { label }
+        MessageEntryWidget { widget: label.upcast() }
     }
 }
 
 impl client::MessageEntryWidget<Ui> for MessageEntryWidget {
     fn set_status(&mut self, status: client::MessageStatus) {
-        let style = self.label.get_style_context();
+        let style = self.widget.get_style_context();
         style.remove_class("pending");
         style.remove_class("error");
 
@@ -391,13 +411,14 @@ fn show_create_community(client: Client<Ui>) {
                 let dialog = dialog.clone();
                 async move {
                     if let Ok(name) = name_entry.try_get_text() {
+                        dialog.close();
+
                         // TODO: error handling
                         let community = client.create_community(&name).await.unwrap();
 
                         community.create_room("General").await.unwrap();
                         community.create_room("Off Topic").await.unwrap();
                     }
-                    dialog.close();
                 }
             })
             .build_widget_event()
@@ -420,11 +441,12 @@ fn show_join_community(client: Client<Ui>) {
                 let dialog = dialog.clone();
                 async move {
                     if let Ok(code) = code_entry.try_get_text() {
+                        dialog.close();
+
                         let code = InviteCode(code);
                         // TODO: error handling
                         client.join_community(code).await.unwrap();
                     }
-                    dialog.close();
                 }
             })
             .build_widget_event()

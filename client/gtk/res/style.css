@@ -188,6 +188,62 @@ spinner:checked {
   border-radius: 10px;
 }
 
+#active #message .embed {
+  background: @sidebar_bg_color;
+  padding: 6px;
+  border-radius: 10px;
+}
+
+#active #message #invite #community_header {
+  padding: 4px;
+}
+
+#active #message #invite #label {
+  color: #a0a0a0;
+  font-size: 12px;
+}
+
+#active #message #invite #community_icon {
+  min-width: 40px;
+  min-height: 40px;
+
+  background-image: url('icon.png');
+  background-size: 40px;
+
+  border-radius: 20px;
+}
+
+#active #message #invite #community_icon border {
+  border-style: none;
+}
+
+#active #message #invite #community_name {
+  color: #d0d0d0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#active #message #invite #community_motd {
+  color: #a0a0a0;
+  font-size: 12px;
+  font-style: italic;
+}
+
+#active #message #invite #join_button {
+  min-width: 60px;
+  min-height: 10px;
+  background: transparent;
+  border-style: solid;
+  border-color: @widget_bg_color;
+  border-width: 3px;
+  padding: 6px;
+  border-radius: 20px;
+}
+
+#active #message #invite #join_button:hover {
+  background: @widget_bg_color;
+}
+
 .no_hover *:hover {
   background: inherit;
   transition: none;
@@ -235,7 +291,7 @@ spinner:checked {
   margin: 4px;
 }
 
-#active #community_icon {
+#active #sidebar #community_icon {
   min-width: 40px;
   min-height: 40px;
 
@@ -245,17 +301,17 @@ spinner:checked {
   border-radius: 20px;
 }
 
-#active #community_icon border {
+#active #sidebar #community_icon border {
   border-style: none;
 }
 
-#active #community_header #community_name {
+#active #sidebar #community_header #community_name {
   color: #d0d0d0;
   font-size: 15px;
   font-weight: 600;
 }
 
-#active #community_header #community_motd {
+#active #sidebar #community_header #community_motd {
   color: #a0a0a0;
   font-size: 12px;
   font-style: italic;
