@@ -1,5 +1,5 @@
 @define-color content_bg_color #343434;
-@define-color sidebar_bg_color #313131;
+@define-color sidebar_bg_color #303030;
 @define-color upper_bar_bg_color #3D3D3D;
 @define-color lower_bar_bg_color #2D2D2D;
 
@@ -176,6 +176,7 @@ spinner:checked {
 
 #active #messages {
   background: @content_bg_color;
+  padding: 6px;
 }
 
 #active #messages row, #active #message row:hover {
