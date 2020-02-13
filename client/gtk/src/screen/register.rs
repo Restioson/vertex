@@ -2,7 +2,7 @@ use std::fmt;
 
 use gtk::prelude::*;
 
-use crate::{auth, token_store, TryGetText, window, Server};
+use crate::{auth, Server, token_store, TryGetText, window};
 use crate::connect::AsConnector;
 use crate::screen;
 
@@ -55,7 +55,7 @@ async fn bind_events(screen: &Screen) {
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
                 let instance_ip = screen.instance_entry.try_get_text().unwrap_or_default();
-                let instance = Server(instance_ip);
+                let instance = Server::parse(instance_ip);
 
                 let username = screen.username_entry.try_get_text().unwrap_or_default();
                 let password_1 = screen.password_entry_1.try_get_text().unwrap_or_default();
@@ -72,7 +72,10 @@ async fn bind_events(screen: &Screen) {
                         let client = screen::active::start(ws).await;
                         window::set_screen(&client.ui.main);
                     }
-                    Err(err) => screen.error_label.set_text(&format!("{}", err)),
+                    Err(err) => {
+                        println!("Encountered error during register: {:?}", err);
+                        screen.error_label.set_text(&format!("{}", err));
+                    }
                 }
 
                 screen.status_stack.set_visible_child(&screen.error_label);
@@ -108,26 +111,34 @@ async fn register(
     Ok(auth.authenticate(token.device, token.token).await?)
 }
 
-#[derive(Copy, Clone, Debug)]
+type StdError = Box<dyn std::error::Error>;
+
+#[derive(Debug)]
 enum RegisterError {
+    InvalidInstanceIp,
     UsernameAlreadyExists,
     InvalidUsername,
     InvalidPassword,
     PasswordsDoNotMatch,
     InternalServerError,
-    NetworkError,
+    ConnectError(hyper::Error),
+    NetworkError(hyper::Error),
+    ProtocolError(StdError),
     UnknownError,
 }
 
 impl fmt::Display for RegisterError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            RegisterError::InvalidInstanceIp => write!(f, "Invalid instance ip"),
             RegisterError::UsernameAlreadyExists => write!(f, "Username already exists"),
             RegisterError::InvalidUsername => write!(f, "Invalid username"),
             RegisterError::InvalidPassword => write!(f, "Invalid password"),
             RegisterError::PasswordsDoNotMatch => write!(f, "Passwords do not match"),
             RegisterError::InternalServerError => write!(f, "Internal server error"),
-            RegisterError::NetworkError => write!(f, "Network error"),
+            RegisterError::ConnectError(_) => write!(f, "Couldn't connect to instance"),
+            RegisterError::NetworkError(_) => write!(f, "Network error"),
+            RegisterError::ProtocolError(_) => write!(f, "Protocol error: check your server instance?"),
             RegisterError::UnknownError => write!(f, "Unknown error"),
         }
     }
@@ -136,20 +147,24 @@ impl fmt::Display for RegisterError {
 impl From<auth::Error> for RegisterError {
     fn from(err: auth::Error) -> Self {
         match err {
-            auth::Error::Net(_) => RegisterError::NetworkError,
-            auth::Error::Server(err) => err.into(),
-            _ => RegisterError::UnknownError,
-        }
-    }
-}
+            auth::Error::Net(err) => if err.is_connect() {
+                RegisterError::ConnectError(err)
+            } else {
+                RegisterError::NetworkError(err)
+            },
 
-impl From<vertex::AuthError> for RegisterError {
-    fn from(err: vertex::AuthError) -> Self {
-        match err {
-            vertex::AuthError::Internal => RegisterError::InternalServerError,
-            vertex::AuthError::InvalidUsername => RegisterError::InvalidUsername,
-            vertex::AuthError::InvalidPassword => RegisterError::InvalidPassword,
-            vertex::AuthError::UsernameAlreadyExists => RegisterError::UsernameAlreadyExists,
+            auth::Error::InvalidUri(_) => RegisterError::InvalidInstanceIp,
+            auth::Error::SerdeUrlEncoded(err) => RegisterError::ProtocolError(Box::new(err)),
+            auth::Error::SerdeCbor(err) => RegisterError::ProtocolError(Box::new(err)),
+
+            auth::Error::Server(err) => match err {
+                vertex::AuthError::Internal => RegisterError::InternalServerError,
+                vertex::AuthError::InvalidUsername => RegisterError::InvalidUsername,
+                vertex::AuthError::InvalidPassword => RegisterError::InvalidPassword,
+                vertex::AuthError::UsernameAlreadyExists => RegisterError::UsernameAlreadyExists,
+                _ => RegisterError::UnknownError,
+            },
+
             _ => RegisterError::UnknownError,
         }
     }

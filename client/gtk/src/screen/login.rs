@@ -44,7 +44,7 @@ async fn bind_events(screen: &Screen) {
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
                 let instance_ip = screen.instance_entry.try_get_text().unwrap_or_default();
-                let instance = Server(instance_ip);
+                let instance = Server::parse(instance_ip);
 
                 let username = screen.username_entry.try_get_text().unwrap_or_default();
                 let password = screen.password_entry.try_get_text().unwrap_or_default();
@@ -60,7 +60,10 @@ async fn bind_events(screen: &Screen) {
                         let client = screen::active::start(ws).await;
                         window::set_screen(&client.ui.main);
                     }
-                    Err(err) => screen.error_label.set_text(&format!("{}", err)),
+                    Err(err) => {
+                        println!("Encountered error during login: {:?}", err);
+                        screen.error_label.set_text(&format!("{}", err));
+                    }
                 }
 
                 screen.status_stack.set_visible_child(&screen.error_label);
@@ -101,20 +104,28 @@ async fn login(
     Ok(auth.authenticate(device, token).await?)
 }
 
-#[derive(Copy, Clone, Debug)]
+type StdError = Box<dyn std::error::Error>;
+
+#[derive(Debug)]
 enum LoginError {
+    InvalidInstanceIp,
     InvalidUsernameOrPassword,
     InternalServerError,
-    NetworkError,
+    ConnectError(hyper::Error),
+    NetworkError(hyper::Error),
+    ProtocolError(StdError),
     UnknownError,
 }
 
 impl fmt::Display for LoginError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            LoginError::InvalidInstanceIp => write!(f, "Invalid instance ip"),
             LoginError::InvalidUsernameOrPassword => write!(f, "Invalid username or password"),
             LoginError::InternalServerError => write!(f, "Internal server error"),
-            LoginError::NetworkError => write!(f, "Network error"),
+            LoginError::ConnectError(_) => write!(f, "Couldn't connect to instance"),
+            LoginError::NetworkError(_) => write!(f, "Network error"),
+            LoginError::ProtocolError(_) => write!(f, "Protocol error: check your server instance?"),
             LoginError::UnknownError => write!(f, "Unknown error"),
         }
     }
@@ -123,19 +134,23 @@ impl fmt::Display for LoginError {
 impl From<auth::Error> for LoginError {
     fn from(err: auth::Error) -> Self {
         match err {
-            auth::Error::Net(_) => LoginError::NetworkError,
-            auth::Error::Server(err) => err.into(),
-            _ => LoginError::UnknownError,
-        }
-    }
-}
+            auth::Error::Net(err) => if err.is_connect() {
+                LoginError::ConnectError(err)
+            } else {
+                LoginError::NetworkError(err)
+            },
 
-impl From<vertex::AuthError> for LoginError {
-    fn from(err: vertex::AuthError) -> Self {
-        match err {
-            vertex::AuthError::Internal => LoginError::InternalServerError,
-            vertex::AuthError::IncorrectCredentials | vertex::AuthError::InvalidUser
-            => LoginError::InvalidUsernameOrPassword,
+            auth::Error::InvalidUri(_) => LoginError::InvalidInstanceIp,
+            auth::Error::SerdeUrlEncoded(err) => LoginError::ProtocolError(Box::new(err)),
+            auth::Error::SerdeCbor(err) => LoginError::ProtocolError(Box::new(err)),
+
+            auth::Error::Server(err) => match err {
+                vertex::AuthError::Internal => LoginError::InternalServerError,
+                vertex::AuthError::IncorrectCredentials | vertex::AuthError::InvalidUser
+                => LoginError::InvalidUsernameOrPassword,
+
+                _ => LoginError::UnknownError,
+            },
 
             _ => LoginError::UnknownError,
         }

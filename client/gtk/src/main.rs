@@ -74,7 +74,17 @@ impl<E: gtk::EntryExt> TryGetText for E {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct Server(pub String);
+pub struct Server(String);
+
+impl Server {
+    pub fn parse(url: String) -> Server {
+        let mut url = url;
+        if !url.starts_with("https://") {
+            url.insert_str(0, "https://");
+        }
+        Server(url)
+    }
+}
 
 impl Server {
     pub fn url(&self) -> &str { &self.0 }

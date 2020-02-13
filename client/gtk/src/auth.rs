@@ -141,7 +141,7 @@ impl Client {
         where Req: serde::Serialize, Res: serde::de::DeserializeOwned
     {
         let request = hyper::Request::builder()
-            .uri(url.parse::<hyper::Uri>().unwrap())
+            .uri(url.parse::<hyper::Uri>()?)
             .method(hyper::Method::POST)
             .body(hyper::Body::from(serde_cbor::to_vec(&request)?))
             .unwrap();
@@ -158,9 +158,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     Server(AuthError),
+    Net(hyper::Error),
+    InvalidUri(hyper::http::uri::InvalidUri),
     SerdeUrlEncoded(serde_urlencoded::ser::Error),
     SerdeCbor(serde_cbor::Error),
-    Net(hyper::Error),
     DidNotUpgrade,
 }
 
@@ -178,4 +179,8 @@ impl From<serde_urlencoded::ser::Error> for Error {
 
 impl From<hyper::Error> for Error {
     fn from(error: hyper::Error) -> Self { Error::Net(error) }
+}
+
+impl From<hyper::http::uri::InvalidUri> for Error {
+    fn from(error: hyper::http::uri::InvalidUri) -> Self { Error::InvalidUri(error) }
 }
