@@ -19,12 +19,12 @@ Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, feder
       [guide](https://www.ibm.com/support/knowledgecenter/SSMNED_5.0.0/com.ibm.apic.cmc.doc/task_apionprem_gernerate_self_signed_openSSL.html).
       This currently works for the client, but in the future, it will trigger a warning or cause an error.
    2. You can get a verified certificate for free with LetsEncrypt through its [Certbot](https://certbot.eff.org/instructions). 
-      You may also want to put an Nginx reverse proxy in front of Vertex so that you don't have to restart it every time 
+      You may also want to put an Nginx/Apache reverse proxy in front of Vertex so that you don't have to restart it every time 
       to renew a certificate 
       [(guide)](https://medium.com/@mightywomble/how-to-set-up-nginx-reverse-proxy-with-lets-encrypt-8ef3fd6b79e5).
 3. Copy your certificate and key files to `server/docker/` (named `cert.pem` and `key.pem` respectively).
-4. Run `VERTEX_SERVER_PORT=.. docker-compose up` in the main directory `vertex/` (if this does not work, 
-   try `VERTEX_SERVER_PORT=.. sudo docker-compose up`). Run `docker-compose up --build` to rebuild for new changes. 
+4. Run `VERTEX_SERVER_PORT=443 docker-compose up` in the main directory `vertex/` (if this does not work, 
+   try `VERTEX_SERVER_PORT=443 sudo docker-compose up`). Add `--build` to the end to rebuild for new updates. 
    To set the password for `key.pem`, edit the values in `vertex/.env`. 
 
 **Warning:** *First time* (and in general on Docker) compilation may take very long for the server (~10min). Grab a cup 
