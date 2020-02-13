@@ -53,6 +53,8 @@ tokio-tls = "0.3"
 
 once_cell = "1.3"
 
+ears = "0.7"
+
 vertex = { path = "../../common" }
 
 [target.'cfg(unix)'.dependencies]

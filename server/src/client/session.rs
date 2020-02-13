@@ -10,7 +10,7 @@ use xtra::prelude::*;
 pub use manager::*;
 use vertex::*;
 
-use crate::community::{CommunityActor, CreateRoom, GetRoomStructures, Join, COMMUNITIES, Connect};
+use crate::community::{CommunityActor, Connect, CreateRoom, GetRoomStructures, Join, COMMUNITIES};
 use crate::database::*;
 use crate::{auth, handle_disconnected, IdentifiedMessage, SendMessage};
 
@@ -188,7 +188,8 @@ impl ActiveSession {
                 user: self.user,
                 device: self.device,
                 session: ctx.address().unwrap(),
-            }).unwrap();
+            })
+            .unwrap();
 
             let structure = CommunityStructure {
                 id: *id,

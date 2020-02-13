@@ -5,9 +5,9 @@ use log::Level;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::ErrorKind;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::net::SocketAddr;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {

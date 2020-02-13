@@ -157,7 +157,10 @@ async fn main() {
     load_communities(database.clone()).await;
 
     let config = Arc::new(config);
-    let global = Global { database, config: config.clone() };
+    let global = Global {
+        database,
+        config: config.clone(),
+    };
     let global = warp::any().map(move || global.clone());
 
     let authenticate = warp::path("authenticate")

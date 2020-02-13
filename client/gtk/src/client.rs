@@ -10,6 +10,9 @@ use vertex::*;
 
 use crate::{net, SharedMut};
 use std::env;
+use ears::{Sound, AudioController};
+use std::sync::Arc;
+use futures::lock::Mutex;
 
 mod community;
 mod room;
@@ -57,6 +60,7 @@ pub struct Client<Ui: ClientUi> {
     pub ui: Ui,
     pub user: User,
     pub message_list: MessageList<Ui>,
+    pub notif_sound: Option<Arc<Mutex<Sound>>>,
 
     state: SharedMut<ClientState<Ui>>,
 }
@@ -90,7 +94,12 @@ impl<Ui: ClientUi> Client<Ui> {
             selected_room: None,
         });
 
-        let client = Client { request, ui, user, message_list, state };
+        let notif_sound = match Sound::new("res/notification_sound_clearly.ogg") {
+            Ok(s) => Some(Arc::new(Mutex::new(s))),
+            Err(_) => None
+        };
+
+        let client = Client { request, ui, user, message_list, notif_sound, state };
 
         for community in ready.communities {
             client.add_community(community).await;
@@ -125,7 +134,7 @@ impl<Ui: ClientUi> Client<Ui> {
 
                 if let Some(room) = room {
                     room.add_message(message.author, message.content).await;
-                    self.display_notification(&event);
+                    self.system_notification(&event).await;
                 } else {
                     println!("received message for invalid room: {:?}#{:?}", message.community, message.room);
                 }
@@ -207,8 +216,9 @@ impl<Ui: ClientUi> Client<Ui> {
         Ok(())
     }
 
-    pub fn display_notification(&self, event: &ServerEvent) {
+    pub async fn system_notification(&self, event: &ServerEvent) {
         if let ServerEvent::AddMessage(message) = event {
+            // Show the system notification
             let msg = format!("{:?}: {}", message.author, message.content);
 
             #[cfg(windows)]
@@ -233,6 +243,12 @@ impl<Ui: ClientUi> Client<Ui> {
                     }
                 });
             };
+
+            // Play the sound
+            if let Some(sound) = &self.notif_sound {
+                sound.lock().await.play();
+            }
+
         }
     }
 }
