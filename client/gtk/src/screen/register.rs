@@ -2,13 +2,14 @@ use std::fmt;
 
 use gtk::prelude::*;
 
-use crate::{auth, local_server, token_store, TryGetText, window};
+use crate::{auth, token_store, TryGetText, window, Server};
 use crate::connect::AsConnector;
 use crate::screen;
 
 #[derive(Clone)]
 pub struct Screen {
     pub main: gtk::Viewport,
+    instance_entry: gtk::Entry,
     username_entry: gtk::Entry,
     password_entry_1: gtk::Entry,
     password_entry_2: gtk::Entry,
@@ -24,6 +25,7 @@ pub async fn build() -> Screen {
 
     let screen = Screen {
         main: builder.get_object("viewport").unwrap(),
+        instance_entry: builder.get_object("instance_entry").unwrap(),
         username_entry: builder.get_object("username_entry").unwrap(),
         password_entry_1: builder.get_object("password_entry_1").unwrap(),
         password_entry_2: builder.get_object("password_entry_2").unwrap(),
@@ -52,6 +54,9 @@ async fn bind_events(screen: &Screen) {
     screen.register_button.connect_button_press_event(
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
+                let instance_ip = screen.instance_entry.try_get_text().unwrap_or_default();
+                let instance = Server(instance_ip);
+
                 let username = screen.username_entry.try_get_text().unwrap_or_default();
                 let password_1 = screen.password_entry_1.try_get_text().unwrap_or_default();
                 let password_2 = screen.password_entry_2.try_get_text().unwrap_or_default();
@@ -59,7 +64,7 @@ async fn bind_events(screen: &Screen) {
                 screen.status_stack.set_visible_child(&screen.spinner);
                 screen.error_label.set_text("");
 
-                match register(username, password_1, password_2).await {
+                match register(instance, username, password_1, password_2).await {
                     Ok(ws) => {
                         let screen = screen::loading::build();
                         window::set_screen(&screen);
@@ -77,6 +82,7 @@ async fn bind_events(screen: &Screen) {
 }
 
 async fn register(
+    instance: Server,
     username: String,
     password_1: String,
     password_2: String,
@@ -88,8 +94,7 @@ async fn register(
     let password = password_1;
     let credentials = vertex::UserCredentials::new(username, password);
 
-    let server = local_server();
-    let auth = auth::Client::new(server.clone());
+    let auth = auth::Client::new(instance.clone());
 
     let _ = auth.register(credentials.clone(), None).await?;
 
@@ -98,7 +103,7 @@ async fn register(
         vertex::TokenCreationOptions::default(),
     ).await?;
 
-    token_store::store_token(server, token.device, token.token.clone());
+    token_store::store_token(instance, token.device, token.token.clone());
 
     Ok(auth.authenticate(token.device, token.token).await?)
 }

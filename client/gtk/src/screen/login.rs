@@ -2,13 +2,14 @@ use std::fmt;
 
 use gtk::prelude::*;
 
-use crate::{auth, local_server, token_store, TryGetText, window};
+use crate::{auth, Server, token_store, TryGetText, window};
 use crate::connect::AsConnector;
 use crate::screen;
 
 #[derive(Clone)]
 pub struct Screen {
     pub main: gtk::Viewport,
+    instance_entry: gtk::Entry,
     username_entry: gtk::Entry,
     password_entry: gtk::Entry,
     login_button: gtk::Button,
@@ -23,6 +24,7 @@ pub async fn build() -> Screen {
 
     let screen = Screen {
         main: builder.get_object("viewport").unwrap(),
+        instance_entry: builder.get_object("instance_entry").unwrap(),
         username_entry: builder.get_object("username_entry").unwrap(),
         password_entry: builder.get_object("password_entry").unwrap(),
         login_button: builder.get_object("login_button").unwrap(),
@@ -41,13 +43,16 @@ async fn bind_events(screen: &Screen) {
     screen.login_button.connect_button_press_event(
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
+                let instance_ip = screen.instance_entry.try_get_text().unwrap_or_default();
+                let instance = Server(instance_ip);
+
                 let username = screen.username_entry.try_get_text().unwrap_or_default();
                 let password = screen.password_entry.try_get_text().unwrap_or_default();
 
                 screen.status_stack.set_visible_child(&screen.spinner);
                 screen.error_label.set_text("");
 
-                match login(username, password).await {
+                match login(instance, username, password).await {
                     Ok(ws) => {
                         let loading = screen::loading::build();
                         window::set_screen(&loading);
@@ -74,21 +79,21 @@ async fn bind_events(screen: &Screen) {
 }
 
 async fn login(
+    instance: Server,
     username: String,
     password: String,
 ) -> Result<auth::AuthenticatedWs, LoginError> {
-    let server = local_server();
-    let auth = auth::Client::new(server.clone());
+    let auth = auth::Client::new(instance.clone());
 
     let (device, token) = match token_store::get_stored_token() {
-        Some(token) => token,
-        None => {
+        Some(token) if token.instance == instance => (token.device, token.token),
+        _ => {
             let token = auth.create_token(
                 vertex::UserCredentials::new(username, password),
                 vertex::TokenCreationOptions::default(),
             ).await?;
 
-            token_store::store_token(server, token.device, token.token.clone());
+            token_store::store_token(instance, token.device, token.token.clone());
             (token.device, token.token)
         }
     };

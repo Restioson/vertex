@@ -63,10 +63,6 @@ impl<T> WeakSharedMut<T> {
     }
 }
 
-pub fn local_server() -> Server {
-    Server("https://localhost:8443/client".to_owned())
-}
-
 pub trait TryGetText {
     fn try_get_text(&self) -> Result<String, ()>;
 }
@@ -77,8 +73,8 @@ impl<E: gtk::EntryExt> TryGetText for E {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Server(String);
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct Server(pub String);
 
 impl Server {
     pub fn url(&self) -> &str { &self.0 }
@@ -99,8 +95,8 @@ async fn start() {
 
 async fn try_login() -> Option<auth::AuthenticatedWs> {
     match token_store::get_stored_token() {
-        Some((device, token)) => {
-            let auth = auth::Client::new(local_server());
+        Some(token_store::StoredToken { instance, device, token }) => {
+            let auth = auth::Client::new(instance);
             match auth.authenticate(device, token).await {
                 Ok(ws) => Some(ws),
                 Err(err) => {

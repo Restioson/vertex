@@ -18,7 +18,7 @@ type Connector = hyper_tls::HttpsConnector<hyper::client::HttpConnector>;
 
 pub struct Client {
     server: Server,
-    connector: Connector,
+    client: hyper::Client<Connector>,
 }
 
 impl Client {
@@ -34,7 +34,10 @@ impl Client {
 
         let https = (http, tls).into();
 
-        Client { server, connector: https }
+        let client = hyper::client::Client::builder()
+            .build(https);
+
+        Client { server, client }
     }
 
     pub async fn authenticate(
@@ -43,7 +46,7 @@ impl Client {
         token: AuthToken,
     ) -> Result<AuthenticatedWs> {
         let request = serde_urlencoded::to_string(AuthenticateRequest { device, token: token.clone() })?;
-        let url = format!("{}/authenticate?{}", self.server.url(), request);
+        let url = format!("{}/client/authenticate?{}", self.server.url(), request);
 
         let key: [u8; 16] = rand::random();
         let key = base64::encode(&key);
@@ -57,7 +60,7 @@ impl Client {
             .body(hyper::Body::empty())
             .unwrap();
 
-        let response = self.build_client().request(request).await?;
+        let response = self.client.request(request).await?;
 
         match response.status() {
             hyper::StatusCode::SWITCHING_PROTOCOLS => {
@@ -91,7 +94,7 @@ impl Client {
     ) -> Result<RegisterUserResponse> {
         let response: AuthResult<RegisterUserResponse> = self.post(
             RegisterUserRequest { credentials, display_name },
-            format!("{}/register", self.server.url()),
+            format!("{}/client/register", self.server.url()),
         ).await?;
 
         Ok(response?)
@@ -104,7 +107,7 @@ impl Client {
     ) -> Result<CreateTokenResponse> {
         let response: AuthResult<CreateTokenResponse> = self.post(
             CreateTokenRequest { credentials, options },
-            format!("{}/token/create", self.server.url()),
+            format!("{}/client/token/create", self.server.url()),
         ).await?;
 
         Ok(response?)
@@ -117,7 +120,7 @@ impl Client {
     ) -> Result<()> {
         let response: AuthResult<()> = self.post(
             RefreshTokenRequest { credentials, device },
-            format!("{}/token/refresh", self.server.url()),
+            format!("{}/client/token/refresh", self.server.url()),
         ).await?;
         Ok(response?)
     }
@@ -129,7 +132,7 @@ impl Client {
     ) -> Result<()> {
         let response: AuthResult<()> = self.post(
             RevokeTokenRequest { credentials, device },
-            format!("{}/token/revoke", self.server.url()),
+            format!("{}/client/token/revoke", self.server.url()),
         ).await?;
         Ok(response?)
     }
@@ -143,15 +146,10 @@ impl Client {
             .body(hyper::Body::from(serde_cbor::to_vec(&request)?))
             .unwrap();
 
-        let response = self.build_client().request(request).await?;
+        let response = self.client.request(request).await?;
         let bytes = hyper::body::to_bytes(response.into_body()).await?;
 
         Ok(serde_cbor::from_slice(&bytes)?)
-    }
-
-    fn build_client(&self) -> hyper::Client<Connector> {
-        hyper::client::Client::builder()
-            .build(self.connector.clone())
     }
 }
 
