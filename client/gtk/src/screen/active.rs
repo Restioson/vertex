@@ -24,13 +24,25 @@ impl Ui {
 
         let main: gtk::Viewport = builder.get_object("main").unwrap();
 
+        let settings_button: gtk::Button = builder.get_object("settings_button").unwrap();
+        let settings_image = settings_button.get_child()
+            .and_then(|img| img.downcast::<gtk::Image>().ok())
+            .unwrap();
+
+        settings_image.set_from_pixbuf(Some(
+            &gdk_pixbuf::Pixbuf::new_from_file_at_size(
+                "res/feather/settings.svg",
+                20, 20,
+            ).unwrap()
+        ));
+
         Ui {
             main: main.clone(),
             communities: builder.get_object("communities").unwrap(),
             messages_scroll: builder.get_object("messages_scroll").unwrap(),
             messages_list: builder.get_object("messages").unwrap(),
             message_entry: builder.get_object("message_entry").unwrap(),
-            settings_button: builder.get_object("settings_button").unwrap(),
+            settings_button,
             add_community_button: builder.get_object("add_community_button").unwrap(),
         }
     }
