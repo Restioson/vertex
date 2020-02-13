@@ -11,7 +11,8 @@ use crate::connect::AsConnector;
 pub struct Ui {
     pub main: gtk::Viewport,
     communities: gtk::ListBox,
-    messages: gtk::ListBox,
+    messages_scroll: gtk::ScrolledWindow,
+    messages_list: gtk::ListBox,
     message_entry: gtk::Entry,
     settings_button: gtk::Button,
     add_community_button: gtk::Button,
@@ -26,7 +27,8 @@ impl Ui {
         Ui {
             main: main.clone(),
             communities: builder.get_object("communities").unwrap(),
-            messages: builder.get_object("messages").unwrap(),
+            messages_scroll: builder.get_object("messages_scroll").unwrap(),
+            messages_list: builder.get_object("messages").unwrap(),
             message_entry: builder.get_object("message_entry").unwrap(),
             settings_button: builder.get_object("settings_button").unwrap(),
             add_community_button: builder.get_object("add_community_button").unwrap(),
@@ -81,7 +83,11 @@ impl client::ClientUi for Ui {
     }
 
     fn build_message_list(&self) -> MessageListWidget {
-        MessageListWidget { list: self.messages.clone(), last_group: None }
+        MessageListWidget {
+            scroll: self.messages_scroll.clone(),
+            list: self.messages_list.clone(),
+            last_group: None,
+        }
     }
 }
 
@@ -221,6 +227,7 @@ impl client::RoomEntryWidget<Ui> for RoomEntryWidget {
 }
 
 pub struct MessageListWidget {
+    scroll: gtk::ScrolledWindow,
     list: gtk::ListBox,
     last_group: Option<GroupedMessageWidget>,
 }
@@ -238,6 +245,12 @@ impl MessageListWidget {
 
         self.last_group.as_ref().unwrap()
     }
+
+    fn update_scroll(&mut self) {
+        if let Some(adjustment) = self.scroll.get_vadjustment() {
+            adjustment.set_value(adjustment.get_upper());
+        }
+    }
 }
 
 impl client::MessageListWidget<Ui> for MessageListWidget {
@@ -246,11 +259,15 @@ impl client::MessageListWidget<Ui> for MessageListWidget {
             self.list.remove(&child);
         }
         self.last_group = None;
+        self.update_scroll();
     }
 
     fn push_message(&mut self, author: UserId, content: String) -> MessageEntryWidget {
         let group = self.next_group(author);
-        group.push_message(content)
+        let widget = group.push_message(content);
+        self.update_scroll();
+
+        widget
     }
 }
 
