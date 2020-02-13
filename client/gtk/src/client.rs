@@ -29,8 +29,8 @@ pub trait ClientUi: Sized + Clone + 'static {
     type MessageEntryWidget: MessageEntryWidget<Self>;
 
     fn add_community(&self, name: String) -> Self::CommunityEntryWidget;
-
     fn build_message_list(&self) -> Self::MessageListWidget;
+    fn window_focused(&self) -> bool;
 }
 
 async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
@@ -134,7 +134,10 @@ impl<Ui: ClientUi> Client<Ui> {
 
                 if let Some(room) = room {
                     room.add_message(message.author, message.content).await;
-                    self.system_notification(&event).await;
+
+                    if !self.ui.window_focused() || self.selected_room().await != Some(room) {
+                        self.system_notification(&event).await;
+                    }
                 } else {
                     println!("received message for invalid room: {:?}#{:?}", message.community, message.room);
                 }

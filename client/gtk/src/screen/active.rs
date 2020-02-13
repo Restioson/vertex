@@ -101,6 +101,10 @@ impl client::ClientUi for Ui {
             last_group: None,
         }
     }
+
+    fn window_focused(&self) -> bool {
+        self.main.is_focus()
+    }
 }
 
 #[derive(Clone)]
@@ -260,7 +264,7 @@ impl MessageListWidget {
 
     fn update_scroll(&mut self) {
         if let Some(adjustment) = self.scroll.get_vadjustment() {
-            adjustment.set_value(adjustment.get_upper());
+            adjustment.set_value(adjustment.get_upper() - adjustment.get_page_size());
         }
     }
 }

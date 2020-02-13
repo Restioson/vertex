@@ -78,3 +78,11 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
         Ok(())
     }
 }
+
+impl<Ui: ClientUi> PartialEq<RoomEntry<Ui>> for RoomEntry<Ui> {
+    fn eq(&self, other: &RoomEntry<Ui>) -> bool {
+        self.id == other.id && self.community == other.community
+    }
+}
+
+impl<Ui: ClientUi> Eq for RoomEntry<Ui> {}
