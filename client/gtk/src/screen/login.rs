@@ -42,7 +42,6 @@ async fn bind_events(screen: &Screen) {
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
                 let instance_ip = screen.instance_entry.try_get_text().unwrap_or_default();
-                let instance = Server::parse(instance_ip);
 
                 let username = screen.username_entry.try_get_text().unwrap_or_default();
                 let password = screen.password_entry.try_get_text().unwrap_or_default();
@@ -50,7 +49,7 @@ async fn bind_events(screen: &Screen) {
                 screen.status_stack.set_visible_child(&screen.spinner);
                 screen.error_label.set_text("");
 
-                match login(instance, username, password).await {
+                match login(instance_ip, username, password).await {
                     Ok(parameters) => {
                         screen::active::start(parameters).await;
                     }
@@ -76,10 +75,13 @@ async fn bind_events(screen: &Screen) {
 }
 
 async fn login(
-    instance: Server,
+    instance: String,
     username: String,
     password: String,
 ) -> Result<AuthParameters> {
+    let instance = Server::parse(instance)?;
+    println!("{:?}", instance);
+
     match token_store::get_stored_token() {
         Some(parameters) if parameters.instance == instance => Ok(parameters),
         _ => {
@@ -110,7 +112,7 @@ fn describe_error(error: Error) -> &'static str {
         } else {
             "Network error"
         },
-        Error::ProtocolError => "Protocol error: check your server instance?",
+        Error::ProtocolError(_) => "Protocol error: check your server instance?",
         Error::AuthErrorResponse(err) => match err {
             vertex::AuthError::Internal => "Internal server error",
             vertex::AuthError::IncorrectCredentials | vertex::AuthError::InvalidUser

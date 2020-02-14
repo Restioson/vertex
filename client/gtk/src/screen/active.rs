@@ -380,6 +380,8 @@ pub async fn start(parameters: AuthParameters) {
             window::set_screen(&client.ui.main);
         }
         Err(error) => {
+            println!("Encountered error connecting client: {:?}", error);
+
             let error = describe_error(error);
             let screen = screen::loading::build_error(error, move || start(parameters.clone()));
             window::set_screen(&screen);
@@ -399,7 +401,7 @@ fn describe_error(error: Error) -> String {
         Error::InvalidUrl => "Invalid instance ip".to_string(),
         Error::Http(http) => format!("{}", http),
         Error::Websocket(ws) => format!("{}", ws),
-        Error::ProtocolError => "Protocol error: check your server instance?".to_string(),
+        Error::ProtocolError(_) => "Protocol error: check your server instance?".to_string(),
         Error::AuthErrorResponse(err) => match err {
             vertex::AuthError::Internal => "Internal server error".to_string(),
             vertex::AuthError::InvalidToken => "Invalid token".to_string(),

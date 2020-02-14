@@ -41,7 +41,7 @@ async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
         let event = result?;
         match event {
             ServerEvent::ClientReady(ready) => Ok(ready),
-            _ => Err(Error::ProtocolError),
+            _ => Err(Error::UnexpectedMessage),
         }
     } else {
         Err(Error::Websocket(tungstenite::Error::ConnectionClosed))

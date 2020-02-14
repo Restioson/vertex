@@ -53,7 +53,6 @@ async fn bind_events(screen: &Screen) {
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
                 let instance_ip = screen.instance_entry.try_get_text().unwrap_or_default();
-                let instance = Server::parse(instance_ip);
 
                 let username = screen.username_entry.try_get_text().unwrap_or_default();
                 let password_1 = screen.password_entry_1.try_get_text().unwrap_or_default();
@@ -70,7 +69,7 @@ async fn bind_events(screen: &Screen) {
                 };
 
                 if let Some(password) = password {
-                    match register(instance, username, password).await {
+                    match register(instance_ip, username, password).await {
                         Ok(parameters) => {
                             screen::active::start(parameters).await;
                         }
@@ -88,10 +87,11 @@ async fn bind_events(screen: &Screen) {
 }
 
 async fn register(
-    instance: Server,
+    instance_: String,
     username: String,
     password: String,
 ) -> Result<AuthParameters> {
+    let instance = Server::parse(instance_)?;
     let credentials = vertex::UserCredentials::new(username, password);
 
     let auth = auth::Client::new(instance.clone());
@@ -122,7 +122,7 @@ fn describe_error(error: Error) -> &'static str {
         } else {
             "Network error"
         },
-        Error::ProtocolError => "Protocol error: check your server instance?",
+        Error::ProtocolError(_) => "Protocol error: check your server instance?",
         Error::AuthErrorResponse(err) => match err {
             vertex::AuthError::Internal => "Internal server error",
             vertex::AuthError::InvalidUsername => "Invalid username",

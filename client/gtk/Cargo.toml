@@ -23,7 +23,8 @@ gdk = "0.12"
 gdk-pixbuf = "0.8"
 gtk = { version = "0.8", features = ["v3_20"] }
 
-url = "2.1"
+url = { version = "2.1", features = ["serde"] }
+
 uuid = { version = "^0.8", features = ["serde", "v4"] }
 keyring = "^0.7"
 

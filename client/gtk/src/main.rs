@@ -7,6 +7,7 @@ use gio::prelude::*;
 use gtk::prelude::*;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use url::Url;
 
 use vertex::*;
 
@@ -83,20 +84,25 @@ pub struct AuthParameters {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct Server(String);
+#[serde(transparent)]
+pub struct Server(Url);
 
 impl Server {
-    pub fn parse(url: String) -> Server {
+    pub fn parse(url: String) -> Result<Server> {
         let mut url = url;
         if !url.starts_with("https://") {
             url.insert_str(0, "https://");
         }
-        Server(url)
+        if !url.ends_with('/') {
+            url.push('/');
+        }
+        Ok(Server(Url::parse(&url)?))
     }
 }
 
 impl Server {
-    pub fn url(&self) -> &str { &self.0 }
+    #[inline]
+    pub fn url(&self) -> &Url { &self.0 }
 }
 
 async fn start() {
@@ -152,6 +158,8 @@ async fn main() {
     application.run(&[]);
 }
 
+type StdError = Box<dyn std::error::Error>;
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
@@ -160,14 +168,14 @@ pub enum Error {
     Http(hyper::Error),
     Websocket(tungstenite::Error),
     Timeout,
-    ProtocolError,
+    ProtocolError(Option<StdError>),
     ErrorResponse(ErrResponse),
     AuthErrorResponse(AuthError),
     UnexpectedMessage,
 }
 
 impl From<serde_cbor::Error> for Error {
-    fn from(_: serde_cbor::Error) -> Self { Error::ProtocolError }
+    fn from(error: serde_cbor::Error) -> Self { Error::ProtocolError(Some(Box::new(error))) }
 }
 
 impl From<hyper::Error> for Error {
@@ -188,4 +196,8 @@ impl From<ErrResponse> for Error {
 
 impl From<AuthError> for Error {
     fn from(error: AuthError) -> Self { Error::AuthErrorResponse(error) }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(_: url::ParseError) -> Self { Error::InvalidUrl }
 }

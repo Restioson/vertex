@@ -6,6 +6,7 @@ use vertex::*;
 
 use crate::{Error, Result};
 use crate::Server;
+use url::Url;
 
 pub struct AuthenticatedWs {
     pub stream: AuthenticatedWsStream,
@@ -48,13 +49,14 @@ impl Client {
     ) -> Result<AuthenticatedWs> {
         let request = serde_urlencoded::to_string(AuthenticateRequest { device, token: token.clone() })
             .expect("failed to encode authenticate request");
-        let url = format!("{}/client/authenticate?{}", self.server.url(), request);
+
+        let url = self.server.url().join(&format!("client/authenticate?{}", request))?;
 
         let key: [u8; 16] = rand::random();
         let key = base64::encode(&key);
 
         let request = hyper::Request::builder()
-            .uri(url.parse::<hyper::Uri>().unwrap())
+            .uri(url.as_str().parse::<hyper::Uri>().unwrap())
             .header("upgrade", "websocket")
             .header("connection", "upgrade")
             .header("sec-websocket-key", key)
@@ -82,7 +84,7 @@ impl Client {
                 let bytes = hyper::body::to_bytes(body).await?;
 
                 match serde_cbor::from_slice::<AuthResult<()>>(&bytes)? {
-                    Ok(_) => Err(Error::ProtocolError),
+                    Ok(_) => Err(Error::ProtocolError(None)),
                     Err(e) => Err(e.into()),
                 }
             }
@@ -96,7 +98,7 @@ impl Client {
     ) -> Result<RegisterUserResponse> {
         let response: AuthResult<RegisterUserResponse> = self.post(
             RegisterUserRequest { credentials, display_name },
-            format!("{}/client/register", self.server.url()),
+            self.server.url().join("client/register")?,
         ).await?;
 
         Ok(response?)
@@ -109,7 +111,7 @@ impl Client {
     ) -> Result<CreateTokenResponse> {
         let response: AuthResult<CreateTokenResponse> = self.post(
             CreateTokenRequest { credentials, options },
-            format!("{}/client/token/create", self.server.url()),
+            self.server.url().join("client/token/create")?,
         ).await?;
 
         Ok(response?)
@@ -122,7 +124,7 @@ impl Client {
     ) -> Result<()> {
         let response: AuthResult<()> = self.post(
             RefreshTokenRequest { credentials, device },
-            format!("{}/client/token/refresh", self.server.url()),
+            self.server.url().join("client/token/refresh")?,
         ).await?;
         Ok(response?)
     }
@@ -134,16 +136,16 @@ impl Client {
     ) -> Result<()> {
         let response: AuthResult<()> = self.post(
             RevokeTokenRequest { credentials, device },
-            format!("{}/client/token/revoke", self.server.url()),
+            self.server.url().join("client/token/revoke")?,
         ).await?;
         Ok(response?)
     }
 
-    async fn post<Req, Res>(&self, request: Req, url: String) -> Result<Res>
+    async fn post<Req, Res>(&self, request: Req, url: Url) -> Result<Res>
         where Req: serde::Serialize, Res: serde::de::DeserializeOwned
     {
         let request = hyper::Request::builder()
-            .uri(url.parse::<hyper::Uri>()?)
+            .uri(url.as_str().parse::<hyper::Uri>()?)
             .method(hyper::Method::POST)
             .body(hyper::Body::from(serde_cbor::to_vec(&request)?))
             .unwrap();
