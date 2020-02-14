@@ -5,14 +5,16 @@ use lazy_static::lazy_static;
 use vertex::*;
 
 use super::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use futures::TryStreamExt;
 
 lazy_static! {
     static ref USERS: DashMap<UserId, ActiveUser> = DashMap::new();
 }
 
 pub struct ActiveUser {
-    pub communities: HashSet<CommunityId>, // Community ID to community name
+    pub communities: HashMap<CommunityId, UserCommunity>,
+    pub looking_at: Option<(CommunityId, RoomId)>,
     pub sessions: HashMap<DeviceId, Session>,
 }
 
@@ -24,12 +26,22 @@ impl ActiveUser {
         session: Session,
     ) -> DbResult<Self> {
         let communities = db.get_communities_for_user(user).await?;
-        let communities = communities.iter().map(|c| c.id).collect();
+        let db = &db; // To prevent move
+        let communities = communities
+            .and_then(|record| async move {
+                let community = UserCommunity::load(db, user, record.community).await?;
+
+                Ok((record.community, community))
+            })
+            .try_collect()
+            .await?;
+
         let mut sessions = HashMap::new();
         sessions.insert(device, session);
 
         Ok(ActiveUser {
             communities,
+            looking_at: None,
             sessions,
         })
     }
@@ -47,6 +59,27 @@ impl Session {
             Session::Active(addr) => Some(addr.clone()),
         }
     }
+}
+
+pub struct UserCommunity {
+    rooms: HashMap<RoomId, UserRoom>,
+}
+
+impl UserCommunity {
+    pub async fn load(db: &Database, user: UserId, community: CommunityId) -> DbResult<Self> {
+        let rooms = db
+            .get_watching_states(user, community)
+            .await?
+            .map_ok(|(id, watching)| (id, UserRoom { watching }))
+            .try_collect()
+            .await?;
+
+        Ok(UserCommunity { rooms })
+    }
+}
+
+pub struct UserRoom {
+    watching: WatchingState,
 }
 
 pub async fn insert(db: Database, user: UserId, device: DeviceId) -> DbResult<Result<(), ()>> {

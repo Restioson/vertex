@@ -5,17 +5,8 @@ use futures::{Stream, TryStreamExt};
 use l337_postgres::PostgresConnectionManager;
 use log::{error, warn};
 use tokio_postgres::types::ToSql;
-use tokio_postgres::NoTls;
-
-pub use communities::*;
-pub use community_membership::*;
-pub use invite_code::*;
-pub use rooms::*;
-pub use token::*;
-pub use user::*;
-pub use message::*;
+use tokio_postgres::{NoTls, Row};
 use vertex::{AuthError, DeviceId, ErrResponse, UserId};
-
 use crate::client;
 use crate::database::message::CREATE_MESSAGES_TABLE;
 
@@ -23,9 +14,20 @@ mod communities;
 mod community_membership;
 mod invite_code;
 mod rooms;
+mod room_watching_state;
 mod token;
 mod user;
 mod message;
+
+pub use communities::*;
+pub use community_membership::*;
+pub use invite_code::*;
+pub use room_watching_state::*;
+pub use rooms::*;
+pub use token::*;
+pub use user::*;
+pub use message::*;
+use std::convert::TryFrom;
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 
@@ -99,6 +101,7 @@ impl Database {
             CREATE_ROOMS_TABLE,
             CREATE_INVITE_CODES_TABLE,
             CREATE_MESSAGES_TABLE,
+            CREATE_ROOM_WATCHING_STATE_TABLE,
         ];
 
         for cmd in &cmds {
@@ -194,5 +197,27 @@ impl Database {
         let stmt = conn.client.prepare(STMT).await?;
         conn.client.execute(&stmt, &[]).await?;
         Ok(())
+    }
+}
+
+/// How the user was (or wasn't) added to a community or room. This is needed for the complicated (
+/// but resilient) SQL queries used.
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+enum InsertIntoTableSource {
+    Insert,
+    Select,
+    Update,
+}
+
+impl TryFrom<&Row> for InsertIntoTableSource {
+    type Error = tokio_postgres::Error;
+
+    fn try_from(row: &Row) -> Result<InsertIntoTableSource, tokio_postgres::Error> {
+        Ok(match row.try_get::<&str, i8>("source")? as u8 {
+            b'i' => InsertIntoTableSource::Insert,
+            b's' => InsertIntoTableSource::Select,
+            b'u' => InsertIntoTableSource::Update,
+            _ => panic!("Invalid AddToRoomSource type!"),
+        })
     }
 }

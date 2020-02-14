@@ -164,7 +164,7 @@ impl ActiveSession {
         manager::get_active_user(self.user)
             .unwrap()
             .communities
-            .contains(&id)
+            .contains_key(&id)
     }
 
     async fn ready(&mut self, ctx: &mut Context<Self>) -> Result<(), ()> {
@@ -181,7 +181,7 @@ impl ActiveSession {
         let active = manager::get_active_user(self.user).unwrap();
         let mut communities = Vec::with_capacity(active.communities.len());
 
-        for id in active.communities.iter() {
+        for (id, _user_community) in active.communities.iter() {
             let addr = COMMUNITIES.get(id).unwrap().actor.clone();
             let rooms = addr.send(GetRoomStructures).await.unwrap(); // TODO errors thing
             addr.do_send(Connect {
@@ -513,10 +513,14 @@ impl<'a> RequestHandler<'a> {
             match res {
                 Ok(community) => {
                     if let Some(mut user) = manager::get_active_user_mut(self.user) {
-                        user.communities.insert(community.id);
+                        let db = &self.session.global.database;
+                        let user_community = UserCommunity::load(db, self.user, id).await?;
+                        user.communities.insert(community.id, user_community);
+
                         let community = community.clone();
                         let send = ServerMessage::Event(ServerEvent::AddCommunity(community));
                         let sessions = user.sessions.iter();
+
                         sessions
                             .filter(|(id, _)| **id != self.device)
                             .filter_map(|(_, session)| session.as_active())
