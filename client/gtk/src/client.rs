@@ -1,6 +1,10 @@
+use std::env;
 use std::rc::Rc;
+use std::sync::Arc;
 
+use ears::{AudioController, Sound};
 use futures::{Stream, StreamExt};
+use futures::lock::Mutex;
 
 pub use community::*;
 pub use message::*;
@@ -9,10 +13,7 @@ pub use user::*;
 use vertex::*;
 
 use crate::{net, SharedMut};
-use std::env;
-use ears::{Sound, AudioController};
-use std::sync::Arc;
-use futures::lock::Mutex;
+use crate::{Error, Result};
 
 mod community;
 mod room;
@@ -34,16 +35,16 @@ pub trait ClientUi: Sized + Clone + 'static {
 }
 
 async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
-    where S: Stream<Item = net::Result<ServerEvent>> + Unpin
+    where S: Stream<Item = tungstenite::Result<ServerEvent>> + Unpin
 {
     if let Some(result) = event_receiver.next().await {
         let event = result?;
         match event {
             ServerEvent::ClientReady(ready) => Ok(ready),
-            _ => Err(Error::UnexpectedMessage),
+            _ => Err(Error::ProtocolError),
         }
     } else {
-        Err(Error::Net(net::Error::Closed))
+        Err(Error::Websocket(tungstenite::Error::ConnectionClosed))
     }
 }
 
@@ -146,8 +147,8 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
-    pub async fn handle_err(&self, err: net::Error) {
-        println!("server error: {:?}", err);
+    pub async fn handle_network_err(&self, err: tungstenite::Error) {
+        println!("network error: {:?}", err);
     }
 
     pub async fn create_community(&self, name: &str) -> Result<CommunityEntry<Ui>> {
@@ -225,33 +226,32 @@ impl<Ui: ClientUi> Client<Ui> {
             let msg = format!("{:?}: {}", message.author, message.content);
 
             #[cfg(windows)]
-            notifica::notify("Vertex", &msg);
+                notifica::notify("Vertex", &msg);
 
-            # [cfg(unix)]
-            {
-                let mut icon_path = env::current_dir().unwrap();
-                icon_path.push("res");
-                icon_path.push("icon.png");
+            #[cfg(unix)]
+                {
+                    let mut icon_path = env::current_dir().unwrap();
+                    icon_path.push("res");
+                    icon_path.push("icon.png");
 
-                tokio::task::spawn_blocking(move || {
-                    let res = notify_rust::Notification::new()
-                        .summary("Vertex")
-                        .appname("Vertex")
-                        .icon(&icon_path.to_str().unwrap())
-                        .body(&msg)
-                        .show();
+                    tokio::task::spawn_blocking(move || {
+                        let res = notify_rust::Notification::new()
+                            .summary("Vertex")
+                            .appname("Vertex")
+                            .icon(&icon_path.to_str().unwrap())
+                            .body(&msg)
+                            .show();
 
-                    if let Ok(handle) = res {
-                        handle.on_close(|| {});
-                    }
-                });
-            };
+                        if let Ok(handle) = res {
+                            handle.on_close(|| {});
+                        }
+                    });
+                };
 
             // Play the sound
             if let Some(sound) = &self.notif_sound {
                 sound.lock().await.play();
             }
-
         }
     }
 }
@@ -262,7 +262,7 @@ struct ClientLoop<Ui: ClientUi, S> {
 }
 
 impl<Ui: ClientUi, S> ClientLoop<Ui, S>
-    where S: Stream<Item = net::Result<ServerEvent>> + Unpin
+    where S: Stream<Item = tungstenite::Result<ServerEvent>> + Unpin
 {
     // TODO: we need to be able to signal this to exit!
     async fn run(self) {
@@ -274,7 +274,7 @@ impl<Ui: ClientUi, S> ClientLoop<Ui, S>
             while let Some(result) = event_receiver.next().await {
                 match result {
                     Ok(event) => client.handle_event(event).await,
-                    Err(err) => client.handle_err(err).await,
+                    Err(err) => client.handle_network_err(err).await,
                 }
             }
         });
@@ -290,26 +290,5 @@ impl<Ui: ClientUi, S> ClientLoop<Ui, S>
         });
 
         futures::future::select(receiver, keep_alive).await;
-    }
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
-#[derive(Debug)]
-pub enum Error {
-    Net(net::Error),
-    Response(ErrResponse),
-    UnexpectedMessage,
-}
-
-impl From<net::Error> for Error {
-    fn from(net: net::Error) -> Self {
-        Error::Net(net)
-    }
-}
-
-impl From<ErrResponse> for Error {
-    fn from(response: ErrResponse) -> Self {
-        Error::Response(response)
     }
 }

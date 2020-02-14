@@ -1,8 +1,6 @@
-use std::fmt;
-
 use gtk::prelude::*;
 
-use crate::{auth, Server, token_store, TryGetText, window};
+use crate::{auth, AuthParameters, Error, Result, Server, token_store, TryGetText, window};
 use crate::connect::AsConnector;
 use crate::screen;
 
@@ -53,16 +51,12 @@ async fn bind_events(screen: &Screen) {
                 screen.error_label.set_text("");
 
                 match login(instance, username, password).await {
-                    Ok(ws) => {
-                        let loading = screen::loading::build();
-                        window::set_screen(&loading);
-
-                        let client = screen::active::start(ws).await;
-                        window::set_screen(&client.ui.main);
+                    Ok(parameters) => {
+                        screen::active::start(parameters).await;
                     }
                     Err(err) => {
                         println!("Encountered error during login: {:?}", err);
-                        screen.error_label.set_text(&format!("{}", err));
+                        screen.error_label.set_text(describe_error(err));
                     }
                 }
 
@@ -85,74 +79,45 @@ async fn login(
     instance: Server,
     username: String,
     password: String,
-) -> Result<auth::AuthenticatedWs, LoginError> {
-    let auth = auth::Client::new(instance.clone());
-
-    let (device, token) = match token_store::get_stored_token() {
-        Some(token) if token.instance == instance => (token.device, token.token),
+) -> Result<AuthParameters> {
+    match token_store::get_stored_token() {
+        Some(parameters) if parameters.instance == instance => Ok(parameters),
         _ => {
+            let auth = auth::Client::new(instance.clone());
             let token = auth.create_token(
                 vertex::UserCredentials::new(username, password),
                 vertex::TokenCreationOptions::default(),
             ).await?;
 
-            token_store::store_token(instance, token.device, token.token.clone());
-            (token.device, token.token)
-        }
-    };
+            let parameters = AuthParameters {
+                instance,
+                device: token.device,
+                token: token.token,
+            };
 
-    Ok(auth.authenticate(device, token).await?)
-}
+            token_store::store_token(&parameters);
 
-type StdError = Box<dyn std::error::Error>;
-
-#[derive(Debug)]
-enum LoginError {
-    InvalidInstanceIp,
-    InvalidUsernameOrPassword,
-    InternalServerError,
-    ConnectError(hyper::Error),
-    NetworkError(hyper::Error),
-    ProtocolError(StdError),
-    UnknownError,
-}
-
-impl fmt::Display for LoginError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            LoginError::InvalidInstanceIp => write!(f, "Invalid instance ip"),
-            LoginError::InvalidUsernameOrPassword => write!(f, "Invalid username or password"),
-            LoginError::InternalServerError => write!(f, "Internal server error"),
-            LoginError::ConnectError(_) => write!(f, "Couldn't connect to instance"),
-            LoginError::NetworkError(_) => write!(f, "Network error"),
-            LoginError::ProtocolError(_) => write!(f, "Protocol error: check your server instance?"),
-            LoginError::UnknownError => write!(f, "Unknown error"),
+            Ok(parameters)
         }
     }
 }
 
-impl From<auth::Error> for LoginError {
-    fn from(err: auth::Error) -> Self {
-        match err {
-            auth::Error::Net(err) => if err.is_connect() {
-                LoginError::ConnectError(err)
-            } else {
-                LoginError::NetworkError(err)
-            },
+fn describe_error(error: Error) -> &'static str {
+    match error {
+        Error::InvalidUrl => "Invalid instance ip",
+        Error::Http(http) => if http.is_connect() {
+            "Couldn't connect to instance"
+        } else {
+            "Network error"
+        },
+        Error::ProtocolError => "Protocol error: check your server instance?",
+        Error::AuthErrorResponse(err) => match err {
+            vertex::AuthError::Internal => "Internal server error",
+            vertex::AuthError::IncorrectCredentials | vertex::AuthError::InvalidUser
+            => "Invalid username or password",
+            _ => "Unknown auth error",
+        },
 
-            auth::Error::InvalidUri(_) => LoginError::InvalidInstanceIp,
-            auth::Error::SerdeUrlEncoded(err) => LoginError::ProtocolError(Box::new(err)),
-            auth::Error::SerdeCbor(err) => LoginError::ProtocolError(Box::new(err)),
-
-            auth::Error::Server(err) => match err {
-                vertex::AuthError::Internal => LoginError::InternalServerError,
-                vertex::AuthError::IncorrectCredentials | vertex::AuthError::InvalidUser
-                => LoginError::InvalidUsernameOrPassword,
-
-                _ => LoginError::UnknownError,
-            },
-
-            _ => LoginError::UnknownError,
-        }
+        _ => "Unknown error",
     }
 }

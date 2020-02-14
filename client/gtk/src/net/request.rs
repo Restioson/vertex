@@ -10,8 +10,9 @@ use futures::stream::{Stream, StreamExt};
 use vertex::*;
 
 use crate::net;
+use crate::{Result, Error};
 
-use super::Result;
+const REQUEST_TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_secs(5);
 
 struct RequestIdGenerator {
     next_request_id: AtomicU32,
@@ -40,7 +41,7 @@ impl RequestTracker {
         }
     }
 
-    fn enqueue(&self, id: RequestId) -> Option<oneshot::Receiver<ResponseResult>> {
+    fn enqueue(&self, id: RequestId) -> Option<oneshot::Receiver<Result<OkResponse>>> {
         let mut pending_requests = self.pending_requests.borrow_mut();
         if pending_requests.contains_key(&id) {
             return None;
@@ -59,10 +60,11 @@ impl RequestTracker {
     }
 }
 
-struct EnqueuedRequest(oneshot::Sender<ResponseResult>);
+struct EnqueuedRequest(oneshot::Sender<Result<OkResponse>>);
 
 impl EnqueuedRequest {
     fn handle(self, result: ResponseResult) {
+        let result = result.map_err(|err| Error::ErrorResponse(err));
         let _ = self.0.send(result); // We don't care if the channel has closed
     }
 }
@@ -94,7 +96,7 @@ impl RequestManager {
         }
     }
 
-    pub fn receive_from(&self, net: net::Receiver) -> impl Stream<Item = Result<ServerEvent>> {
+    pub fn receive_from(&self, net: net::Receiver) -> impl Stream<Item = tungstenite::Result<ServerEvent>> {
         let tracker = Rc::downgrade(&self.tracker);
 
         net.stream().filter_map(move |result| {
@@ -114,11 +116,15 @@ impl RequestManager {
     }
 }
 
-pub struct Request(oneshot::Receiver<ResponseResult>);
+pub struct Request(oneshot::Receiver<Result<OkResponse>>);
 
 impl Request {
-    pub async fn response(self) -> ResponseResult {
-        self.0.map(|result| result.expect("channel closed")).await
+    pub async fn response(self) -> Result<OkResponse> {
+        let future = self.0.map(|result| result.expect("channel closed"));
+        let result = tokio::time::timeout(REQUEST_TIMEOUT, future).await
+            .map_err(|_| Error::Timeout)?;
+
+        Ok(result?)
     }
 }
 

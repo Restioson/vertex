@@ -4,6 +4,7 @@ use tokio_tungstenite::WebSocketStream;
 
 use vertex::*;
 
+use crate::{Error, Result};
 use crate::Server;
 
 pub struct AuthenticatedWs {
@@ -45,7 +46,8 @@ impl Client {
         device: DeviceId,
         token: AuthToken,
     ) -> Result<AuthenticatedWs> {
-        let request = serde_urlencoded::to_string(AuthenticateRequest { device, token: token.clone() })?;
+        let request = serde_urlencoded::to_string(AuthenticateRequest { device, token: token.clone() })
+            .expect("failed to encode authenticate request");
         let url = format!("{}/client/authenticate?{}", self.server.url(), request);
 
         let key: [u8; 16] = rand::random();
@@ -80,7 +82,7 @@ impl Client {
                 let bytes = hyper::body::to_bytes(body).await?;
 
                 match serde_cbor::from_slice::<AuthResult<()>>(&bytes)? {
-                    Ok(_) => Err(Error::DidNotUpgrade),
+                    Ok(_) => Err(Error::ProtocolError),
                     Err(e) => Err(e.into()),
                 }
             }
@@ -151,36 +153,4 @@ impl Client {
 
         Ok(serde_cbor::from_slice(&bytes)?)
     }
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
-#[derive(Debug)]
-pub enum Error {
-    Server(AuthError),
-    Net(hyper::Error),
-    InvalidUri(hyper::http::uri::InvalidUri),
-    SerdeUrlEncoded(serde_urlencoded::ser::Error),
-    SerdeCbor(serde_cbor::Error),
-    DidNotUpgrade,
-}
-
-impl From<AuthError> for Error {
-    fn from(error: AuthError) -> Self { Error::Server(error) }
-}
-
-impl From<serde_cbor::Error> for Error {
-    fn from(error: serde_cbor::Error) -> Self { Error::SerdeCbor(error) }
-}
-
-impl From<serde_urlencoded::ser::Error> for Error {
-    fn from(error: serde_urlencoded::ser::Error) -> Self { Error::SerdeUrlEncoded(error) }
-}
-
-impl From<hyper::Error> for Error {
-    fn from(error: hyper::Error) -> Self { Error::Net(error) }
-}
-
-impl From<hyper::http::uri::InvalidUri> for Error {
-    fn from(error: hyper::http::uri::InvalidUri) -> Self { Error::InvalidUri(error) }
 }

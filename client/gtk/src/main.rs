@@ -8,6 +8,8 @@ use gtk::prelude::*;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
+use vertex::*;
+
 pub use crate::client::Client;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -64,13 +66,20 @@ impl<T> WeakSharedMut<T> {
 }
 
 pub trait TryGetText {
-    fn try_get_text(&self) -> Result<String, ()>;
+    fn try_get_text(&self) -> std::result::Result<String, ()>;
 }
 
 impl<E: gtk::EntryExt> TryGetText for E {
-    fn try_get_text(&self) -> Result<String, ()> {
+    fn try_get_text(&self) -> std::result::Result<String, ()> {
         self.get_text().map(|s| s.as_str().to_owned()).ok_or(())
     }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AuthParameters {
+    pub instance: Server,
+    pub device: DeviceId,
+    pub token: AuthToken,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -91,32 +100,14 @@ impl Server {
 }
 
 async fn start() {
-    match try_login().await {
-        Some(ws) => {
-            let client = screen::active::start(ws).await;
-            window::set_screen(&client.ui.main);
+    match token_store::get_stored_token() {
+        Some(parameters) => {
+            screen::active::start(parameters).await;
         }
-        None => {
+        _ => {
             let screen = screen::login::build().await;
             window::set_screen(&screen.main);
         }
-    }
-}
-
-async fn try_login() -> Option<auth::AuthenticatedWs> {
-    match token_store::get_stored_token() {
-        Some(token_store::StoredToken { instance, device, token }) => {
-            let auth = auth::Client::new(instance);
-            match auth.authenticate(device, token).await {
-                Ok(ws) => Some(ws),
-                Err(err) => {
-                    println!("failed to log in with stored token: {:?}", err);
-                    token_store::forget_token();
-                    None
-                }
-            }
-        }
-        _ => None,
     }
 }
 
@@ -159,4 +150,42 @@ async fn main() {
     });
 
     application.run(&[]);
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub enum Error {
+    InvalidUrl,
+    Http(hyper::Error),
+    Websocket(tungstenite::Error),
+    Timeout,
+    ProtocolError,
+    ErrorResponse(ErrResponse),
+    AuthErrorResponse(AuthError),
+    UnexpectedMessage,
+}
+
+impl From<serde_cbor::Error> for Error {
+    fn from(_: serde_cbor::Error) -> Self { Error::ProtocolError }
+}
+
+impl From<hyper::Error> for Error {
+    fn from(error: hyper::Error) -> Self { Error::Http(error) }
+}
+
+impl From<tungstenite::Error> for Error {
+    fn from(error: tungstenite::Error) -> Self { Error::Websocket(error) }
+}
+
+impl From<hyper::http::uri::InvalidUri> for Error {
+    fn from(_: hyper::http::uri::InvalidUri) -> Self { Error::InvalidUrl }
+}
+
+impl From<ErrResponse> for Error {
+    fn from(error: ErrResponse) -> Self { Error::ErrorResponse(error) }
+}
+
+impl From<AuthError> for Error {
+    fn from(error: AuthError) -> Self { Error::AuthErrorResponse(error) }
 }

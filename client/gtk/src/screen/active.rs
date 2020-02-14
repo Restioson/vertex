@@ -2,10 +2,12 @@ use gtk::prelude::*;
 
 use vertex::*;
 
-use crate::{Client, client, screen, TryGetText, window};
+use crate::{AuthParameters, Client, Error, Result, TryGetText};
 use crate::auth;
-use crate::client::MessageStatus;
+use crate::client::{self, MessageStatus};
 use crate::connect::AsConnector;
+use crate::screen;
+use crate::window;
 
 #[derive(Clone)]
 pub struct Ui {
@@ -331,6 +333,7 @@ impl MessageEntryWidget {
     }
 
     fn build_invite() -> MessageEntryWidget {
+        // TODO: cache glade source in memory so it doesn't have to be reloaded every time
         let builder = gtk::Builder::new_from_file("res/glade/active/message_invite.glade");
         let invite: gtk::Box = builder.get_object("invite").unwrap();
         let community_name: gtk::Label = builder.get_object("community_name").unwrap();
@@ -367,14 +370,44 @@ impl client::MessageEntryWidget<Ui> for MessageEntryWidget {
     }
 }
 
-pub async fn start(ws: auth::AuthenticatedWs) -> Client<Ui> {
-    // TODO: extract login process such that this error can be properly handled
-    let client = Client::start(ws, Ui::build()).await
-        .expect("client failed to start");
+pub async fn start(parameters: AuthParameters) {
+    let loading = screen::loading::build();
+    window::set_screen(&loading);
 
-    client.ui.bind_events(&client);
+    match try_start(parameters.clone()).await {
+        Ok(client) => {
+            client.ui.bind_events(&client);
+            window::set_screen(&client.ui.main);
+        }
+        Err(error) => {
+            let error = describe_error(error);
+            let screen = screen::loading::build_error(error, move || start(parameters.clone()));
+            window::set_screen(&screen);
+        }
+    }
+}
 
-    client
+async fn try_start(parameters: AuthParameters) -> Result<Client<Ui>> {
+    let auth = auth::Client::new(parameters.instance);
+    let ws = auth.authenticate(parameters.device, parameters.token).await?;
+
+    Ok(Client::start(ws, Ui::build()).await?)
+}
+
+fn describe_error(error: Error) -> String {
+    match error {
+        Error::InvalidUrl => "Invalid instance ip".to_string(),
+        Error::Http(http) => format!("{}", http),
+        Error::Websocket(ws) => format!("{}", ws),
+        Error::ProtocolError => "Protocol error: check your server instance?".to_string(),
+        Error::AuthErrorResponse(err) => match err {
+            vertex::AuthError::Internal => "Internal server error".to_string(),
+            vertex::AuthError::InvalidToken => "Invalid token".to_string(),
+            _ => "Unknown auth error".to_string(),
+        },
+
+        _ => "Unknown error".to_string(),
+    }
 }
 
 fn show_add_community(client: Client<Ui>) {

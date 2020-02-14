@@ -489,3 +489,23 @@ spinner:checked {
   min-width: 25px;
   min-height: 25px;
 }
+
+/*
+  loading error screen
+*/
+
+#loading_error #title {
+  font-size: 16px;
+}
+
+#loading_error #error_label {
+  font-size: 12px;
+  color: @error_color;
+  padding-bottom: 20px;
+}
+
+#loading_error button {
+  min-height: 20px;
+  padding: 8px;
+  margin: 4px;
+}
