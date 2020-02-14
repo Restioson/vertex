@@ -73,7 +73,6 @@ pub struct ForwardedMessage {
     pub community: CommunityId,
     pub room: RoomId,
     pub author: UserId,
-    pub device: DeviceId,
     pub content: String,
 }
 
@@ -82,14 +81,12 @@ impl ForwardedMessage {
         id: MessageId,
         msg: ClientSentMessage,
         author: UserId,
-        device: DeviceId,
     ) -> Self {
         ForwardedMessage {
             id,
             community: msg.to_community,
             room: msg.to_room,
             author,
-            device,
             content: msg.content,
         }
     }
