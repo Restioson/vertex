@@ -1,10 +1,15 @@
 use uuid::Uuid;
 
+pub use embed::*;
+pub use rich::*;
 use vertex::*;
 
-use crate::SharedMut;
+use crate::{SharedMut, Client};
 
 use super::ClientUi;
+
+mod rich;
+mod embed;
 
 #[derive(Debug, Copy, Clone)]
 pub enum MessageStatus {
@@ -31,8 +36,10 @@ pub trait MessageListWidget<Ui: ClientUi> {
     fn push_message(&mut self, author: UserId, content: String) -> Ui::MessageEntryWidget;
 }
 
-pub trait MessageEntryWidget<Ui: ClientUi> {
+pub trait MessageEntryWidget<Ui: ClientUi>: Clone {
     fn set_status(&mut self, status: MessageStatus);
+
+    fn push_embed(&mut self, client: &Client<Ui>, embed: MessageEmbed);
 }
 
 pub struct MessageListState<Ui: ClientUi> {
@@ -42,16 +49,34 @@ pub struct MessageListState<Ui: ClientUi> {
 
 #[derive(Clone)]
 pub struct MessageList<Ui: ClientUi> {
+    client: Client<Ui>,
     state: SharedMut<MessageListState<Ui>>,
 }
 
 impl<Ui: ClientUi> MessageList<Ui> {
-    pub fn new(widget: Ui::MessageListWidget) -> Self {
+    pub fn new(client: Client<Ui>, widget: Ui::MessageListWidget) -> Self {
         let state = SharedMut::new(MessageListState {
             widget,
             stream: None,
         });
-        MessageList { state }
+        MessageList { client, state }
+    }
+
+    fn push_to(&self, list: &mut Ui::MessageListWidget, author: UserId, content: String) -> Ui::MessageEntryWidget {
+        let rich = RichMessage::parse(content);
+        let widget = list.push_message(author, rich.text.clone());
+
+        glib::MainContext::ref_thread_default().spawn_local({
+            let client = self.client.clone();
+            let mut widget = widget.clone();
+            async move {
+                for embed in rich.load_embeds().await {
+                    widget.push_embed(&client, embed);
+                }
+            }
+        });
+
+        widget
     }
 
     async fn populate_list(&self, state: &mut MessageListState<Ui>, stream: &MessageStream<Ui>) {
@@ -59,7 +84,7 @@ impl<Ui: ClientUi> MessageList<Ui> {
         stream.read_last(25, &mut messages).await;
 
         for (author, content) in messages {
-            state.widget.push_message(author, content);
+            self.push_to(&mut state.widget, author, content);
         }
     }
 
@@ -95,7 +120,8 @@ impl<Ui: ClientUi> MessageList<Ui> {
 
     pub async fn push(&self, author: UserId, content: String) -> MessageHandle<Ui> {
         let mut state = self.state.write().await;
-        let widget = state.widget.push_message(author, content);
+
+        let widget = self.push_to(&mut state.widget, author, content);
         MessageHandle { widget }
     }
 }

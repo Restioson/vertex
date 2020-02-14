@@ -43,12 +43,7 @@ entry:focus {
   background: shade(@widget_bg_color, 1.2);
 }
 
-entry selection {
-  color: #ffffff;
-  background-color: @accent_color;
-}
-
-textview selection {
+entry selection, textview selection, label selection {
   color: #ffffff;
   background-color: @accent_color;
 }
@@ -192,6 +187,7 @@ spinner:checked {
 #active #message .embed {
   background: @sidebar_bg_color;
   padding: 6px;
+  margin-top: 4px;
   border-radius: 10px;
 }
 
@@ -243,6 +239,18 @@ spinner:checked {
 
 #active #message #invite #join_button:hover {
   background: @widget_bg_color;
+}
+
+#active #message #opengraph #title {
+  color: #d0d0d0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#active #message #opengraph #description {
+  color: #a0a0a0;
+  font-size: 12px;
+  font-style: italic;
 }
 
 .no_hover *:hover {
@@ -345,7 +353,7 @@ spinner:checked {
   border-radius: 20px;
 }
 
-#active #message label {
+#active #message #message_text {
   color: #e0e0e0;
   padding-left: 2px;
 }

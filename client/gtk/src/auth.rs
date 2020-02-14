@@ -25,16 +25,7 @@ pub struct Client {
 
 impl Client {
     pub fn new(server: Server) -> Client {
-        let tls = native_tls::TlsConnector::builder()
-            .danger_accept_invalid_certs(true)
-            .build()
-            .expect("failed to build tls connector");
-        let tls = tokio_tls::TlsConnector::from(tls);
-
-        let mut http = hyper::client::HttpConnector::new();
-        http.enforce_http(false);
-
-        let https = (http, tls).into();
+        let https = crate::https_ignore_invalid_certs();
 
         let client = hyper::client::Client::builder()
             .build(https);

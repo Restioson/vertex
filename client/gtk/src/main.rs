@@ -23,6 +23,21 @@ pub mod screen;
 pub mod token_store;
 pub mod window;
 
+// TODO: remove
+pub fn https_ignore_invalid_certs() -> hyper_tls::HttpsConnector<hyper::client::HttpConnector> {
+    let tls = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("failed to build tls connector");
+
+    let tls = tokio_tls::TlsConnector::from(tls);
+
+    let mut http = hyper::client::HttpConnector::new();
+    http.enforce_http(false);
+
+    (http, tls).into()
+}
+
 pub struct SharedMut<T>(Rc<RwLock<T>>);
 
 impl<T> Clone for SharedMut<T> {

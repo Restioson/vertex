@@ -50,6 +50,7 @@ async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
 
 pub struct ClientState<Ui: ClientUi> {
     pub communities: Vec<CommunityEntry<Ui>>,
+    pub message_list: Option<MessageList<Ui>>,
 
     selected_room: Option<RoomEntry<Ui>>,
 }
@@ -60,7 +61,6 @@ pub struct Client<Ui: ClientUi> {
 
     pub ui: Ui,
     pub user: User,
-    pub message_list: MessageList<Ui>,
     pub notif_sound: Option<Arc<Mutex<Sound>>>,
 
     state: SharedMut<ClientState<Ui>>,
@@ -88,10 +88,9 @@ impl<Ui: ClientUi> Client<Ui> {
             ws.token,
         );
 
-        let message_list = MessageList::new(ui.build_message_list());
-
         let state = SharedMut::new(ClientState {
             communities: Vec::new(),
+            message_list: None,
             selected_room: None,
         });
 
@@ -100,7 +99,7 @@ impl<Ui: ClientUi> Client<Ui> {
             Err(_) => None
         };
 
-        let client = Client { request, ui, user, message_list, notif_sound, state };
+        let client = Client { request, ui, user, notif_sound, state };
 
         for community in ready.communities {
             client.add_community(community).await;
@@ -199,11 +198,12 @@ impl<Ui: ClientUi> Client<Ui> {
     }
 
     pub async fn select_room(&self, room: Option<RoomEntry<Ui>>) {
+        let message_list = self.message_list().await;
         let mut state = self.state.write().await;
 
         match &room {
-            Some(room) => self.message_list.set_stream(room.message_stream.clone()).await,
-            None => self.message_list.detach_stream().await,
+            Some(room) => message_list.set_stream(room.message_stream.clone()).await,
+            None => message_list.detach_stream().await,
         }
 
         state.selected_room = room;
@@ -251,6 +251,21 @@ impl<Ui: ClientUi> Client<Ui> {
             // Play the sound
             if let Some(sound) = &self.notif_sound {
                 sound.lock().await.play();
+            }
+        }
+    }
+
+    // TODO: I hate this
+    pub async fn message_list(&self) -> MessageList<Ui> {
+        let state = self.state.read().await;
+        match &state.message_list {
+            Some(list) => list.clone(),
+            None => {
+                drop(state);
+                let mut state = self.state.write().await;
+                let list = MessageList::new(self.clone(), self.ui.build_message_list());
+                state.message_list = Some(list.clone());
+                list
             }
         }
     }
