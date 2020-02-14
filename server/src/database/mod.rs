@@ -13,9 +13,11 @@ pub use invite_code::*;
 pub use rooms::*;
 pub use token::*;
 pub use user::*;
+pub use message::*;
 use vertex::{AuthError, DeviceId, ErrResponse, UserId};
 
 use crate::client;
+use crate::database::message::CREATE_MESSAGES_TABLE;
 
 mod communities;
 mod community_membership;
@@ -23,6 +25,7 @@ mod invite_code;
 mod rooms;
 mod token;
 mod user;
+mod message;
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 
@@ -95,6 +98,7 @@ impl Database {
             CREATE_COMMUNITY_MEMBERSHIP_TABLE,
             CREATE_ROOMS_TABLE,
             CREATE_INVITE_CODES_TABLE,
+            CREATE_MESSAGES_TABLE,
         ];
 
         for cmd in &cmds {

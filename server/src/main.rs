@@ -2,11 +2,10 @@
 
 use std::convert::Infallible;
 use std::fs::OpenOptions;
-use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::{env, fmt::Debug, fs};
+use std::{fmt::Debug, fs};
 
 use directories::ProjectDirs;
 use futures::StreamExt;

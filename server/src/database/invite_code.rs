@@ -13,7 +13,7 @@ use crate::database::{Database, DbResult};
 pub(super) const CREATE_INVITE_CODES_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS invite_codes (
         id BIGINT PRIMARY KEY,
-        community_id UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+        community UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
         expiration_date TIMESTAMP WITH TIME ZONE
     )";
 
@@ -54,19 +54,19 @@ impl Database {
     ) -> DbResult<Result<InviteCode, TooManyInviteCodes>> {
         // From https://stackoverflow.com/a/26448803/4871468
         const INSERT: &str = "
-            INSERT INTO invite_codes (id, community_id, expiration_date)
+            INSERT INTO invite_codes (id, community, expiration_date)
             SELECT
               $1 AS id,
-              $2 AS community_id,
+              $2 AS community,
               $3 AS expiration_date
             FROM
               invite_codes
-            WHERE community_id = $2
+            WHERE community = $2
             HAVING
               COUNT(*) < $4
             ON CONFLICT DO NOTHING;
         ";
-        const COUNT: &str = "SELECT COUNT(*) FROM invite_codes WHERE community_id = $1;";
+        const COUNT: &str = "SELECT COUNT(*) FROM invite_codes WHERE community = $1;";
 
         let mut conn = self.pool.connection().await?;
 
@@ -119,7 +119,7 @@ impl Database {
         code: InviteCode,
     ) -> DbResult<Result<Option<CommunityId>, MalformedInviteCode>> {
         const QUERY: &str = "
-            SELECT community_id FROM invite_codes WHERE id=$1
+            SELECT community FROM invite_codes WHERE id=$1
         ";
 
         let conn = self.pool.connection().await?;
@@ -133,7 +133,7 @@ impl Database {
 
         let row_opt = conn.client.query_opt(&query, args).await?;
         if let Some(row) = row_opt {
-            Ok(Ok(Some(CommunityId(row.try_get("community_id")?))))
+            Ok(Ok(Some(CommunityId(row.try_get("community")?))))
         } else {
             Ok(Ok(None))
         }

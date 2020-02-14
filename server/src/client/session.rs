@@ -538,16 +538,16 @@ impl<'a> RequestHandler<'a> {
         }
     }
 
-    async fn create_room(self, name: String, community_id: CommunityId) -> ResponseResult {
+    async fn create_room(self, name: String, community: CommunityId) -> ResponseResult {
         if !self.perms.has_perms(TokenPermissionFlags::CREATE_ROOMS) {
             return Err(ErrResponse::AccessDenied);
         }
 
-        if !self.session.in_community(&community_id) {
+        if !self.session.in_community(&community) {
             return Err(ErrResponse::InvalidCommunity);
         }
 
-        if let Some(community) = COMMUNITIES.get(&community_id) {
+        if let Some(community) = COMMUNITIES.get(&community) {
             let create = CreateRoom {
                 creator: self.device,
                 name: name.clone(),

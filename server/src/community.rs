@@ -10,6 +10,7 @@ use uuid::Uuid;
 use vertex::*;
 use xtra::prelude::*;
 use xtra::Disconnected;
+use chrono::Utc;
 
 lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Community> = DashMap::new();
@@ -163,19 +164,37 @@ impl Handler<Connect> for CommunityActor {
     }
 }
 
-impl SyncHandler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
+impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
+    type Responder<'a> = impl Future<Output = Result<MessageId, ErrResponse>> + 'a;
     fn handle(
         &mut self,
         m: IdentifiedMessage<ClientSentMessage>,
         _: &mut Context<Self>,
-    ) -> Result<MessageId, ErrResponse> {
-        let from_device = m.device;
-        let fwd = ForwardedMessage::from_message_author_device(m.message, m.user, m.device);
-        let send = SendMessage(ServerMessage::Event(ServerEvent::AddMessage(fwd)));
+    ) -> Self::Responder<'_> {
+        async move {
+            let id = MessageId(Uuid::new_v4());
 
-        self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(from_device));
+            let msg = m.message.clone();
+            let db = self.database.clone();
+            let fut = async move {
+                db.create_message(
+                    id,
+                    msg.to_community,
+                    Utc::now(),
+                    msg.content
+                ).await
+            };
+            let db_fut_handle = tokio::spawn(fut);
 
-        Ok(MessageId(Uuid::new_v4()))
+            let from_device = m.device;
+            let fwd = ForwardedMessage::new(id, m.message, m.user, m.device);
+            let send = SendMessage(ServerMessage::Event(ServerEvent::AddMessage(fwd)));
+
+            self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(from_device));
+
+            db_fut_handle.await.expect("Error joining future")?;
+            Ok(MessageId(Uuid::new_v4()))
+        }
     }
 }
 

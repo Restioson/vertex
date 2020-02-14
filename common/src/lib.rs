@@ -69,6 +69,7 @@ pub struct ClientSentMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardedMessage {
+    pub id: MessageId,
     pub community: CommunityId,
     pub room: RoomId,
     pub author: UserId,
@@ -77,12 +78,14 @@ pub struct ForwardedMessage {
 }
 
 impl ForwardedMessage {
-    pub fn from_message_author_device(
+    pub fn new(
+        id: MessageId,
         msg: ClientSentMessage,
         author: UserId,
         device: DeviceId,
     ) -> Self {
         ForwardedMessage {
+            id,
             community: msg.to_community,
             room: msg.to_room,
             author,
