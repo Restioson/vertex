@@ -73,6 +73,7 @@ impl client::ClientUi for Ui {
     fn add_community(&self, name: String) -> CommunityEntryWidget {
         let entry = CommunityEntryWidget::build(name);
         self.communities.add(&entry.expander.widget);
+        entry.expander.widget.show_all();
 
         entry
     }

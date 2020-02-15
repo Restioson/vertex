@@ -69,12 +69,12 @@ impl Session {
         }
     }
 
-    pub fn set_looking_at(&mut self, at: (CommunityId, RoomId)) -> Option<()> {
+    pub fn set_looking_at(&mut self, at: Option<(CommunityId, RoomId)>) -> Option<()> {
         match self {
             Session::Upgrading => None,
             Session::Active { actor, .. } => {
                 *self = Session::Active {
-                    looking_at: Some(at),
+                    looking_at: at,
                     actor: actor.clone(),
                 };
                 Some(())
@@ -83,6 +83,7 @@ impl Session {
     }
 }
 
+#[derive(Debug)]
 pub struct UserCommunity {
     pub rooms: HashMap<RoomId, UserRoom>,
 }
@@ -100,6 +101,7 @@ impl UserCommunity {
     }
 }
 
+#[derive(Debug)]
 pub struct UserRoom {
     pub watching: WatchingState,
 }

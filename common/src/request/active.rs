@@ -112,10 +112,7 @@ pub enum ClientRequest {
         new_password: String,
     },
     GetUserProfile(UserId),
-    SetLookingAt {
-        room: RoomId,
-        in_community: CommunityId,
-    },
+    SetLookingAt(Option<(CommunityId, RoomId)>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

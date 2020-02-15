@@ -219,11 +219,24 @@ impl<Ui: ClientUi> Client<Ui> {
             .cloned()
     }
 
-    pub async fn select_room(&self, room: Option<RoomEntry<Ui>>) {
+    pub async fn select_room(&self, room: Option<RoomEntry<Ui>>) -> Result<()> {
+        self.set_looking_at(room.as_ref()).await?;
+
         let mut state = self.state.write().await;
         self.chat.set_room(room.as_ref()).await;
 
         state.selected_room = room;
+
+        Ok(())
+    }
+
+    async fn set_looking_at(&self, room: Option<&RoomEntry<Ui>>) -> Result<()> {
+        let request = self.request.send(ClientRequest::SetLookingAt(
+            room.map(|room| (room.community.id, room.id))
+        )).await?;
+
+        request.response().await?;
+        Ok(())
     }
 
     pub async fn selected_room(&self) -> Option<RoomEntry<Ui>> {

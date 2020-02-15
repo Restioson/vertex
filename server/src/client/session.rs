@@ -1,8 +1,9 @@
+use std::fmt::Debug;
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
-use futures::stream::SplitSink;
 use futures::{Future, SinkExt, TryStreamExt};
+use futures::stream::SplitSink;
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
@@ -10,12 +11,11 @@ use xtra::prelude::*;
 pub use manager::*;
 use vertex::*;
 
-use crate::community::{CommunityActor, Connect, CreateRoom, GetRoomStructures, Join, COMMUNITIES};
-use crate::database::*;
 use crate::{auth, handle_disconnected, IdentifiedMessage};
+use crate::community::{COMMUNITIES, CommunityActor, Connect, CreateRoom, GetRoomStructures, Join};
+use crate::database::*;
 
 use super::*;
-use std::fmt::Debug;
 
 mod manager;
 
@@ -239,7 +239,7 @@ impl ActiveSession {
                 device: self.device,
                 session: ctx.address().unwrap(),
             })
-            .unwrap();
+                .unwrap();
 
             let structure = CommunityStructure {
                 id: *id,
@@ -292,14 +292,14 @@ impl ActiveSession {
                 device,
                 perms,
             }
-            .handle_request(msg.request)
-            .await;
+                .handle_request(msg.request)
+                .await;
 
             self.send(ServerMessage::Response {
                 id: msg.id,
                 result: response,
             })
-            .await?;
+                .await?;
         } else if message.is_close() {
             ctx.stop();
         } else {
@@ -344,9 +344,7 @@ impl<'a> RequestHandler<'a> {
                 community,
                 expiration_date,
             } => self.create_invite(community, expiration_date).await,
-            ClientRequest::SetLookingAt { room, in_community } => {
-                self.set_looking_at(room, in_community).await
-            }
+            ClientRequest::SetLookingAt(room) => self.set_looking_at(room).await,
             ClientRequest::GetNewMessages {
                 community,
                 room,
@@ -559,7 +557,7 @@ impl<'a> RequestHandler<'a> {
             }
             Err(_) => {
                 self.ctx.stop(); // The user did not exist at the time of request
-                                 // TODO delete community
+                // TODO delete community
                 Err(ErrResponse::UserDeleted)
             }
         }
@@ -690,23 +688,21 @@ impl<'a> RequestHandler<'a> {
         }
     }
 
-    async fn set_looking_at(self, room: RoomId, community: CommunityId) -> ResponseResult {
-        if !self.session.in_community(&community) {
-            return Err(ErrResponse::InvalidCommunity);
-        }
-
+    async fn set_looking_at(self, room: Option<(CommunityId, RoomId)>) -> ResponseResult {
         let mut active_user = manager::get_active_user_mut(self.user).unwrap();
 
-        if let Some(user_community) = active_user.communities.get(&community) {
-            if !user_community.rooms.contains_key(&room) {
-                return Err(ErrResponse::InvalidRoom);
+        if let Some((community, room)) = room {
+            if let Some(community) = active_user.communities.get(&community) {
+                if !community.rooms.contains_key(&room) {
+                    return Err(ErrResponse::InvalidRoom);
+                }
+            } else {
+                return Err(ErrResponse::InvalidCommunity);
             }
-        } else {
-            return Err(ErrResponse::InvalidCommunity);
         }
 
         let session = active_user.sessions.get_mut(&self.device).unwrap();
-        session.set_looking_at((community, room)).unwrap();
+        session.set_looking_at(room).unwrap();
 
         Ok(OkResponse::NoData)
     }
