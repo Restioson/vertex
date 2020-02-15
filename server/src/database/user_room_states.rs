@@ -179,7 +179,7 @@ impl Database {
     ) -> DbResult<impl Stream<Item = DbResult<UserRoomState>>> {
         const QUERY: &str = "
             SELECT
-                rooms.id,
+                rooms.id AS room,
                 user_room_states.watching_state,
                 (
                     SELECT
@@ -189,10 +189,7 @@ impl Database {
                 ) as unread
             FROM rooms
             INNER JOIN user_room_states ON rooms.id = user_room_states.room
-                WHERE rooms.community = $1 AND user_room_states.user_id = $2
-            INNER JOIN
-                SELECT user_room_states.last_read IS DISTINCT FROM MAX(messages.ord)
-                FROM messages
+            WHERE rooms.community = $1 AND user_room_states.user_id = $2
         ";
 
         let conn = self.pool.connection().await?;

@@ -10,7 +10,7 @@ use super::message::*;
 use super::room::*;
 
 fn create_fallback_profile(author: UserId) -> UserProfile {
-    let name = format!("{}", message.author.0);
+    let name = format!("{}", author.0);
     UserProfile {
         version: ProfileVersion(0),
         username: name.clone(),
