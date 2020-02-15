@@ -1,14 +1,12 @@
-use std::env;
 use std::rc::Rc;
-use std::sync::Arc;
 
-use ears::{AudioController, Sound};
 use futures::{Stream, StreamExt};
-use futures::lock::Mutex;
+use futures::future::{Abortable, AbortHandle};
 
 pub use chat::*;
 pub use community::*;
 pub use message::*;
+pub use notification::*;
 pub use profile::*;
 pub use room::*;
 pub use user::*;
@@ -23,6 +21,7 @@ mod user;
 mod message;
 mod profile;
 mod chat;
+mod notification;
 
 pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
 
@@ -57,14 +56,7 @@ async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
 
 pub struct ClientState<Ui: ClientUi> {
     pub communities: Vec<CommunityEntry<Ui>>,
-
     selected_room: Option<RoomEntry<Ui>>,
-}
-
-impl<Ui: ClientUi> Drop for ClientState<Ui> {
-    fn drop(&mut self) {
-        println!("Drop client state");
-    }
 }
 
 #[derive(Clone)]
@@ -76,7 +68,9 @@ pub struct Client<Ui: ClientUi> {
     pub profiles: ProfileCache,
     pub chat: Chat<Ui>,
 
-    pub notif_sound: Option<Arc<Mutex<Sound>>>,
+    notifier: Notifier,
+
+    abort_handle: AbortHandle,
 
     state: WeakSharedMut<ClientState<Ui>>,
 }
@@ -112,12 +106,19 @@ impl<Ui: ClientUi> Client<Ui> {
             selected_room: None,
         });
 
-        let notif_sound = match Sound::new("res/notification_sound_clearly.ogg") {
-            Ok(s) => Some(Arc::new(Mutex::new(s))),
-            Err(_) => None
+        let (abort_signal, abort_handle) = futures::future::abortable(futures::future::pending());
+
+        let client = Client {
+            request,
+            ui,
+            user,
+            profiles,
+            chat,
+            notifier: Notifier::new(),
+            abort_handle,
+            state: state.downgrade(),
         };
 
-        let client = Client { request, ui, user, profiles, chat, notif_sound, state: state.downgrade() };
         client.bind_events().await;
 
         for community in ready.communities {
@@ -128,6 +129,7 @@ impl<Ui: ClientUi> Client<Ui> {
         ctx.spawn_local(ClientLoop {
             client: client.clone(),
             event_receiver,
+            abort_signal,
             _state: state,
         }.run());
 
@@ -139,7 +141,7 @@ impl<Ui: ClientUi> Client<Ui> {
         self.chat.bind_events(&self).await;
     }
 
-    async fn handle_event(&self, event: ServerEvent) -> LoopSignal {
+    async fn handle_event(&self, event: ServerEvent) {
         match event.clone() {
             ServerEvent::AddCommunity(structure) => {
                 self.add_community(structure).await;
@@ -165,25 +167,23 @@ impl<Ui: ClientUi> Client<Ui> {
                     }).await;
 
                     if !self.ui.window_focused() || self.selected_room().await != Some(room) {
-                        self.system_notification(&event).await;
+                        self.notifier.send(&event).await;
                     }
                 } else {
                     println!("received message for invalid room: {:?}#{:?}", message.community, message.room);
                 }
             }
             ServerEvent::SessionLoggedOut => {
+                self.abort_handle.abort();
                 println!("session logged out");
-                return LoopSignal::Stop;
             }
             unexpected => println!("unhandled server event: {:?}", unexpected),
         }
-
-        LoopSignal::Continue
     }
 
-    async fn handle_network_err(&self, err: tungstenite::Error) -> LoopSignal {
+    async fn handle_network_err(&self, err: tungstenite::Error) {
         println!("network error: {:?}", err);
-        LoopSignal::Stop
+        self.abort_handle.abort();
     }
 
     pub async fn create_community(&self, name: &str) -> Result<CommunityEntry<Ui>> {
@@ -285,52 +285,12 @@ impl<Ui: ClientUi> Client<Ui> {
         request.response().await?;
         Ok(())
     }
-
-    pub async fn system_notification(&self, event: &ServerEvent) {
-        if let ServerEvent::AddMessage(message) = event {
-            // Show the system notification
-            let msg = format!("{:?}: {}", message.author, message.content);
-
-            #[cfg(windows)]
-                notifica::notify("Vertex", &msg);
-
-            #[cfg(unix)]
-                {
-                    let mut icon_path = env::current_dir().unwrap();
-                    icon_path.push("res");
-                    icon_path.push("icon.png");
-
-                    tokio::task::spawn_blocking(move || {
-                        let res = notify_rust::Notification::new()
-                            .summary("Vertex")
-                            .appname("Vertex")
-                            .icon(&icon_path.to_str().unwrap())
-                            .body(&msg)
-                            .show();
-
-                        if let Ok(handle) = res {
-                            handle.on_close(|| {});
-                        }
-                    });
-                };
-
-            // Play the sound
-            if let Some(sound) = &self.notif_sound {
-                sound.lock().await.play();
-            }
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-enum LoopSignal {
-    Continue,
-    Stop,
 }
 
 struct ClientLoop<Ui: ClientUi, S> {
     client: Client<Ui>,
     event_receiver: S,
+    abort_signal: Abortable<futures::future::Pending<()>>,
     _state: SharedMut<ClientState<Ui>>,
 }
 
@@ -346,12 +306,9 @@ impl<Ui: ClientUi, S> ClientLoop<Ui, S>
         let receiver = Box::pin(async move {
             let mut event_receiver = event_receiver;
             while let Some(result) = event_receiver.next().await {
-                let signal = match result {
+                match result {
                     Ok(event) => client.handle_event(event).await,
                     Err(err) => client.handle_network_err(err).await,
-                };
-                if let LoopSignal::Stop = signal {
-                    break;
                 }
             }
         });
@@ -366,6 +323,7 @@ impl<Ui: ClientUi, S> ClientLoop<Ui, S>
             }
         });
 
-        futures::future::select(receiver, keep_alive).await;
+        let run = futures::future::select(receiver, keep_alive);
+        futures::future::select(self.abort_signal, run).await;
     }
 }
