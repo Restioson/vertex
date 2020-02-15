@@ -14,7 +14,7 @@ pub use room::*;
 pub use user::*;
 use vertex::*;
 
-use crate::{net, SharedMut};
+use crate::{net, SharedMut, WeakSharedMut};
 use crate::{Error, Result};
 
 mod community;
@@ -61,6 +61,12 @@ pub struct ClientState<Ui: ClientUi> {
     selected_room: Option<RoomEntry<Ui>>,
 }
 
+impl<Ui: ClientUi> Drop for ClientState<Ui> {
+    fn drop(&mut self) {
+        println!("Drop client state");
+    }
+}
+
 #[derive(Clone)]
 pub struct Client<Ui: ClientUi> {
     request: Rc<net::RequestSender>,
@@ -72,7 +78,7 @@ pub struct Client<Ui: ClientUi> {
 
     pub notif_sound: Option<Arc<Mutex<Sound>>>,
 
-    state: SharedMut<ClientState<Ui>>,
+    state: WeakSharedMut<ClientState<Ui>>,
 }
 
 impl<Ui: ClientUi> Client<Ui> {
@@ -111,7 +117,7 @@ impl<Ui: ClientUi> Client<Ui> {
             Err(_) => None
         };
 
-        let client = Client { request, ui, user, profiles, chat, notif_sound, state };
+        let client = Client { request, ui, user, profiles, chat, notif_sound, state: state.downgrade() };
         client.bind_events().await;
 
         for community in ready.communities {
@@ -122,6 +128,7 @@ impl<Ui: ClientUi> Client<Ui> {
         ctx.spawn_local(ClientLoop {
             client: client.clone(),
             event_receiver,
+            _state: state,
         }.run());
 
         Ok(client)
@@ -132,7 +139,7 @@ impl<Ui: ClientUi> Client<Ui> {
         self.chat.bind_events(&self).await;
     }
 
-    pub async fn handle_event(&self, event: ServerEvent) {
+    async fn handle_event(&self, event: ServerEvent) -> LoopSignal {
         match event.clone() {
             ServerEvent::AddCommunity(structure) => {
                 self.add_community(structure).await;
@@ -164,12 +171,19 @@ impl<Ui: ClientUi> Client<Ui> {
                     println!("received message for invalid room: {:?}#{:?}", message.community, message.room);
                 }
             }
+            ServerEvent::SessionLoggedOut => {
+                println!("session logged out");
+                return LoopSignal::Stop;
+            },
             unexpected => println!("unhandled server event: {:?}", unexpected),
         }
+
+        LoopSignal::Continue
     }
 
-    pub async fn handle_network_err(&self, err: tungstenite::Error) {
+    async fn handle_network_err(&self, err: tungstenite::Error) -> LoopSignal {
         println!("network error: {:?}", err);
+        LoopSignal::Stop
     }
 
     pub async fn create_community(&self, name: &str) -> Result<CommunityEntry<Ui>> {
@@ -208,24 +222,34 @@ impl<Ui: ClientUi> Client<Ui> {
             entry.add_room(room).await;
         }
 
-        let mut state = self.state.write().await;
-        state.communities.push(entry);
-        state.communities.last().unwrap().clone()
+        if let Some(state) = self.state.upgrade() {
+            let mut state = state.write().await;
+            state.communities.push(entry);
+            state.communities.last().unwrap().clone()
+        } else {
+            entry
+        }
     }
 
     pub async fn community_by_id(&self, id: CommunityId) -> Option<CommunityEntry<Ui>> {
-        self.state.read().await.communities.iter()
-            .find(|&community| community.id == id)
-            .cloned()
+        match self.state.upgrade() {
+            Some(state) => {
+                state.read().await.communities.iter()
+                    .find(|&community| community.id == id)
+                    .cloned()
+            }
+            None => None,
+        }
     }
 
     pub async fn select_room(&self, room: Option<RoomEntry<Ui>>) -> Result<()> {
         self.set_looking_at(room.as_ref()).await?;
 
-        let mut state = self.state.write().await;
-        self.chat.set_room(room.as_ref()).await;
-
-        state.selected_room = room;
+        if let Some(state) = self.state.upgrade() {
+            let mut state = state.write().await;
+            self.chat.set_room(room.as_ref()).await;
+            state.selected_room = room;
+        }
 
         Ok(())
     }
@@ -240,8 +264,13 @@ impl<Ui: ClientUi> Client<Ui> {
     }
 
     pub async fn selected_room(&self) -> Option<RoomEntry<Ui>> {
-        let state = self.state.read().await;
-        state.selected_room.as_ref().cloned()
+        match self.state.upgrade() {
+            Some(state) => {
+                let state = state.read().await;
+                state.selected_room.as_ref().cloned()
+            }
+            None => None,
+        }
     }
 
     pub async fn log_out(&self) -> Result<()> {
@@ -286,25 +315,36 @@ impl<Ui: ClientUi> Client<Ui> {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+enum LoopSignal {
+    Continue,
+    Stop,
+}
+
 struct ClientLoop<Ui: ClientUi, S> {
     client: Client<Ui>,
     event_receiver: S,
+    _state: SharedMut<ClientState<Ui>>,
 }
 
 impl<Ui: ClientUi, S> ClientLoop<Ui, S>
     where S: Stream<Item = tungstenite::Result<ServerEvent>> + Unpin
 {
-    // TODO: we need to be able to signal this to exit!
     async fn run(self) {
-        let ClientLoop { client, event_receiver } = self;
+        let client = self.client;
+        let event_receiver = self.event_receiver;
+
         let request = client.request.clone();
 
         let receiver = Box::pin(async move {
             let mut event_receiver = event_receiver;
             while let Some(result) = event_receiver.next().await {
-                match result {
+                let signal = match result {
                     Ok(event) => client.handle_event(event).await,
                     Err(err) => client.handle_network_err(err).await,
+                };
+                if let LoopSignal::Stop = signal {
+                    break;
                 }
             }
         });
