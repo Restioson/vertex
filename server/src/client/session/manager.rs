@@ -5,8 +5,8 @@ use lazy_static::lazy_static;
 use vertex::*;
 
 use super::*;
-use std::collections::HashMap;
 use futures::TryStreamExt;
+use std::collections::HashMap;
 
 lazy_static! {
     static ref USERS: DashMap<UserId, ActiveUser> = DashMap::new();
@@ -14,7 +14,6 @@ lazy_static! {
 
 pub struct ActiveUser {
     pub communities: HashMap<CommunityId, UserCommunity>,
-    pub looking_at: Option<(CommunityId, RoomId)>,
     pub sessions: HashMap<DeviceId, Session>,
 }
 
@@ -41,7 +40,6 @@ impl ActiveUser {
 
         Ok(ActiveUser {
             communities,
-            looking_at: None,
             sessions,
         })
     }
@@ -49,14 +47,40 @@ impl ActiveUser {
 
 pub enum Session {
     Upgrading,
-    Active(Address<ActiveSession>),
+    Active {
+        actor: Address<ActiveSession>,
+        looking_at: Option<(CommunityId, RoomId)>,
+    },
 }
 
 impl Session {
-    pub fn as_active(&self) -> Option<Address<ActiveSession>> {
+    pub fn as_active_looking_at(&self) -> Option<Option<(CommunityId, RoomId)>> {
         match self {
             Session::Upgrading => None,
-            Session::Active(addr) => Some(addr.clone()),
+            Session::Active { looking_at, .. } => Some(looking_at.clone()),
+        }
+    }
+
+    pub fn as_active_actor(&self) -> Option<Address<ActiveSession>> {
+        match self {
+            Session::Upgrading => None,
+            Session::Active { actor, .. } => Some(actor.clone()),
+        }
+    }
+
+    pub fn set_looking_at(&mut self, at: (CommunityId, RoomId)) -> Option<()> {
+        match self {
+            Session::Upgrading => None,
+            Session::Active {
+                looking_at: _,
+                actor,
+            } => {
+                *self = Session::Active {
+                    looking_at: Some(at),
+                    actor: actor.clone(),
+                };
+                Some(())
+            }
         }
     }
 }
@@ -106,7 +130,10 @@ pub fn upgrade(user: UserId, device: DeviceId, addr: Address<ActiveSession>) -> 
 
     match user.sessions.get_mut(&device) {
         Some(session) => {
-            *session = Session::Active(addr);
+            *session = Session::Active {
+                actor: addr,
+                looking_at: None,
+            };
             Ok(())
         }
         None => Err(()),
@@ -115,8 +142,8 @@ pub fn upgrade(user: UserId, device: DeviceId, addr: Address<ActiveSession>) -> 
 
 pub fn remove_and_notify(user: UserId, device: DeviceId) -> Option<Session> {
     let result = remove(user, device);
-    if let Some(Session::Active(session)) = &result {
-        session.do_send(LogoutThisSession).unwrap();
+    if let Some(Session::Active { actor, .. }) = &result {
+        actor.do_send(LogoutThisSession).unwrap();
     }
 
     result
@@ -143,8 +170,8 @@ pub fn remove(user: UserId, device: DeviceId) -> Option<Session> {
 pub fn remove_all(user: UserId) {
     if let Some((_, active_user)) = USERS.remove(&user) {
         for session in active_user.sessions.values() {
-            if let Session::Active(addr) = session {
-                addr.do_send(LogoutThisSession).unwrap()
+            if let Session::Active { actor, .. } = session {
+                actor.do_send(LogoutThisSession).unwrap()
             }
         }
     }

@@ -1,11 +1,11 @@
 #![feature(type_alias_impl_trait, generic_associated_types, type_ascription)]
 
 use std::convert::Infallible;
+use std::fs;
 use std::fs::OpenOptions;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::{fmt::Debug, fs};
 
 use directories::ProjectDirs;
 use futures::StreamExt;
@@ -34,13 +34,6 @@ mod database;
 pub struct Global {
     pub database: Database,
     pub config: Arc<Config>,
-}
-
-#[derive(Debug, Clone)]
-pub struct SendMessage<T: Debug>(T);
-
-impl<T: Debug + Send + 'static> Message for SendMessage<T> {
-    type Result = ();
 }
 
 /// Marker trait for `vertex_common` structs that are actor messages too

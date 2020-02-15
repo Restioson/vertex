@@ -2,13 +2,13 @@ FROM rustlang/rust:nightly-slim as build
 
 WORKDIR /vertex/server
 COPY server/Cargo.* .
-COPY common/ ../common/
 
 # Build deps except for vertex_common
 RUN mkdir src/ && rustc --version && echo "fn main() {}" > src/main.rs \
     && sed -i 's/vertex_common/#vertex_common/g' Cargo.toml && cargo +nightly  build --release
 
 # Build vertex_common
+COPY common/ ../common/
 RUN sed -i 's/#vertex_common/vertex_common/g' Cargo.toml && cargo +nightly  build --release && rm src/main.rs
 
 # Build project

@@ -1,8 +1,11 @@
-use vertex::{MessageId, CommunityId, UserId, RoomId, ProfileVersion};
-use chrono::{DateTime, Utc};
-use tokio_postgres::Row;
-use std::convert::TryFrom;
 use crate::database::{Database, DbResult};
+use chrono::{DateTime, Utc};
+use futures::{Stream, TryStreamExt};
+use std::cmp;
+use std::convert::TryFrom;
+use tokio_postgres::types::ToSql;
+use tokio_postgres::Row;
+use vertex::{CommunityId, MessageId, ProfileVersion, RoomId, UserId};
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct MessageOrdinal(pub u64);
@@ -68,10 +71,20 @@ impl Database {
 
         let conn = self.pool.connection().await?;
         let query = conn.client.prepare(QUERY).await?;
-        let opt = conn.client.query_opt(
-            &query,
-            &[&id.0, &author.0, &community.0, &room.0, &date, &Some(content)]
-        ).await?;
+        let opt = conn
+            .client
+            .query_opt(
+                &query,
+                &[
+                    &id.0,
+                    &author.0,
+                    &community.0,
+                    &room.0,
+                    &date,
+                    &Some(content),
+                ],
+            )
+            .await?;
 
         let row = opt.unwrap();
         let ord = MessageOrdinal(row.try_get::<&str, i64>("ord")? as u64);
@@ -79,4 +92,53 @@ impl Database {
 
         Ok((ord, profile_version))
     }
+
+    pub async fn get_new_messages(
+        &self,
+        user: UserId,
+        community: CommunityId,
+        room: RoomId,
+        client_max: usize,
+    ) -> DbResult<impl Stream<Item = DbResult<(ProfileVersion, MessageRecord)>>> {
+        const SERVER_MAX: usize = 50;
+        const QUERY: &str = "
+            WITH last_read_tbl AS (
+                SELECT last_read FROM user_room_states WHERE user_id = $3
+            )
+            SELECT messages.*, users.profile_version FROM messages
+            INNER JOIN users ON messages.author = users.id
+                WHERE community = $1 AND room = $2 AND ord > last_read_tbl.last_read
+                LIMIT $3
+                ORDER BY ord ASC
+        ";
+
+        let conn = self.pool.connection().await?;
+        let query = conn.client.prepare(QUERY).await?;
+        let args: &[&(dyn ToSql + Sync)] = &[
+            &community.0,
+            &room.0,
+            &user.0,
+            &(cmp::min(SERVER_MAX, client_max) as i64),
+        ];
+
+        let stream = conn.client.query_raw(&query, slice_iter(args)).await?;
+        let stream = stream
+            .and_then(|row| async move {
+                let profile_version = row.try_get::<&str, i32>("profile_version")?;
+                Ok((
+                    ProfileVersion(profile_version as u32),
+                    MessageRecord::try_from(row)?,
+                ))
+            })
+            .map_err(|e| e.into());
+
+        Ok(stream)
+    }
+}
+
+/// Taken from tokio_postgres
+fn slice_iter<'a>(
+    s: &'a [&'a (dyn ToSql + Sync)],
+) -> impl ExactSizeIterator<Item = &'a dyn ToSql> + 'a {
+    s.iter().map(|s| *s as _)
 }

@@ -1,6 +1,8 @@
+use crate::client::session::{ForwardMessage, SendMessage};
 use crate::client::{self, ActiveSession, Session};
 use crate::database::{AddToCommunityError, CommunityRecord, Database, DbResult};
-use crate::{handle_disconnected, IdentifiedMessage, SendMessage};
+use crate::{handle_disconnected, IdentifiedMessage};
+use chrono::Utc;
 use dashmap::DashMap;
 use futures::Future;
 use futures::TryStreamExt;
@@ -10,7 +12,6 @@ use uuid::Uuid;
 use vertex::*;
 use xtra::prelude::*;
 use xtra::Disconnected;
-use chrono::Utc;
 
 lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Community> = DashMap::new();
@@ -128,14 +129,14 @@ impl CommunityActor {
             };
 
             for (device, session) in user.sessions.iter() {
-                if let Session::Active(session) = session {
+                if let Session::Active { actor, .. } = session {
                     let send_to_this_device = match except {
                         Some(except) => except != *device,
                         None => true,
                     };
 
                     if send_to_this_device {
-                        if let Err(d) = f(session) {
+                        if let Err(d) = f(actor) {
                             handle_disconnected("ClientSession")(d);
                         }
                     }
@@ -178,20 +179,25 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
             let db = self.database.clone();
             let author = m.user;
 
-            let (_ord, profile_version) = db.create_message(
-                id,
-                author,
-                msg.to_community,
-                msg.to_room,
-                Utc::now(),
-                msg.content
-            ).await?;
+            let (_ord, profile_version) = db
+                .create_message(
+                    id,
+                    author,
+                    msg.to_community,
+                    msg.to_room,
+                    Utc::now(),
+                    msg.content,
+                )
+                .await?;
 
             let from_device = m.device;
             let fwd = ForwardedMessage::new(id, m.message, m.user, profile_version);
-            let send = SendMessage(ServerMessage::Event(ServerEvent::AddMessage(fwd)));
+            let send = ForwardMessage(fwd);
 
-            self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(from_device));
+            self.for_each_online_device_except(
+                |addr| addr.do_send(send.clone()),
+                Some(from_device),
+            );
 
             Ok(id)
         }
@@ -205,7 +211,7 @@ impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
         _: &mut Context<Self>,
     ) -> Result<(), ErrResponse> {
         let from_device = m.device;
-        let send = SendMessage(ServerMessage::Event(ServerEvent::Edit(m.message)));
+        let send = SendMessage(ServerMessage::Event(ServerEvent::Edit(m.message))); // TODO watching
 
         self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(from_device));
 

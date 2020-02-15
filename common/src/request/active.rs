@@ -13,6 +13,7 @@ pub enum OkResponse {
     UserProfile(UserProfile),
     Token { device: DeviceId, token: AuthToken },
     Invite { code: InviteCode },
+    NewMessages(Vec<ForwardedMessage>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -68,6 +69,11 @@ pub enum ClientRequest {
     LogOut,
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
+    GetNewMessages {
+        community: CommunityId,
+        room: RoomId,
+        max: u64,
+    },
     CreateCommunity {
         name: String,
     },
@@ -114,6 +120,10 @@ pub enum ServerMessage {
 pub enum ServerEvent {
     ClientReady(ClientReady),
     AddMessage(ForwardedMessage),
+    NotifyMessageReady {
+        room: RoomId,
+        community: CommunityId,
+    },
     Edit(Edit),
     Delete(Delete),
     SessionLoggedOut,

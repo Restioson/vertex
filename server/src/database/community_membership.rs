@@ -45,7 +45,6 @@ UNION  ALL
 TABLE  ups;
 "#;
 
-
 pub struct CommunityMember {
     pub community: CommunityId,
     user: UserId,
@@ -88,7 +87,7 @@ pub enum AddToCommunityError {
 impl Database {
     pub async fn get_communities_for_user(
         &self,
-        user: UserId
+        user: UserId,
     ) -> DbResult<impl Stream<Item = DbResult<CommunityMember>>> {
         const QUERY: &str = "
             SELECT * from community_membership WHERE user_id = $1
@@ -99,13 +98,13 @@ impl Database {
         let query = conn.client.prepare(QUERY).await?;
         let rows = {
             let args = iter::once(&user.0 as &(dyn ToSql + Sync));
-            conn.client.query_raw(&query, args.map(|x| x as &dyn ToSql)).await?
+            conn.client
+                .query_raw(&query, args.map(|x| x as &dyn ToSql))
+                .await?
         };
 
         let stream = rows
-            .and_then(|row| async move {
-                Ok(CommunityMember::try_from(row)?)
-            })
+            .and_then(|row| async move { Ok(CommunityMember::try_from(row)?) })
             .map_err(|e| e.into());
 
         Ok(stream)
@@ -145,7 +144,7 @@ impl Database {
         let query = conn.client.prepare(ADD_TO_COMMUNITY).await?;
         let res = conn
             .client
-            .query_opt(&query, &[&community.0, &user.0,])
+            .query_opt(&query, &[&community.0, &user.0])
             .await;
 
         match res {
@@ -157,9 +156,7 @@ impl Database {
                     Insert => Ok(Ok(())),
 
                     // Membership row already existed - conflict of some sort
-                    Select | Update => {
-                        Ok(Err(AddToCommunityError::AlreadyInCommunity))
-                    }
+                    Select | Update => Ok(Err(AddToCommunityError::AlreadyInCommunity)),
                 }
             }
             Ok(None) => panic!("db error: add to community query did not return anything"),

@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use chrono::{DateTime, Utc};
 use futures::stream::SplitSink;
-use futures::{Future, SinkExt};
+use futures::{Future, SinkExt, TryStreamExt};
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
@@ -12,9 +12,10 @@ use vertex::*;
 
 use crate::community::{CommunityActor, Connect, CreateRoom, GetRoomStructures, Join, COMMUNITIES};
 use crate::database::*;
-use crate::{auth, handle_disconnected, IdentifiedMessage, SendMessage};
+use crate::{auth, handle_disconnected, IdentifiedMessage};
 
 use super::*;
+use std::fmt::Debug;
 
 mod manager;
 
@@ -33,6 +34,20 @@ impl Message for CheckHeartbeat {
 struct NotifyClientReady;
 
 impl Message for NotifyClientReady {
+    type Result = ();
+}
+
+#[derive(Debug, Clone)]
+pub struct SendMessage<T: Debug>(pub T);
+
+impl<T: Debug + Send + 'static> Message for SendMessage<T> {
+    type Result = ();
+}
+
+#[derive(Debug, Clone)]
+pub struct ForwardMessage(pub ForwardedMessage);
+
+impl Message for ForwardMessage {
     type Result = ();
 }
 
@@ -115,6 +130,41 @@ impl Handler<NotifyClientReady> for ActiveSession {
             if self.ready(ctx).await.is_err() {
                 ctx.stop();
             }
+        }
+    }
+}
+
+impl Handler<ForwardMessage> for ActiveSession {
+    type Responder<'a> = impl Future<Output = ()> + 'a;
+
+    fn handle<'a>(
+        &'a mut self,
+        fwd: ForwardMessage,
+        ctx: &'a mut Context<Self>,
+    ) -> Self::Responder<'a> {
+        async move {
+            let active_user = manager::get_active_user(self.user).unwrap();
+            let (community, room) = (fwd.0.community, fwd.0.room);
+            let session = &active_user.sessions[&self.device];
+            let looking_at = session.as_active_looking_at().unwrap();
+
+            if let Some(user_community) = active_user.communities.get(&community) {
+                if let Some(user_room) = user_community.rooms.get(&room) {
+                    let msg = if looking_at == Some((community, room))
+                        || user_room.watching == WatchingState::Watching
+                    {
+                        ServerMessage::Event(ServerEvent::AddMessage(fwd.0))
+                    } else {
+                        ServerMessage::Event(ServerEvent::NotifyMessageReady { room, community })
+                    };
+
+                    if self.send(msg).await.is_err() {
+                        ctx.stop()
+                    }
+                }
+            };
+
+            // Just ignore any errors as probable timing anomalies
         }
     }
 }
@@ -294,10 +344,14 @@ impl<'a> RequestHandler<'a> {
                 community,
                 expiration_date,
             } => self.create_invite(community, expiration_date).await,
-            ClientRequest::SetLookingAt {
+            ClientRequest::SetLookingAt { room, in_community } => {
+                self.set_looking_at(room, in_community).await
+            }
+            ClientRequest::GetNewMessages {
+                community,
                 room,
-                in_community
-            } => self.set_looking_at(room, in_community).await,
+                max,
+            } => self.get_new_messages(community, room, max as usize).await,
             _ => unimplemented!(),
         }
     }
@@ -538,7 +592,7 @@ impl<'a> RequestHandler<'a> {
 
                         sessions
                             .filter(|(id, _)| **id != self.device)
-                            .filter_map(|(_, session)| session.as_active())
+                            .filter_map(|(_, session)| session.as_active_actor())
                             .for_each(|addr| {
                                 let _ = addr.do_send(SendMessage(send.clone()));
                             });
@@ -628,10 +682,49 @@ impl<'a> RequestHandler<'a> {
                 return Err(ErrResponse::InvalidRoom);
             }
         } else {
-            return Err(ErrResponse::InvalidCommunity)
+            return Err(ErrResponse::InvalidCommunity);
         }
 
-        active_user.looking_at = Some((community, room));
+        let session = active_user.sessions.get_mut(&self.device).unwrap();
+        session.set_looking_at((community, room)).unwrap();
+
         Ok(OkResponse::NoData)
+    }
+
+    async fn get_new_messages(
+        self,
+        community: CommunityId,
+        room: RoomId,
+        max: usize,
+    ) -> ResponseResult {
+        if !self.session.in_community(&community) {
+            return Err(ErrResponse::InvalidCommunity);
+        }
+
+        let stream = self
+            .session
+            .global
+            .database
+            .get_new_messages(self.user, community, room, max)
+            .await?;
+
+        let msgs = stream
+            .try_filter_map(|(profile_version, record)| async move {
+                match record.content {
+                    Some(content) => Ok(Some(ForwardedMessage {
+                        id: record.id,
+                        community: record.community,
+                        room: record.room,
+                        author: record.author,
+                        author_profile_version: profile_version,
+                        content,
+                    })),
+                    None => Ok(None),
+                }
+            })
+            .try_collect()
+            .await?;
+
+        Ok(OkResponse::NewMessages(msgs))
     }
 }

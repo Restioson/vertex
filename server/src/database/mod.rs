@@ -1,33 +1,33 @@
 use std::fs;
 use std::time::{Duration, Instant};
 
+use crate::client;
+use crate::database::message::CREATE_MESSAGES_TABLE;
 use futures::{Stream, TryStreamExt};
 use l337_postgres::PostgresConnectionManager;
 use log::{error, warn};
 use tokio_postgres::types::ToSql;
 use tokio_postgres::{NoTls, Row};
 use vertex::{AuthError, DeviceId, ErrResponse, UserId};
-use crate::client;
-use crate::database::message::CREATE_MESSAGES_TABLE;
 
 mod communities;
 mod community_membership;
 mod invite_code;
+mod message;
 mod rooms;
-mod room_watching_state;
 mod token;
 mod user;
-mod message;
+mod user_room_states;
 
 pub use communities::*;
 pub use community_membership::*;
 pub use invite_code::*;
-pub use room_watching_state::*;
+pub use message::*;
 pub use rooms::*;
+use std::convert::TryFrom;
 pub use token::*;
 pub use user::*;
-pub use message::*;
-use std::convert::TryFrom;
+pub use user_room_states::*;
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 
@@ -102,7 +102,7 @@ impl Database {
             CREATE_ROOMS_TABLE,
             CREATE_INVITE_CODES_TABLE,
             CREATE_MESSAGES_TABLE,
-            CREATE_ROOM_WATCHING_STATE_TABLE,
+            CREATE_USER_ROOM_STATES_TABLE,
         ];
 
         for cmd in &cmds {

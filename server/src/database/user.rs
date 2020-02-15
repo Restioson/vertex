@@ -3,7 +3,7 @@ use crate::auth::HashSchemeVersion;
 use std::convert::TryFrom;
 use tokio_postgres::{error::SqlState, row::Row, types::ToSql};
 use uuid::Uuid;
-use vertex::{UserId, ProfileVersion, UserProfile};
+use vertex::{ProfileVersion, UserId, UserProfile};
 
 pub(super) const CREATE_USERS_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS users (
@@ -59,9 +59,7 @@ impl TryFrom<Row> for UserRecord {
             id: UserId(row.try_get("id")?),
             username: row.try_get("username")?,
             display_name: row.try_get("display_name")?,
-            profile_version: ProfileVersion(
-                row.try_get::<&str, i32>("profile_version")? as u32
-            ),
+            profile_version: ProfileVersion(row.try_get::<&str, i32>("profile_version")? as u32),
             password_hash: row.try_get("password_hash")?,
             hash_scheme_version: HashSchemeVersion::from(
                 row.try_get::<&str, i16>("hash_scheme_version")?,
@@ -120,7 +118,8 @@ impl Database {
             .await?;
         let opt = conn.client.query_opt(&query, &[&id.0]).await?;
 
-        if let Some(row) = opt {  // Can't opt::map because of ?
+        if let Some(row) = opt {
+            // Can't opt::map because of ?
             Ok(Some(UserProfile {
                 version: ProfileVersion(row.try_get::<&str, i32>("profile_version")? as u32),
                 username: row.try_get("username")?,
