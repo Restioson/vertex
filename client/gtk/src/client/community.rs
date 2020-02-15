@@ -80,7 +80,7 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
         let entry = RoomEntry::new(
             self.client.clone(),
             widget,
-            self.clone(),
+            self.id,
             room.id,
             room.name,
         );

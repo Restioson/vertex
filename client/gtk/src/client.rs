@@ -174,7 +174,7 @@ impl<Ui: ClientUi> Client<Ui> {
             ServerEvent::SessionLoggedOut => {
                 println!("session logged out");
                 return LoopSignal::Stop;
-            },
+            }
             unexpected => println!("unhandled server event: {:?}", unexpected),
         }
 
@@ -256,11 +256,18 @@ impl<Ui: ClientUi> Client<Ui> {
 
     async fn set_looking_at(&self, room: Option<&RoomEntry<Ui>>) -> Result<()> {
         let request = self.request.send(ClientRequest::SetLookingAt(
-            room.map(|room| (room.community.id, room.id))
+            room.map(|room| (room.community, room.id))
         )).await?;
 
         request.response().await?;
         Ok(())
+    }
+
+    pub async fn selected_community(&self) -> Option<CommunityEntry<Ui>> {
+        match self.selected_room().await {
+            Some(room) => self.community_by_id(room.community).await,
+            None => None,
+        }
     }
 
     pub async fn selected_room(&self) -> Option<RoomEntry<Ui>> {

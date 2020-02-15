@@ -3,7 +3,6 @@ use vertex::*;
 use crate::Client;
 
 use super::{ClientUi, Result};
-use super::community::*;
 use super::message::*;
 
 pub trait RoomEntryWidget<Ui: ClientUi>: Clone {
@@ -18,7 +17,7 @@ pub struct RoomEntry<Ui: ClientUi> {
 
     pub message_stream: MessageStream<Ui>,
 
-    pub community: CommunityEntry<Ui>,
+    pub community: CommunityId,
     pub id: RoomId,
 
     pub name: String,
@@ -28,7 +27,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
     pub(super) fn new(
         client: Client<Ui>,
         widget: Ui::RoomEntryWidget,
-        community: CommunityEntry<Ui>,
+        community: CommunityId,
         id: RoomId,
         name: String,
     ) -> Self {
@@ -68,7 +67,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
 
     async fn send_message_request(&self, content: String) -> Result<()> {
         let request = ClientRequest::SendMessage(ClientSentMessage {
-            to_community: self.community.id,
+            to_community: self.community,
             to_room: self.id,
             content,
         });
@@ -82,7 +81,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
 
 impl<Ui: ClientUi> PartialEq<RoomEntry<Ui>> for RoomEntry<Ui> {
     fn eq(&self, other: &RoomEntry<Ui>) -> bool {
-        self.id == other.id && self.community.id == other.community.id
+        self.id == other.id && self.community == other.community
     }
 }
 
