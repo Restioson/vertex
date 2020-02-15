@@ -92,6 +92,10 @@ pub enum ClientRequest {
         new_password: String,
     },
     GetUserProfile(UserId),
+    SetLookingAt {
+        room: RoomId,
+        in_community: CommunityId,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

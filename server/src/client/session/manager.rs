@@ -62,7 +62,7 @@ impl Session {
 }
 
 pub struct UserCommunity {
-    rooms: HashMap<RoomId, UserRoom>,
+    pub rooms: HashMap<RoomId, UserRoom>,
 }
 
 impl UserCommunity {
@@ -79,7 +79,7 @@ impl UserCommunity {
 }
 
 pub struct UserRoom {
-    watching: WatchingState,
+    pub watching: WatchingState,
 }
 
 pub async fn insert(db: Database, user: UserId, device: DeviceId) -> DbResult<Result<(), ()>> {

@@ -291,6 +291,10 @@ impl<'a> RequestHandler<'a> {
                 community,
                 expiration_date,
             } => self.create_invite(community, expiration_date).await,
+            ClientRequest::SetLookingAt {
+                room,
+                in_community
+            } => self.set_looking_at(room, in_community).await,
             _ => unimplemented!(),
         }
     }
@@ -609,5 +613,24 @@ impl<'a> RequestHandler<'a> {
         } else {
             Err(ErrResponse::InvalidCommunity)
         }
+    }
+
+    async fn set_looking_at(self, room: RoomId, community: CommunityId) -> ResponseResult {
+        if !self.session.in_community(&community) {
+            return Err(ErrResponse::InvalidCommunity);
+        }
+
+        let mut active_user = manager::get_active_user_mut(self.user).unwrap();
+
+        if let Some(user_community) = active_user.communities.get(&community) {
+            if !user_community.rooms.contains_key(&room) {
+                return Err(ErrResponse::InvalidRoom);
+            }
+        } else {
+            return Err(ErrResponse::InvalidCommunity)
+        }
+
+        active_user.looking_at = Some((community, room));
+        Ok(OkResponse::NoData)
     }
 }
