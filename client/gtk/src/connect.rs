@@ -102,6 +102,15 @@ impl<Shared: Clone, Widget: Clone, Event: Clone> Connector<Shared, (Widget, Even
     }
 }
 
+impl<Shared: Clone, Widget: Clone, Listener: Clone> Connector<Shared, (Widget, Listener)> {
+    #[inline]
+    pub fn build_widget_listener(self) -> impl Fn(&Widget, &Listener) {
+        move |widget, event| {
+            self.execute((widget.clone(), event.clone()));
+        }
+    }
+}
+
 impl<Shared: Clone, Widget: Clone, Opt: Clone> Connector<Shared, (Widget, Option<Opt>)> {
     #[inline]
     pub fn build_widget_and_option_consumer(self) -> impl Fn(&Widget, Option<&Opt>) {

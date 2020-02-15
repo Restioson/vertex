@@ -25,12 +25,6 @@ impl MessageListWidget {
 
         self.last_group.as_ref().unwrap()
     }
-
-    fn update_scroll(&mut self) {
-        if let Some(adjustment) = self.scroll.get_vadjustment() {
-            adjustment.set_value(adjustment.get_upper() - adjustment.get_page_size());
-        }
-    }
 }
 
 impl client::MessageListWidget<Ui> for MessageListWidget {
@@ -39,15 +33,37 @@ impl client::MessageListWidget<Ui> for MessageListWidget {
             self.list.remove(&child);
         }
         self.last_group = None;
-        self.update_scroll();
     }
 
     fn push_message(&mut self, author: UserId, content: String) -> MessageEntryWidget {
         let group = self.next_group(author);
         let widget = group.push_message(content);
-        self.update_scroll();
 
         widget
+    }
+
+    fn bind_events(&self, list: &client::MessageList<Ui>) {
+        let adjustment = self.scroll.get_vadjustment().unwrap();
+
+        adjustment.connect_value_changed(
+            list.connector()
+                .do_async(|list, adjustment: gtk::Adjustment| async move {
+                    let upper = adjustment.get_upper() - adjustment.get_page_size();
+                    let reading_new = adjustment.get_value() + 10.0 >= upper;
+                    list.set_reading_new(reading_new).await;
+                })
+                .build_cloned_consumer()
+        );
+
+        self.list.connect_size_allocate(
+            (list.clone(), adjustment).connector()
+                .do_async(|(list, adjustment), (_, _)| async move {
+                    if list.reading_new().await {
+                        adjustment.set_value(adjustment.get_upper() - adjustment.get_page_size());
+                    }
+                })
+                .build_widget_listener()
+        );
     }
 }
 

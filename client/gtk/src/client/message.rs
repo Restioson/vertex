@@ -4,7 +4,7 @@ pub use embed::*;
 pub use rich::*;
 use vertex::*;
 
-use crate::{SharedMut, Client};
+use crate::{Client, SharedMut};
 
 use super::ClientUi;
 
@@ -34,6 +34,8 @@ pub trait MessageListWidget<Ui: ClientUi> {
     fn clear(&mut self);
 
     fn push_message(&mut self, author: UserId, content: String) -> Ui::MessageEntryWidget;
+
+    fn bind_events(&self, list: &MessageList<Ui>);
 }
 
 pub trait MessageEntryWidget<Ui: ClientUi>: Clone {
@@ -45,6 +47,7 @@ pub trait MessageEntryWidget<Ui: ClientUi>: Clone {
 pub struct MessageListState<Ui: ClientUi> {
     widget: Ui::MessageListWidget,
     stream: Option<MessageStream<Ui>>,
+    reading_new: bool,
 }
 
 #[derive(Clone)]
@@ -58,8 +61,14 @@ impl<Ui: ClientUi> MessageList<Ui> {
         let state = SharedMut::new(MessageListState {
             widget,
             stream: None,
+            reading_new: true,
         });
         MessageList { client, state }
+    }
+
+    pub async fn bind_events(&self) {
+        let state = self.state.read().await;
+        state.widget.bind_events(&self);
     }
 
     fn push_to(&self, list: &mut Ui::MessageListWidget, author: UserId, content: String) -> Ui::MessageEntryWidget {
@@ -123,6 +132,14 @@ impl<Ui: ClientUi> MessageList<Ui> {
 
         let widget = self.push_to(&mut state.widget, author, content);
         MessageHandle { widget }
+    }
+
+    pub async fn set_reading_new(&self, reading_new: bool) {
+        self.state.write().await.reading_new = reading_new;
+    }
+
+    pub async fn reading_new(&self) -> bool {
+        self.state.read().await.reading_new
     }
 }
 

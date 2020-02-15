@@ -263,7 +263,10 @@ impl<Ui: ClientUi> Client<Ui> {
             None => {
                 drop(state);
                 let mut state = self.state.write().await;
+
                 let list = MessageList::new(self.clone(), self.ui.build_message_list());
+                list.bind_events().await;
+
                 state.message_list = Some(list.clone());
                 list
             }
