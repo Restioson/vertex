@@ -108,7 +108,7 @@ impl Database {
             SELECT rooms.id, watching_state FROM rooms
             LEFT JOIN room_watching_state ON rooms.id = room_watching_state.room
                 WHERE rooms.community = $1 AND
-                (room_watching_state.user_id = $2 OR room_watching_state.user_id IS NULL)
+                    (room_watching_state.user_id = $2 OR room_watching_state.user_id IS NULL)
         ";
 
         let conn = self.pool.connection().await?;

@@ -1,4 +1,4 @@
-use vertex::{MessageId, CommunityId, UserId, RoomId};
+use vertex::{MessageId, CommunityId, UserId, RoomId, ProfileVersion};
 use chrono::{DateTime, Utc};
 use tokio_postgres::Row;
 use std::convert::TryFrom;
@@ -55,11 +55,15 @@ impl Database {
         room: RoomId,
         date: DateTime<Utc>,
         content: String,
-    ) -> DbResult<MessageOrdinal> {
+    ) -> DbResult<(MessageOrdinal, ProfileVersion)> {
         const QUERY: &str = "
-            INSERT INTO messages (id, author, community, room, date, content)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                RETURNING ord
+            WITH inserted AS
+                (INSERT INTO messages (id, author, community, room, date, content)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    RETURNING ord, author
+                )
+            SELECT inserted.ord, users.profile_version FROM inserted
+            INNER JOIN users ON inserted.author = users.id
         ";
 
         let conn = self.pool.connection().await?;
@@ -69,6 +73,10 @@ impl Database {
             &[&id.0, &author.0, &community.0, &room.0, &date, &Some(content)]
         ).await?;
 
-        Ok(MessageOrdinal(opt.unwrap().try_get::<&str, i64>("ord")? as u64))
+        let row = opt.unwrap();
+        let ord = MessageOrdinal(row.try_get::<&str, i64>("ord")? as u64);
+        let profile_version = ProfileVersion(row.try_get::<&str, i32>("profile_version")? as u32);
+
+        Ok((ord, profile_version))
     }
 }

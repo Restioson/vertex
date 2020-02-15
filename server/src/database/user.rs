@@ -3,13 +3,14 @@ use crate::auth::HashSchemeVersion;
 use std::convert::TryFrom;
 use tokio_postgres::{error::SqlState, row::Row, types::ToSql};
 use uuid::Uuid;
-use vertex::UserId;
+use vertex::{UserId, ProfileVersion};
 
 pub(super) const CREATE_USERS_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS users (
         id                   UUID PRIMARY KEY,
         username             VARCHAR NOT NULL UNIQUE,
         display_name         VARCHAR NOT NULL,
+        profile_version      INTEGER NOT NULL,
         password_hash        VARCHAR NOT NULL,
         hash_scheme_version  SMALLINT NOT NULL,
         compromised          BOOLEAN NOT NULL,
@@ -21,6 +22,7 @@ pub struct UserRecord {
     pub id: UserId,
     pub username: String,
     pub display_name: String,
+    pub profile_version: ProfileVersion,
     pub password_hash: String,
     pub hash_scheme_version: HashSchemeVersion,
     pub compromised: bool,
@@ -39,6 +41,7 @@ impl UserRecord {
             id: UserId(Uuid::new_v4()),
             username,
             display_name,
+            profile_version: ProfileVersion(0),
             password_hash,
             hash_scheme_version,
             compromised: false,
@@ -56,6 +59,9 @@ impl TryFrom<Row> for UserRecord {
             id: UserId(row.try_get("id")?),
             username: row.try_get("username")?,
             display_name: row.try_get("display_name")?,
+            profile_version: ProfileVersion(
+                row.try_get::<&str, i32>("profile_version")? as u32
+            ),
             password_hash: row.try_get("password_hash")?,
             hash_scheme_version: HashSchemeVersion::from(
                 row.try_get::<&str, i16>("hash_scheme_version")?,
@@ -115,13 +121,14 @@ impl Database {
                     id,
                     username,
                     display_name,
+                    profile_version,
                     password_hash,
                     hash_scheme_version,
                     compromised,
                     locked,
                     banned
                 )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT DO NOTHING";
 
         let conn = self.pool.connection().await?;
@@ -130,6 +137,7 @@ impl Database {
             &user.id.0,
             &user.username,
             &user.display_name,
+            &(user.profile_version.0 as i32),
             &user.password_hash,
             &(user.hash_scheme_version as u8 as i16),
             &user.compromised,
@@ -152,11 +160,14 @@ impl Database {
         user: UserId,
         new_username: String,
     ) -> DbResult<Result<(), ChangeUsernameError>> {
+        const STMT: &str = "
+            UPDATE users
+                SET username = $1, profile_version = profile_version + 1
+                WHERE id = $2
+        ";
+
         let conn = self.pool.connection().await?;
-        let stmt = conn
-            .client
-            .prepare("UPDATE users SET username = $1 WHERE id = $2")
-            .await?;
+        let stmt = conn.client.prepare(STMT).await?;
         let res = conn.client.execute(&stmt, &[&new_username, &user.0]).await;
 
         match res {
@@ -185,11 +196,14 @@ impl Database {
         user: UserId,
         new_display_name: String,
     ) -> DbResult<Result<(), NonexistentUser>> {
+        const STMT: &str = "
+            UPDATE users
+                SET display_name = $1, profile_version = profile_version + 1
+                WHERE id = $2
+        ";
+
         let conn = self.pool.connection().await?;
-        let stmt = conn
-            .client
-            .prepare("UPDATE users SET display_name = $1 WHERE id = $2")
-            .await?;
+        let stmt = conn.client.prepare(STMT).await?;
         let res = conn
             .client
             .execute(&stmt, &[&new_display_name, &user.0])

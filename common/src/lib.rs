@@ -29,6 +29,9 @@ pub struct MessageId(pub Uuid);
 #[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct DeviceId(pub Uuid);
 
+#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct ProfileVersion(pub u32);
+
 impl fmt::Display for DeviceId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -73,6 +76,7 @@ pub struct ForwardedMessage {
     pub community: CommunityId,
     pub room: RoomId,
     pub author: UserId,
+    pub author_profile_version: ProfileVersion,
     pub content: String,
 }
 
@@ -81,12 +85,14 @@ impl ForwardedMessage {
         id: MessageId,
         msg: ClientSentMessage,
         author: UserId,
+        author_profile_version: ProfileVersion,
     ) -> Self {
         ForwardedMessage {
             id,
             community: msg.to_community,
             room: msg.to_room,
             author,
+            author_profile_version,
             content: msg.content,
         }
     }

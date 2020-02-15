@@ -178,26 +178,22 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
             let db = self.database.clone();
             let author = m.user;
 
-            let fut = async move {
-                db.create_message(
-                    id,
-                    author,
-                    msg.to_community,
-                    msg.to_room,
-                    Utc::now(),
-                    msg.content
-                ).await
-            };
-            let db_fut_handle = tokio::spawn(fut);
+            let (_ord, profile_version) = db.create_message(
+                id,
+                author,
+                msg.to_community,
+                msg.to_room,
+                Utc::now(),
+                msg.content
+            ).await?;
 
             let from_device = m.device;
-            let fwd = ForwardedMessage::new(id, m.message, m.user);
+            let fwd = ForwardedMessage::new(id, m.message, m.user, profile_version);
             let send = SendMessage(ServerMessage::Event(ServerEvent::AddMessage(fwd)));
 
             self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(from_device));
 
-            db_fut_handle.await.expect("Error joining future")?;
-            Ok(MessageId(Uuid::new_v4()))
+            Ok(id)
         }
     }
 }

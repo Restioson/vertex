@@ -62,7 +62,8 @@ impl From<DatabaseError> for ErrResponse {
 }
 
 impl From<DatabaseError> for AuthError {
-    fn from(_: DatabaseError) -> AuthError {
+    fn from(e: DatabaseError) -> AuthError {
+        warn!("db error: {:#?}", e);
         AuthError::Internal
     }
 }
