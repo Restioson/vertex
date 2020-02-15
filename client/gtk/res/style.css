@@ -211,7 +211,7 @@ scrollbar slider:hover:active {
 #active #message .embed {
   background: @sidebar_bg_color;
   padding: 6px;
-  margin-top: 4px;
+  margin: 4px;
   border-radius: 10px;
 }
 
