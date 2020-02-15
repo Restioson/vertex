@@ -40,7 +40,7 @@ pub async fn build() -> Screen {
 }
 
 async fn bind_events(screen: &Screen) {
-    screen.login_button.connect_button_press_event(
+    screen.login_button.connect_button_release_event(
         screen.connector()
             .do_async(|_screen, (_button, _event)| async move {
                 let screen = screen::login::build().await;
@@ -49,7 +49,7 @@ async fn bind_events(screen: &Screen) {
             .build_widget_event()
     );
 
-    screen.register_button.connect_button_press_event(
+    screen.register_button.connect_button_release_event(
         screen.connector()
             .do_async(|screen, (_button, _event)| async move {
                 let instance_ip = screen.instance_entry.try_get_text().unwrap_or_default();

@@ -121,7 +121,7 @@ fn build_invite_embed(client: &Client<Ui>, embed: InviteEmbed) -> gtk::Widget {
     motd_label.set_text("5 members");
 
     let join_button: gtk::Button = builder.get_object("join_button").unwrap();
-    join_button.connect_button_press_event(
+    join_button.connect_button_release_event(
         client.connector()
             .do_async(move |client, (_, _)| {
                 let code = embed.code.clone();

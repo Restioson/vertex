@@ -36,16 +36,6 @@ impl Ui {
         let content: gtk::Box = builder.get_object("content").unwrap();
 
         let settings_button: gtk::Button = builder.get_object("settings_button").unwrap();
-        let settings_image = settings_button.get_child()
-            .and_then(|img| img.downcast::<gtk::Image>().ok())
-            .unwrap();
-
-        settings_image.set_from_pixbuf(Some(
-            &gdk_pixbuf::Pixbuf::new_from_file_at_size(
-                "res/feather/settings.svg",
-                20, 20,
-            ).unwrap()
-        ));
 
         Ui {
             main,
@@ -64,7 +54,7 @@ impl client::ClientUi for Ui {
     type MessageEntryWidget = MessageEntryWidget;
 
     fn bind_events(&self, client: &Client<Ui>) {
-        self.settings_button.connect_button_press_event(
+        self.settings_button.connect_button_release_event(
             client.connector()
                 .do_async(|client, (_button, _event)| async move {
                     let screen = screen::settings::build(client);
@@ -73,7 +63,7 @@ impl client::ClientUi for Ui {
                 .build_widget_event()
         );
 
-        self.add_community_button.connect_button_press_event(
+        self.add_community_button.connect_button_release_event(
             client.connector()
                 .do_sync(|screen, _| show_add_community(screen))
                 .build_widget_event()
@@ -81,12 +71,10 @@ impl client::ClientUi for Ui {
     }
 
     fn add_community(&self, name: String) -> CommunityEntryWidget {
-        let widget = CommunityEntryWidget::build(name);
+        let entry = CommunityEntryWidget::build(name);
+        self.communities.add(&entry.expander.widget);
 
-        self.communities.add(&widget.expander);
-        widget.expander.show_all();
-
-        widget
+        entry
     }
 
     fn build_chat_widget(&self) -> ChatWidget {

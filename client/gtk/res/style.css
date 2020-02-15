@@ -138,6 +138,13 @@ scrollbar slider:hover:active {
   background-color: shade(@room_list_bg_color, 1.1);
 }
 
+popover {
+  background: @dialog_bg_color;
+  padding: 10px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px 1px rgba(0, 0, 0, 0.35);
+}
+
 #dialog_bg {
   background-color: rgba(0, 0, 0, 0.4);
 }
@@ -302,45 +309,17 @@ scrollbar slider:hover:active {
   transition: none;
 }
 
-#active #community_content {
-  background: @room_list_bg_color;
-  padding: 6px 0px;
-}
-
-#active #room_list {
-  margin-top: 4px;
-}
-
-#active #room_list row {
-  background: @room_list_bg_color;
-  margin-left: 35px;
-  margin-right: 10px;
-  border-radius: 6px;
-}
-
-#active #room_list row:hover {
-  background: shade(@room_list_bg_color, 1.1);
-}
-
-#active #room_list row:selected {
-  background: shade(@room_list_bg_color, 1.3);
-}
-
-#active #community_widgets {
-  background: @room_list_bg_color;
-  margin: 0px 4px;
-}
-
-#active #community_widgets button {
-  padding: 6px;
-  border-radius: 12px;
-}
-
-#active #community_expander {
+#active #sidebar #community_expander {
   margin: 4px 0px;
 }
 
-#active #community_header {
+#active #sidebar #community_expander arrow {
+  -gtk-icon-source: none;
+  min-width: 0px;
+  min-height: 0px;
+}
+
+#active #sidebar #community_header {
   margin: 4px;
 }
 
@@ -370,11 +349,42 @@ scrollbar slider:hover:active {
   font-style: italic;
 }
 
+#active #sidebar #room_list {
+  background: @room_list_bg_color;
+  padding: 6px 0px;
+  margin-top: 4px;
+}
+
+#active #sidebar #room_list row {
+  background: @room_list_bg_color;
+  border-radius: 6px;
+  margin: 0px 4px;
+  margin-left: 40px;
+  margin-right: 10px;
+}
+
+#active #sidebar #room_list row:hover {
+  background: shade(@room_list_bg_color, 1.1);
+}
+
+#active #sidebar #room_list row:selected {
+  background: shade(@room_list_bg_color, 1.3);
+}
+
 #active #room_label {
   color: #d0d0d0;
   font-size: 14px;
   font-weight: 500;
   padding-left: 4px;
+}
+
+#community_menu button {
+  padding: 6px;
+  border-radius: 12px;
+}
+
+#community_menu button label {
+  margin-left: 8px;
 }
 
 #active #message_group {
