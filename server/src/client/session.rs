@@ -2,8 +2,8 @@ use std::fmt::Debug;
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
-use futures::{Future, SinkExt, TryStreamExt};
 use futures::stream::SplitSink;
+use futures::{Future, SinkExt, TryStreamExt};
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
@@ -11,9 +11,9 @@ use xtra::prelude::*;
 pub use manager::*;
 use vertex::*;
 
-use crate::{auth, handle_disconnected, IdentifiedMessage};
-use crate::community::{COMMUNITIES, CommunityActor, Connect, CreateRoom, GetRoomStructures, Join};
+use crate::community::{CommunityActor, Connect, CreateRoom, GetRoomStructures, Join, COMMUNITIES};
 use crate::database::*;
+use crate::{auth, handle_disconnected, IdentifiedMessage};
 
 use super::*;
 
@@ -163,13 +163,20 @@ impl Handler<ForwardMessage> for ActiveSession {
                     let msg = if looking_at == Some((community, room))
                         || user_room.watching == WatchingState::Watching
                     {
-                        ServerMessage::Event(ServerEvent::AddMessage(fwd.0))
+                        Some(ServerMessage::Event(ServerEvent::AddMessage(fwd.0)))
+                    } else if !user_room.unread {
+                        Some(ServerMessage::Event(ServerEvent::NotifyMessageReady {
+                            room,
+                            community,
+                        }))
                     } else {
-                        ServerMessage::Event(ServerEvent::NotifyMessageReady { room, community })
+                        None
                     };
 
-                    if self.send(msg).await.is_err() {
-                        ctx.stop()
+                    if let Some(msg) = msg {
+                        if self.send(msg).await.is_err() {
+                            ctx.stop()
+                        }
                     }
                 }
             };
@@ -182,11 +189,7 @@ impl Handler<ForwardMessage> for ActiveSession {
 impl Handler<AddRoom> for ActiveSession {
     type Responder<'a> = impl Future<Output = ()> + 'a;
 
-    fn handle<'a>(
-        &'a mut self,
-        add: AddRoom,
-        ctx: &'a mut Context<Self>,
-    ) -> Self::Responder<'a> {
+    fn handle<'a>(&'a mut self, add: AddRoom, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
         async move {
             let db = &self.global.database;
             let mut user = manager::get_active_user_mut(self.user).unwrap();
@@ -194,7 +197,10 @@ impl Handler<AddRoom> for ActiveSession {
             if let Some(community) = user.communities.get_mut(&add.community) {
                 community.rooms.insert(
                     add.structure.id,
-                    UserRoom { watching: WatchingState::default() },
+                    UserRoom {
+                        watching: WatchingState::default(),
+                        unread: true,
+                    },
                 );
 
                 let msg = ServerMessage::Event(ServerEvent::AddRoom {
@@ -280,7 +286,7 @@ impl ActiveSession {
                 device: self.device,
                 session: ctx.address().unwrap(),
             })
-                .unwrap();
+            .unwrap();
 
             let structure = CommunityStructure {
                 id: *id,
@@ -333,14 +339,14 @@ impl ActiveSession {
                 device,
                 perms,
             }
-                .handle_request(msg.request)
-                .await;
+            .handle_request(msg.request)
+            .await;
 
             self.send(ServerMessage::Response {
                 id: msg.id,
                 result: response,
             })
-                .await?;
+            .await?;
         } else if message.is_close() {
             ctx.stop();
         } else {
@@ -403,8 +409,7 @@ impl<'a> RequestHandler<'a> {
             ClientRequest::SetAsRead {
                 community,
                 room,
-                latest,
-            } => self.set_as_read(community, room, latest).await,
+            } => self.set_as_read(community, room).await,
             _ => unimplemented!(),
         }
     }
@@ -589,7 +594,9 @@ impl<'a> RequestHandler<'a> {
 
         let db = &self.session.global.database;
         let id = db.create_community(name.clone()).await?;
-        let res = db.create_default_user_room_states_for_user(id, self.user).await?;
+        let res = db
+            .create_default_user_room_states_for_user(id, self.user)
+            .await?;
 
         match res {
             Ok(_) => {
@@ -696,7 +703,10 @@ impl<'a> RequestHandler<'a> {
 
                 community.rooms.insert(
                     room.id,
-                    UserRoom { watching: WatchingState::default() },
+                    UserRoom {
+                        watching: WatchingState::default(),
+                        unread: true,
+                    },
                 );
 
                 return Ok(OkResponse::AddRoom {
@@ -798,14 +808,13 @@ impl<'a> RequestHandler<'a> {
         self,
         community: CommunityId,
         room: RoomId,
-        latest: MessageId,
     ) -> ResponseResult {
         if !self.session.in_community(&community) {
             return Err(ErrResponse::InvalidCommunity);
         }
 
         let db = &self.session.global.database;
-        let res = db.set_last_read(room, self.user, latest).await?;
+        let res = db.set_room_read(room, self.user).await?;
 
         match res {
             Ok(_) => Ok(OkResponse::NoData),

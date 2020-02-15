@@ -82,11 +82,9 @@ pub enum ClientRequest {
         base: MessageId,
         max: u64,
     },
-    /// Set all messages before a given message ID as read
     SetAsRead {
         community: CommunityId,
         room: RoomId,
-        latest: MessageId
     },
     CreateCommunity {
         name: String,

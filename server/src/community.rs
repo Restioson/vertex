@@ -1,4 +1,4 @@
-use crate::client::session::{ForwardMessage, SendMessage, AddRoom};
+use crate::client::session::{AddRoom, ForwardMessage, SendMessage};
 use crate::client::{self, ActiveSession, Session};
 use crate::database::{AddToCommunityError, CommunityRecord, Database, DbResult};
 use crate::{handle_disconnected, IdentifiedMessage};
@@ -253,12 +253,9 @@ impl Handler<CreateRoom> for CommunityActor {
     fn handle(&mut self, create: CreateRoom, _: &mut Context<Self>) -> Self::Responder<'_> {
         async move {
             let db = &self.database;
-            let id = db
-                .create_room(self.id, create.name.clone())
-                .await?;
+            let id = db.create_room(self.id, create.name.clone()).await?;
 
-            db
-                .create_default_user_room_states_for_room(self.id, id)
+            db.create_default_user_room_states_for_room(self.id, id)
                 .await?
                 .expect("Error creating default user room states for new room");
 

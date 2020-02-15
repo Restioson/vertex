@@ -241,9 +241,9 @@ impl Database {
         hash_scheme_version: HashSchemeVersion,
     ) -> DbResult<Result<(), NonexistentUser>> {
         const STMT: &str = "
-            UPDATE users SET
-                password_hash = $1, hash_scheme_version = $2, compromised = $3
-            WHERE id = $4";
+            UPDATE users
+                SET password_hash = $1, hash_scheme_version = $2, compromised = $3
+                WHERE id = $4";
 
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(STMT).await?;

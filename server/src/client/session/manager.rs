@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use vertex::*;
 
 use super::*;
-use futures::TryStreamExt;
+use futures::{TryStreamExt, Stream};
 use std::collections::HashMap;
 
 lazy_static! {
@@ -90,12 +90,15 @@ pub struct UserCommunity {
 
 impl UserCommunity {
     pub async fn load(db: &Database, user: UserId, community: CommunityId) -> DbResult<Self> {
-        let rooms = db
-            .get_watching_states(user, community)
+        let stream = db
+            .get_user_room_states(user, community)
             .await?
-            .map_ok(|(id, watching)| (id, UserRoom { watching }))
-            .try_collect()
-            .await?;
+            .map_ok(|state| (state.room, UserRoom {
+                watching: state.watching_state,
+                unread: state.unread,
+            }));
+
+        let rooms = stream.try_collect().await?;
 
         Ok(UserCommunity { rooms })
     }
@@ -104,6 +107,7 @@ impl UserCommunity {
 #[derive(Debug)]
 pub struct UserRoom {
     pub watching: WatchingState,
+    pub unread: bool,
 }
 
 pub async fn insert(db: Database, user: UserId, device: DeviceId) -> DbResult<Result<(), ()>> {

@@ -19,9 +19,8 @@ pub(super) const CREATE_USER_ROOM_STATES_TABLE: &str = r#"
 
 pub struct UserRoomState {
     pub room: RoomId,
-    user: UserId,
     pub watching_state: WatchingState,
-    pub last_read: Option<MessageOrdinal>,
+    pub unread: bool,
 }
 
 impl TryFrom<Row> for UserRoomState {
@@ -29,13 +28,11 @@ impl TryFrom<Row> for UserRoomState {
 
     fn try_from(row: Row) -> Result<UserRoomState, tokio_postgres::Error> {
         let ws = row.try_get::<&str, i8>("watching_state")? as u8;
-        let last_read = row.try_get::<&str, Option<i64>>("last_read")?;
 
         Ok(UserRoomState {
             room: RoomId(row.try_get("room")?),
-            user: UserId(row.try_get("user_id")?),
             watching_state: WatchingState::from(ws),
-            last_read: last_read.map(|v| MessageOrdinal(v as u64)),
+            unread: row.try_get("unread")?,
         })
     }
 }
@@ -130,25 +127,25 @@ impl Database {
         handle_sql_error(res)
     }
 
-    pub async fn set_last_read(
+    pub async fn set_room_read(
         &self,
         room: RoomId,
         user: UserId,
-        last_read: MessageId,
     ) -> DbResult<Result<(), SetUserRoomStateError>> {
         const STMT: &str = "
-            WITH last_read_ord AS (
-                COALESCE(SELECT ord FROM messages WHERE id = $1, 0::BIGINT)
+            WITH last_read_ord(ord) AS (
+                COALESCE(SELECT MAX(ord) FROM messages GROUP BY room = $2, 0::BIGINT)
             )
-            UPDATE user_room_state
-                WHERE user = $2 AND room = $3
+            UPDATE user_room_states
                 SET last_read = last_read_ord.ord
+                FROM last_read_ord
+                WHERE user_id = $1 AND room = $2
             ";
 
         let conn = self.pool.connection().await?;
 
         let stmt = conn.client.prepare(STMT).await?;
-        let args: &[&(dyn ToSql + Sync)] = &[&last_read.0, &user.0, &room.0];
+        let args: &[&(dyn ToSql + Sync)] = &[&user.0, &room.0];
         let res = conn.client.execute(&stmt, args).await;
 
         handle_sql_error(res)
@@ -161,9 +158,9 @@ impl Database {
         state: WatchingState,
     ) -> DbResult<Result<(), SetUserRoomStateError>> {
         const STMT: &str = "
-            UPDATE user_room_state
-                WHERE user = $1 AND room = $2
+            UPDATE user_room_states
                 SET watching_state = $3
+                WHERE user_id = $1 AND room = $2
             ";
 
         let conn = self.pool.connection().await?;
@@ -175,15 +172,27 @@ impl Database {
         handle_sql_error(res)
     }
 
-    pub async fn get_watching_states(
+    pub async fn get_user_room_states(
         &self,
         user: UserId,
         community: CommunityId,
-    ) -> DbResult<impl Stream<Item = DbResult<(RoomId, WatchingState)>>> {
+    ) -> DbResult<impl Stream<Item = DbResult<UserRoomState>>> {
         const QUERY: &str = "
-            SELECT rooms.id, watching_state FROM rooms
+            SELECT
+                rooms.id,
+                user_room_states.watching_state,
+                (
+                    SELECT
+                        user_room_states.last_read IS DISTINCT FROM MAX(messages.ord)
+                    FROM messages
+                    GROUP BY rooms.id
+                ) as unread
+            FROM rooms
             INNER JOIN user_room_states ON rooms.id = user_room_states.room
                 WHERE rooms.community = $1 AND user_room_states.user_id = $2
+            INNER JOIN
+                SELECT user_room_states.last_read IS DISTINCT FROM MAX(messages.ord)
+                FROM messages
         ";
 
         let conn = self.pool.connection().await?;
@@ -196,11 +205,7 @@ impl Database {
 
         let stream = stream
             .and_then(|row| async move {
-                let ws = row
-                    .try_get::<&str, Option<i8>>("watching_state")?
-                    .map(|v| WatchingState::from(v as u8));
-
-                Ok((RoomId(row.try_get("id")?), ws.unwrap_or_default()))
+                Ok(UserRoomState::try_from(row)?)
             })
             .map_err(|e| e.into());
 
