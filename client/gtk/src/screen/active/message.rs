@@ -6,75 +6,14 @@ use crate::client::{self, InviteEmbed, MessageEmbed, MessageStatus, OpenGraphEmb
 
 use super::*;
 
-pub struct MessageListWidget {
-    pub scroll: gtk::ScrolledWindow,
-    pub list: gtk::ListBox,
-    pub last_group: Option<GroupedMessageWidget>,
-}
-
-impl MessageListWidget {
-    fn next_group(&mut self, author: UserId, profile: UserProfile) -> &GroupedMessageWidget {
-        match &self.last_group {
-            Some(group) if group.author == author => {}
-            _ => {
-                let group = GroupedMessageWidget::build(author, profile);
-                self.list.insert(&group.widget, -1);
-                self.last_group = Some(group);
-            }
-        }
-
-        self.last_group.as_ref().unwrap()
-    }
-}
-
-impl client::MessageListWidget<Ui> for MessageListWidget {
-    fn clear(&mut self) {
-        for child in self.list.get_children() {
-            self.list.remove(&child);
-        }
-        self.last_group = None;
-    }
-
-    fn push_message(&mut self, author: UserId, author_profile: UserProfile, content: String) -> MessageEntryWidget {
-        let group = self.next_group(author, author_profile);
-        let widget = group.push_message(content);
-
-        widget
-    }
-
-    fn bind_events(&self, list: &client::MessageList<Ui>) {
-        let adjustment = self.scroll.get_vadjustment().unwrap();
-
-        adjustment.connect_value_changed(
-            list.connector()
-                .do_async(|list, adjustment: gtk::Adjustment| async move {
-                    let upper = adjustment.get_upper() - adjustment.get_page_size();
-                    let reading_new = adjustment.get_value() + 10.0 >= upper;
-                    list.set_reading_new(reading_new).await;
-                })
-                .build_cloned_consumer()
-        );
-
-        self.list.connect_size_allocate(
-            (list.clone(), adjustment).connector()
-                .do_async(|(list, adjustment), (_, _)| async move {
-                    if list.reading_new().await {
-                        adjustment.set_value(adjustment.get_upper() - adjustment.get_page_size());
-                    }
-                })
-                .build_widget_listener()
-        );
-    }
-}
-
 pub struct GroupedMessageWidget {
-    author: UserId,
-    widget: gtk::Box,
-    entry_list: gtk::ListBox,
+    pub author: UserId,
+    pub widget: gtk::Box,
+    pub entry_list: gtk::ListBox,
 }
 
 impl GroupedMessageWidget {
-    fn build(author: UserId, profile: UserProfile) -> GroupedMessageWidget {
+    pub fn build(author: UserId, profile: UserProfile) -> GroupedMessageWidget {
         let builder = gtk::Builder::new_from_file("res/glade/active/message_entry.glade");
 
         let widget: gtk::Box = builder.get_object("message_group").unwrap();
@@ -89,7 +28,7 @@ impl GroupedMessageWidget {
         GroupedMessageWidget { author, widget, entry_list }
     }
 
-    fn push_message(&self, content: String) -> MessageEntryWidget {
+    pub fn push_message(&self, content: String) -> MessageEntryWidget {
         let entry = MessageEntryWidget::build(content);
         self.entry_list.add(&entry.widget);
         self.entry_list.show_all();

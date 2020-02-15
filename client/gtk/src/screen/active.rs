@@ -1,5 +1,6 @@
 use gtk::prelude::*;
 
+use chat::*;
 use community::*;
 use dialog::*;
 use message::*;
@@ -16,23 +17,23 @@ mod community;
 mod dialog;
 mod message;
 mod room;
+mod chat;
 
 #[derive(Clone)]
 pub struct Ui {
-    pub main: gtk::Viewport,
+    pub main: gtk::Box,
+    content: gtk::Box,
     communities: gtk::ListBox,
-    messages_scroll: gtk::ScrolledWindow,
-    messages_list: gtk::ListBox,
-    message_entry: gtk::Entry,
     settings_button: gtk::Button,
     add_community_button: gtk::Button,
 }
 
 impl Ui {
     fn build() -> Self {
-        let builder = gtk::Builder::new_from_file("res/glade/active/active.glade");
+        let builder = gtk::Builder::new_from_file("res/glade/active/main.glade");
 
-        let main: gtk::Viewport = builder.get_object("main").unwrap();
+        let main: gtk::Box = builder.get_object("main").unwrap();
+        let content: gtk::Box = builder.get_object("content").unwrap();
 
         let settings_button: gtk::Button = builder.get_object("settings_button").unwrap();
         let settings_image = settings_button.get_child()
@@ -47,31 +48,22 @@ impl Ui {
         ));
 
         Ui {
-            main: main.clone(),
+            main,
+            content,
             communities: builder.get_object("communities").unwrap(),
-            messages_scroll: builder.get_object("messages_scroll").unwrap(),
-            messages_list: builder.get_object("messages").unwrap(),
-            message_entry: builder.get_object("message_entry").unwrap(),
             settings_button,
             add_community_button: builder.get_object("add_community_button").unwrap(),
         }
     }
+}
+
+impl client::ClientUi for Ui {
+    type CommunityEntryWidget = CommunityEntryWidget;
+    type RoomEntryWidget = RoomEntryWidget;
+    type ChatWidget = ChatWidget;
+    type MessageEntryWidget = MessageEntryWidget;
 
     fn bind_events(&self, client: &Client<Ui>) {
-        self.message_entry.connect_activate(
-            client.connector()
-                .do_async(|client, entry: gtk::Entry| async move {
-                    if let Some(selected_room) = client.selected_room().await {
-                        let content = entry.try_get_text().unwrap_or_default();
-                        if !content.trim().is_empty() {
-                            entry.set_text("");
-                            let _ = selected_room.send_message(content).await;
-                        }
-                    }
-                })
-                .build_cloned_consumer()
-        );
-
         self.settings_button.connect_button_press_event(
             client.connector()
                 .do_async(|client, (_button, _event)| async move {
@@ -87,13 +79,6 @@ impl Ui {
                 .build_widget_event()
         );
     }
-}
-
-impl client::ClientUi for Ui {
-    type CommunityEntryWidget = CommunityEntryWidget;
-    type RoomEntryWidget = RoomEntryWidget;
-    type MessageListWidget = MessageListWidget;
-    type MessageEntryWidget = MessageEntryWidget;
 
     fn add_community(&self, name: String) -> CommunityEntryWidget {
         let widget = CommunityEntryWidget::build(name);
@@ -104,12 +89,14 @@ impl client::ClientUi for Ui {
         widget
     }
 
-    fn build_message_list(&self) -> MessageListWidget {
-        MessageListWidget {
-            scroll: self.messages_scroll.clone(),
-            list: self.messages_list.clone(),
-            last_group: None,
-        }
+    fn build_chat_widget(&self) -> ChatWidget {
+        let chat = ChatWidget::build();
+        self.content.add(&chat.main);
+        self.content.set_child_packing(&chat.main, true, true, 0, gtk::PackType::Start);
+
+        self.content.show_all();
+
+        chat
     }
 
     fn window_focused(&self) -> bool {
@@ -123,7 +110,6 @@ pub async fn start(parameters: AuthParameters) {
 
     match try_start(parameters.clone()).await {
         Ok(client) => {
-            client.ui.bind_events(&client);
             window::set_screen(&client.ui.main);
         }
         Err(error) => {

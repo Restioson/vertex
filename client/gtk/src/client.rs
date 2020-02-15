@@ -6,6 +6,7 @@ use ears::{AudioController, Sound};
 use futures::{Stream, StreamExt};
 use futures::lock::Mutex;
 
+pub use chat::*;
 pub use community::*;
 pub use message::*;
 pub use profile::*;
@@ -21,6 +22,7 @@ mod room;
 mod user;
 mod message;
 mod profile;
+mod chat;
 
 pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
 
@@ -28,11 +30,14 @@ pub trait ClientUi: Sized + Clone + 'static {
     type CommunityEntryWidget: CommunityEntryWidget<Self>;
     type RoomEntryWidget: RoomEntryWidget<Self>;
 
-    type MessageListWidget: MessageListWidget<Self>;
+    type ChatWidget: ChatWidget<Self>;
+
     type MessageEntryWidget: MessageEntryWidget<Self>;
 
+    fn bind_events(&self, client: &Client<Self>);
+
     fn add_community(&self, name: String) -> Self::CommunityEntryWidget;
-    fn build_message_list(&self) -> Self::MessageListWidget;
+    fn build_chat_widget(&self) -> Self::ChatWidget;
     fn window_focused(&self) -> bool;
 }
 
@@ -63,7 +68,7 @@ pub struct Client<Ui: ClientUi> {
     pub ui: Ui,
     pub user: User,
     pub profiles: ProfileCache,
-    pub message_list: MessageList<Ui>,
+    pub chat: Chat<Ui>,
 
     pub notif_sound: Option<Arc<Mutex<Sound>>>,
 
@@ -93,7 +98,8 @@ impl<Ui: ClientUi> Client<Ui> {
 
         let profiles = ProfileCache::new(request.clone(), user.clone());
 
-        let message_list = MessageList::new(ui.build_message_list());
+        let chat = Chat::new(ui.build_chat_widget());
+        chat.set_room(None).await;
 
         let state = SharedMut::new(ClientState {
             communities: Vec::new(),
@@ -105,7 +111,8 @@ impl<Ui: ClientUi> Client<Ui> {
             Err(_) => None
         };
 
-        let client = Client { request, ui, user, profiles, message_list, notif_sound, state };
+        let client = Client { request, ui, user, profiles, chat, notif_sound, state };
+        client.bind_events().await;
 
         for community in ready.communities {
             client.add_community(community).await;
@@ -118,6 +125,11 @@ impl<Ui: ClientUi> Client<Ui> {
         }.run());
 
         Ok(client)
+    }
+
+    async fn bind_events(&self) {
+        self.ui.bind_events(&self);
+        self.chat.bind_events(&self).await;
     }
 
     pub async fn handle_event(&self, event: ServerEvent) {
@@ -142,7 +154,7 @@ impl<Ui: ClientUi> Client<Ui> {
                     room.add_message(MessageSource {
                         author: message.author,
                         author_profile_version: Some(message.author_profile_version),
-                        content: message.content
+                        content: message.content,
                     }).await;
 
                     if !self.ui.window_focused() || self.selected_room().await != Some(room) {
@@ -209,11 +221,7 @@ impl<Ui: ClientUi> Client<Ui> {
 
     pub async fn select_room(&self, room: Option<RoomEntry<Ui>>) {
         let mut state = self.state.write().await;
-
-        match &room {
-            Some(room) => self.message_list.set_stream(&room.message_stream).await,
-            None => self.message_list.detach_stream().await,
-        }
+        self.chat.set_room(room.as_ref()).await;
 
         state.selected_room = room;
     }

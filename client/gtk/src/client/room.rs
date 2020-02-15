@@ -1,17 +1,13 @@
 use vertex::*;
 
-use crate::{Client, SharedMut};
-use crate::client::community::CommunityEntry;
+use crate::Client;
 
 use super::{ClientUi, Result};
+use super::community::*;
 use super::message::*;
 
 pub trait RoomEntryWidget<Ui: ClientUi>: Clone {
     fn bind_events(&self, room: &RoomEntry<Ui>);
-}
-
-pub struct RoomState {
-    name: String,
 }
 
 #[derive(Clone)]
@@ -25,7 +21,7 @@ pub struct RoomEntry<Ui: ClientUi> {
     pub community: CommunityEntry<Ui>,
     pub id: RoomId,
 
-    state: SharedMut<RoomState>,
+    pub name: String,
 }
 
 impl<Ui: ClientUi> RoomEntry<Ui> {
@@ -37,10 +33,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
         name: String,
     ) -> Self {
         let message_stream = MessageStream::new(id.0, client.clone());
-        let state = RoomState { name };
-        let state = SharedMut::new(state);
-
-        RoomEntry { client, widget, message_stream, community, id, state }
+        RoomEntry { client, widget, message_stream, community, id, name }
     }
 
     pub async fn add_message(&self, message: MessageSource) {
@@ -61,6 +54,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
                 message.set_status(MessageStatus::Pending);
 
                 let result = self.send_message_request(content).await;
+
                 match result {
                     Ok(_) => message.set_status(MessageStatus::Ok),
                     Err(_) => message.set_status(MessageStatus::Err),

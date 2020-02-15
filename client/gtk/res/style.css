@@ -1,6 +1,6 @@
 @define-color content_bg_color #343434;
 @define-color sidebar_bg_color #303030;
-@define-color upper_bar_bg_color #3D3D3D;
+@define-color toolbar_bg_color #3D3D3D;
 @define-color lower_bar_bg_color #2D2D2D;
 
 @define-color dialog_bg_color #313131;
@@ -45,7 +45,7 @@ entry:focus {
 
 entry selection, textview selection, label selection {
   color: #ffffff;
-  background-color: @accent_color;
+  background: @accent_color;
 }
 
 expander arrow {
@@ -157,8 +157,8 @@ scrollbar slider:hover:active {
   active screen
 */
 
-#active #upper_bar {
-  background: @upper_bar_bg_color;
+#active #toolbar {
+  background: @toolbar_bg_color;
   min-height: 30px;
 }
 
@@ -189,7 +189,17 @@ scrollbar slider:hover:active {
   background: @lower_bar_bg_color;
 }
 
-#active #content_lower_bar {
+#active #chat #chat_header {
+  background: @sidebar_bg_color;
+  min-height: 26px;
+}
+
+#active #chat #room_name {
+  font-size: 14px;
+  padding-left: 8px;
+}
+
+#active #chat #lower_bar {
   background: @lower_bar_bg_color;
 }
 
@@ -206,6 +216,16 @@ scrollbar slider:hover:active {
   background: @message_entry_color;
   margin: 7px 4px;
   border-radius: 10px;
+}
+
+#active #message_entry.disabled {
+  background: shade(@message_entry_color, 0.95);
+  color: transparent;
+}
+
+#active #message_entry.disabled selection {
+  color: transparent;
+  background: transparent;
 }
 
 #active #message .embed {
@@ -379,7 +399,7 @@ scrollbar slider:hover:active {
 
 #active #entry_list row {
   padding: 2px;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 #active #entry_list row:hover {
@@ -388,26 +408,25 @@ scrollbar slider:hover:active {
 
 #active #message #message_text {
   color: #e0e0e0;
-  padding-left: 2px;
 }
 
-#active #message .pending {
+#active #message #message_text.pending {
   color: #a0a0a0;
 }
 
-#active #message .error {
+#active #message #message_text.error {
   color: @error_color;
 }
 
-#active #upper_bar #settings_button {
-  background: @upper_bar_bg_color;
+#active #toolbar #settings_button {
+  background: @toolbar_bg_color;
   margin: 4px;
   padding: 4px;
   border-radius: 8px;
 }
 
-#active #upper_bar #settings_button:hover {
-  background: shade(@upper_bar_bg_color, 1.2);
+#active #toolbar #settings_button:hover {
+  background: shade(@toolbar_bg_color, 1.2);
 }
 
 #add_community {
