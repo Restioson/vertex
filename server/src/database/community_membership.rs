@@ -153,7 +153,15 @@ impl Database {
 
                 match res.source {
                     // Membership row did not exist - user has been successfully added
-                    Insert => Ok(Ok(())),
+                    Insert => {
+                        let res = self
+                            .create_default_user_room_states(community, user)
+                            .await?;
+                        match res {
+                            Ok(_) => Ok(Ok(())),
+                            Err(InvalidUser) => Ok(Err(AddToCommunityError::InvalidUser)),
+                        }
+                    }
 
                     // Membership row already existed - conflict of some sort
                     Select | Update => Ok(Err(AddToCommunityError::AlreadyInCommunity)),

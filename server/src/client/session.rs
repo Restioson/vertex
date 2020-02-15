@@ -357,7 +357,15 @@ impl<'a> RequestHandler<'a> {
                 room,
                 base,
                 max,
-            } => self.get_messages_before_base(community, room, base, max as usize).await,
+            } => {
+                self.get_messages_before_base(community, room, base, max as usize)
+                    .await
+            }
+            ClientRequest::SetAsRead {
+                community,
+                room,
+                latest,
+            } => self.set_as_read(community, room, latest).await,
             _ => unimplemented!(),
         }
     }
@@ -498,7 +506,7 @@ impl<'a> RequestHandler<'a> {
             .await?
         {
             Ok(()) => Ok(OkResponse::NoData),
-            Err(NonexistentUser) => {
+            Err(_) => {
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(ErrResponse::UserDeleted)
             }
@@ -525,7 +533,7 @@ impl<'a> RequestHandler<'a> {
 
         match res {
             Ok(()) => Ok(OkResponse::NoData),
-            Err(NonexistentUser) => {
+            Err(_) => {
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(ErrResponse::UserDeleted)
             }
@@ -734,5 +742,28 @@ impl<'a> RequestHandler<'a> {
         let msgs = stream.map_forwarded_messages().try_collect().await?;
 
         Ok(OkResponse::Messages(msgs))
+    }
+
+    async fn set_as_read(
+        self,
+        community: CommunityId,
+        room: RoomId,
+        latest: MessageId,
+    ) -> ResponseResult {
+        if !self.session.in_community(&community) {
+            return Err(ErrResponse::InvalidCommunity);
+        }
+
+        let db = &self.session.global.database;
+        let res = db.set_last_read(room, self.user, latest).await?;
+
+        match res {
+            Ok(_) => Ok(OkResponse::NoData),
+            Err(SetUserRoomStateError::InvalidRoom) => Err(ErrResponse::InvalidRoom),
+            Err(SetUserRoomStateError::InvalidUser) => {
+                self.ctx.stop(); // The user did not exist at the time of request
+                Err(ErrResponse::UserDeleted)
+            }
+        }
     }
 }

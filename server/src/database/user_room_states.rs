@@ -5,7 +5,7 @@ use std::error::Error as ErrorTrait;
 use tokio_postgres::error::{DbError, Error, SqlState};
 use tokio_postgres::types::ToSql;
 use tokio_postgres::Row;
-use vertex::{CommunityId, RoomId, UserId};
+use vertex::{CommunityId, MessageId, RoomId, UserId};
 
 pub(super) const CREATE_USER_ROOM_STATES_TABLE: &str = r#"
     CREATE TABLE IF NOT EXISTS user_room_states (
@@ -69,52 +69,84 @@ pub enum SetUserRoomStateError {
     InvalidRoom,
 }
 
+pub struct InvalidUser;
+
 impl Database {
     pub async fn create_default_user_room_states(
         &self,
         community: CommunityId,
         user: UserId,
-    ) -> DbResult<Result<(), SetUserRoomStateError>> {
+    ) -> DbResult<Result<(), InvalidUser>> {
         const STMT: &str = "
             INSERT INTO user_room_states (room, user_id, watching_state, last_read)
-                SELECT (
-                    SELECT rooms.id, $2, $3, MAX(messages.id)
+                SELECT rooms.id, $1, $2, MAX(messages.ord)
                     FROM rooms
                     INNER JOIN messages ON rooms.id = messages.room
-                    WHERE messages.community = $1
-                )
+                    WHERE messages.community = $3
+                    GROUP BY rooms.id
         ";
 
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(STMT).await?;
-        let args: &[&(dyn ToSql + Sync)] = &[&user.0, &(WatchingState::default() as u8 as i8)];
+        let args: &[&(dyn ToSql + Sync)] = &[
+            &user.0,
+            &(WatchingState::default() as u8 as i8),
+            &community.0,
+        ];
         let res = conn.client.execute(&stmt, args).await;
 
-        handle_sql_error(res)
+        handle_sql_error(res).map(|res| {
+            res.map_err(|e| match e {
+                SetUserRoomStateError::InvalidUser => InvalidUser,
+                SetUserRoomStateError::InvalidRoom => panic!(
+                    "{}{}",
+                    "Create default user room states returned invalid room",
+                    "; this should be impossible!",
+                ),
+            })
+        })
     }
 
-    pub async fn set_user_room_states(
+    pub async fn set_last_read(
         &self,
         room: RoomId,
         user: UserId,
-        state: WatchingState,
-        last_read: MessageOrdinal,
+        last_read: MessageId,
     ) -> DbResult<Result<(), SetUserRoomStateError>> {
         const STMT: &str = "
-            INSERT INTO user_room_states (room, user_id, watching_state, last_read)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT UPDATE SET watching_state = $3, last_read = $4
+            WITH last_read_ord AS (
+                SELECT ord FROM messages WHERE id = $1
+            )
+            UPDATE user_room_state
+                WHERE user = $2 AND room = $3
+                SET last_read = last_read_ord.ord
             ";
 
         let conn = self.pool.connection().await?;
 
         let stmt = conn.client.prepare(STMT).await?;
-        let args: &[&(dyn ToSql + Sync)] = &[
-            &room.0,
-            &user.0,
-            &(state as u8 as i8),
-            &(last_read.0 as i64),
-        ];
+        let args: &[&(dyn ToSql + Sync)] = &[&last_read.0, &user.0, &room.0];
+        let res = conn.client.execute(&stmt, args).await;
+
+        handle_sql_error(res)
+    }
+
+    pub async fn set_watching(
+        &self,
+        room: RoomId,
+        user: UserId,
+        state: WatchingState,
+    ) -> DbResult<Result<(), SetUserRoomStateError>> {
+        const STMT: &str = "
+            UPDATE user_room_state
+                WHERE user = $1 AND room = $2
+                SET watching_state = $3
+            ";
+
+        let conn = self.pool.connection().await?;
+
+        let stmt = conn.client.prepare(STMT).await?;
+        let args: &[&(dyn ToSql + Sync)] = &[&user.0, &room.0, &(state as u8 as i8)];
         let res = conn.client.execute(&stmt, args).await;
 
         handle_sql_error(res)
