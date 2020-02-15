@@ -105,7 +105,10 @@ impl Database {
     ) -> DbResult<impl Stream<Item = DbResult<(ProfileVersion, MessageRecord)>>> {
         const QUERY: &str = "
             WITH last_read_tbl AS (
-                SELECT last_read FROM user_room_states WHERE user_id = $3
+                COALESCE(
+                    SELECT last_read FROM user_room_states WHERE user_id = $3,
+                     0::BIGINT
+                 )
             )
             SELECT messages.*, users.profile_version FROM messages
             INNER JOIN users ON messages.author = users.id
@@ -146,7 +149,10 @@ impl Database {
     ) -> DbResult<impl Stream<Item = DbResult<(ProfileVersion, MessageRecord)>>> {
         const QUERY: &str = "
             WITH base_ord AS (
-                SELECT ord FROM messages WHERE id = $3
+                COALESCE(
+                    SELECT ord FROM messages WHERE id = $3,
+                    0::BIGINT,
+                )
             )
             SELECT messages.*, users.profile_version FROM messages
             INNER JOIN users ON messages.author = users.id

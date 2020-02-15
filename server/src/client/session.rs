@@ -548,15 +548,21 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::AccessDenied);
         }
 
-        let id = self
-            .session
-            .global
-            .database
-            .create_community(name.clone())
-            .await?;
-        CommunityActor::create_and_spawn(name, id, self.session.global.database.clone(), self.user);
+        let db = &self.session.global.database;
+        let id = db.create_community(name.clone()).await?;
+        let res = db.create_default_user_room_states(id, self.user).await?;
 
-        self.join_community_by_id(id).await
+        match res {
+            Ok(_) => {
+                CommunityActor::create_and_spawn(name, id, db.clone(), self.user);
+                self.join_community_by_id(id).await
+            }
+            Err(_) => {
+                self.ctx.stop(); // The user did not exist at the time of request
+                                 // TODO delete community
+                Err(ErrResponse::UserDeleted)
+            }
+        }
     }
 
     async fn join_community(self, code: InviteCode) -> ResponseResult {

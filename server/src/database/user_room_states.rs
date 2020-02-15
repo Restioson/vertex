@@ -12,7 +12,7 @@ pub(super) const CREATE_USER_ROOM_STATES_TABLE: &str = r#"
         room             UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
         user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         watching_state   "char" NOT NULL,
-        last_read        BIGINT NOT NULL,
+        last_read        BIGINT,
 
         UNIQUE(user_id, room)
     )"#;
@@ -21,7 +21,7 @@ pub struct UserRoomState {
     pub room: RoomId,
     user: UserId,
     pub watching_state: WatchingState,
-    pub last_read: MessageOrdinal,
+    pub last_read: Option<MessageOrdinal>,
 }
 
 impl TryFrom<Row> for UserRoomState {
@@ -29,13 +29,13 @@ impl TryFrom<Row> for UserRoomState {
 
     fn try_from(row: Row) -> Result<UserRoomState, tokio_postgres::Error> {
         let ws = row.try_get::<&str, i8>("watching_state")? as u8;
-        let last_read = row.try_get::<&str, i64>("last_read")? as u64;
+        let last_read = row.try_get::<&str, Option<i64>>("last_read")?;
 
         Ok(UserRoomState {
             room: RoomId(row.try_get("room")?),
             user: UserId(row.try_get("user_id")?),
             watching_state: WatchingState::from(ws),
-            last_read: MessageOrdinal(last_read),
+            last_read: last_read.map(|v| MessageOrdinal(v as u64)),
         })
     }
 }
@@ -79,11 +79,9 @@ impl Database {
     ) -> DbResult<Result<(), InvalidUser>> {
         const STMT: &str = "
             INSERT INTO user_room_states (room, user_id, watching_state, last_read)
-                SELECT rooms.id, $1, $2, MAX(messages.ord)
+                SELECT rooms.id, $1, $2, NULL::BIGINT
                     FROM rooms
-                    INNER JOIN messages ON rooms.id = messages.room
-                    WHERE messages.community = $3
-                    GROUP BY rooms.id
+                    WHERE rooms.community = $3
         ";
 
         let conn = self.pool.connection().await?;
@@ -115,7 +113,7 @@ impl Database {
     ) -> DbResult<Result<(), SetUserRoomStateError>> {
         const STMT: &str = "
             WITH last_read_ord AS (
-                SELECT ord FROM messages WHERE id = $1
+                COALESCE(SELECT ord FROM messages WHERE id = $1, 0::BIGINT)
             )
             UPDATE user_room_state
                 WHERE user = $2 AND room = $3
