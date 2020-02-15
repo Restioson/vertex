@@ -54,15 +54,15 @@ impl client::MessageListWidget<Ui> for MessageListWidget {
 pub struct GroupedMessageWidget {
     author: UserId,
     widget: gtk::Box,
-    inner: gtk::Box,
+    entry_list: gtk::ListBox,
 }
 
 impl GroupedMessageWidget {
     fn build(author: UserId) -> GroupedMessageWidget {
         let builder = gtk::Builder::new_from_file("res/glade/active/message_entry.glade");
 
-        let widget: gtk::Box = builder.get_object("message").unwrap();
-        let inner: gtk::Box = builder.get_object("message_inner").unwrap();
+        let widget: gtk::Box = builder.get_object("message_group").unwrap();
+        let entry_list: gtk::ListBox = builder.get_object("entry_list").unwrap();
 
         let author_name: gtk::Label = builder.get_object("author_name").unwrap();
         author_name.set_text(&format!("{}", author.0));
@@ -70,13 +70,13 @@ impl GroupedMessageWidget {
 
         widget.show_all();
 
-        GroupedMessageWidget { author, widget, inner }
+        GroupedMessageWidget { author, widget, entry_list }
     }
 
     fn push_message(&self, content: String) -> MessageEntryWidget {
         let entry = MessageEntryWidget::build(content);
-        self.inner.add(&entry.widget);
-        self.inner.show_all();
+        self.entry_list.add(&entry.widget);
+        self.entry_list.show_all();
 
         entry
     }
@@ -91,6 +91,7 @@ pub struct MessageEntryWidget {
 impl MessageEntryWidget {
     pub fn build(text: String) -> MessageEntryWidget {
         let widget = gtk::BoxBuilder::new()
+            .name("message")
             .orientation(gtk::Orientation::Vertical)
             .build();
 

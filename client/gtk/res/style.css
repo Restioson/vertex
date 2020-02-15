@@ -333,17 +333,17 @@ spinner:checked {
   padding-left: 4px;
 }
 
-#active #message {
+#active #message_group {
   padding: 4px;
 }
 
-#active #message #author_name {
+#active #message_group #author_name {
   font-size: 14px;
   font-weight: 600;
   padding-left: 2px;
 }
 
-#active #message #author_icon {
+#active #message_group #author_icon {
   min-width: 40px;
   min-height: 40px;
 
@@ -351,6 +351,15 @@ spinner:checked {
   background-size: 40px;
 
   border-radius: 20px;
+}
+
+#active #entry_list row {
+  padding: 2px;
+  border-radius: 4px;
+}
+
+#active #entry_list row:hover {
+  background: shade(@content_bg_color, 0.9);
 }
 
 #active #message #message_text {
