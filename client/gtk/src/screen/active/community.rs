@@ -52,6 +52,11 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
                     let menu = build_menu(community);
                     menu.set_relative_to(Some(&button));
                     menu.show();
+
+                    menu.connect_hide(|popover| {
+                        // weird gtk behavior: if we don't do this, it messes with dialog rendering order
+                        popover.set_relative_to::<gtk::Widget>(None);
+                    });
                 })
                 .inhibit(true)
                 .build_widget_event()
