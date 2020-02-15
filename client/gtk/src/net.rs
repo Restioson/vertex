@@ -50,7 +50,7 @@ impl Receiver {
                 Ok(tungstenite::Message::Binary(bytes)) => {
                     match serde_cbor::from_slice::<vertex::ServerMessage>(&bytes) {
                         Ok(message) => Some(Ok(message)),
-                        Err(_) => Some(Err(tungstenite::Error::Protocol(Cow::Borrowed("malformed message")))),
+                        Err(_) => Some(Err(tungstenite::Error::Protocol(Cow::Borrowed("#message_group")))),
                     }
                 }
                 Ok(tungstenite::Message::Close(_)) => Some(Err(tungstenite::Error::ConnectionClosed)),

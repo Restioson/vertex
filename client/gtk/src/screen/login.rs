@@ -80,7 +80,6 @@ async fn login(
     password: String,
 ) -> Result<AuthParameters> {
     let instance = Server::parse(instance)?;
-    println!("{:?}", instance);
 
     match token_store::get_stored_token() {
         Some(parameters) if parameters.instance == instance => Ok(parameters),

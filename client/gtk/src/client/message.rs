@@ -52,18 +52,17 @@ pub struct MessageListState<Ui: ClientUi> {
 
 #[derive(Clone)]
 pub struct MessageList<Ui: ClientUi> {
-    client: Client<Ui>,
     state: SharedMut<MessageListState<Ui>>,
 }
 
 impl<Ui: ClientUi> MessageList<Ui> {
-    pub fn new(client: Client<Ui>, widget: Ui::MessageListWidget) -> Self {
+    pub fn new(widget: Ui::MessageListWidget) -> Self {
         let state = SharedMut::new(MessageListState {
             widget,
             stream: None,
             reading_new: true,
         });
-        MessageList { client, state }
+        MessageList { state }
     }
 
     pub async fn bind_events(&self) {
@@ -71,55 +70,38 @@ impl<Ui: ClientUi> MessageList<Ui> {
         state.widget.bind_events(&self);
     }
 
-    fn push_to(&self, list: &mut Ui::MessageListWidget, author: UserId, content: String) -> Ui::MessageEntryWidget {
+    async fn push(&self, client: &Client<Ui>, author: UserId, content: String) -> Ui::MessageEntryWidget {
+        let mut state = self.state.write().await;
+        let list = &mut state.widget;
+
         let rich = RichMessage::parse(content);
         let widget = list.push_message(author, rich.text.clone());
 
-        glib::MainContext::ref_thread_default().spawn_local({
-            let client = self.client.clone();
-            let mut widget = widget.clone();
-            async move {
-                for embed in rich.load_embeds().await {
-                    widget.push_embed(&client, embed);
+        if rich.has_embeds() {
+            glib::MainContext::ref_thread_default().spawn_local({
+                let client = client.clone();
+                let mut widget = widget.clone();
+                async move {
+                    for embed in rich.load_embeds().await {
+                        widget.push_embed(&client, embed);
+                    }
                 }
-            }
-        });
+            });
+        }
 
         widget
     }
 
-    async fn populate_list(&self, state: &mut MessageListState<Ui>, stream: &MessageStream<Ui>) {
-        let mut messages = Vec::with_capacity(25);
-        stream.read_last(25, &mut messages).await;
+    async fn populate_list(&self, stream: &MessageStream<Ui>) {
+        let mut messages = Vec::with_capacity(50);
+        stream.read_last(50, &mut messages).await;
 
         for (author, content) in messages {
-            self.push_to(&mut state.widget, author, content);
+            self.push(&stream.client, author, content).await;
         }
     }
 
-    pub async fn set_stream(&self, stream: MessageStream<Ui>) {
-        let mut state = self.state.write().await;
-
-        let stream_changed = match &state.stream {
-            Some(last_stream) => last_stream.id != stream.id,
-            None => true,
-        };
-
-        if stream_changed {
-            state.widget.clear();
-            self.populate_list(&mut *state, &stream).await;
-        }
-
-        state.stream = Some(stream);
-    }
-
-    pub async fn detach_stream(&self) {
-        let mut state = self.state.write().await;
-        state.stream = None;
-        state.widget.clear();
-    }
-
-    pub async fn accepts(&self, accepts: &MessageStream<Ui>) -> bool {
+    async fn accepts(&self, accepts: &MessageStream<Ui>) -> bool {
         let state = self.state.read().await;
         match &state.stream {
             Some(stream) => stream.id == accepts.id,
@@ -127,11 +109,20 @@ impl<Ui: ClientUi> MessageList<Ui> {
         }
     }
 
-    pub async fn push(&self, author: UserId, content: String) -> MessageHandle<Ui> {
-        let mut state = self.state.write().await;
+    pub async fn set_stream(&self, stream: &MessageStream<Ui>) {
+        {
+            let mut state = self.state.write().await;
+            state.stream = Some(stream.clone());
+            state.widget.clear();
+        }
 
-        let widget = self.push_to(&mut state.widget, author, content);
-        MessageHandle { widget }
+        self.populate_list(&stream).await;
+    }
+
+    pub async fn detach_stream(&self) {
+        let mut state = self.state.write().await;
+        state.stream = None;
+        state.widget.clear();
     }
 
     pub async fn set_reading_new(&self, reading_new: bool) {
@@ -164,22 +155,24 @@ impl MessageHistory {
 #[derive(Clone)]
 pub struct MessageStream<Ui: ClientUi> {
     id: Uuid,
-    list: MessageList<Ui>,
+    client: Client<Ui>,
     history: SharedMut<MessageHistory>,
 }
 
 impl<Ui: ClientUi> MessageStream<Ui> {
-    pub fn new(id: Uuid, list: MessageList<Ui>) -> Self {
-        let history = SharedMut::new(MessageHistory {
-            messages: vec![]
-        });
-        MessageStream { id, list, history }
+    pub fn new(id: Uuid, client: Client<Ui>) -> Self {
+        let history = MessageHistory { messages: Vec::new() };
+        let history = SharedMut::new(history);
+        MessageStream { id, client, history }
     }
 
     pub async fn push(&self, author: UserId, content: String) -> Option<MessageHandle<Ui>> {
         self.history.write().await.push(author, content.clone());
-        if self.list.accepts(&self).await {
-            Some(self.list.push(author, content).await)
+
+        let list = &self.client.message_list;
+        if list.accepts(&self).await {
+            let widget = list.push(&self.client, author, content).await;
+            Some(MessageHandle { widget })
         } else {
             None
         }

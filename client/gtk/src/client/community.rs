@@ -79,7 +79,6 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
         let widget = self.widget.add_room(room.name.clone());
         let entry = RoomEntry::new(
             self.client.clone(),
-            self.client.message_list().await,
             widget,
             self.clone(),
             room.id,

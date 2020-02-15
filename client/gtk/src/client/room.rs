@@ -31,13 +31,12 @@ pub struct RoomEntry<Ui: ClientUi> {
 impl<Ui: ClientUi> RoomEntry<Ui> {
     pub(super) fn new(
         client: Client<Ui>,
-        message_list: MessageList<Ui>,
         widget: Ui::RoomEntryWidget,
         community: CommunityEntry<Ui>,
         id: RoomId,
         name: String,
     ) -> Self {
-        let message_stream = MessageStream::new(id.0, message_list);
+        let message_stream = MessageStream::new(id.0, client.clone());
         let state = RoomState { name };
         let state = SharedMut::new(state);
 

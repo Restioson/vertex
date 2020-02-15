@@ -69,18 +69,15 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
         self.room_list.connect_row_selected(
             community_entry.connector()
                 .do_async(|community, (_, room): (gtk::ListBox, Option<gtk::ListBoxRow>)| async move {
-                    match room {
-                        Some(room) => {
-                            if let Some(room) = community.client.selected_room().await {
-                                if room.community.id != community.id {
-                                    room.community.widget.room_list.unselect_all();
-                                }
+                    if let Some(room) = room {
+                        if let Some(room) = community.client.selected_room().await {
+                            if room.community.id != community.id {
+                                room.community.widget.room_list.unselect_all();
                             }
-                            let room = room.get_index() as usize;
-                            let room = community.get_room(room).await;
-                            community.client.select_room(room).await;
                         }
-                        None => community.client.select_room(None).await,
+                        let room = room.get_index() as usize;
+                        let room = community.get_room(room).await;
+                        community.client.select_room(room).await;
                     }
                 })
                 .build_widget_and_option_consumer()

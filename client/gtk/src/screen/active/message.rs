@@ -7,7 +7,7 @@ use crate::client::{self, InviteEmbed, MessageEmbed, MessageStatus, OpenGraphEmb
 use super::*;
 
 pub struct MessageListWidget {
-    pub  scroll: gtk::ScrolledWindow,
+    pub scroll: gtk::ScrolledWindow,
     pub list: gtk::ListBox,
     pub last_group: Option<GroupedMessageWidget>,
 }

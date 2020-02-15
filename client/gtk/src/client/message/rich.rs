@@ -28,6 +28,10 @@ impl RichMessage {
         RichMessage { text: content, links }
     }
 
+    pub fn has_embeds(&self) -> bool {
+        !self.links.is_empty()
+    }
+
     pub async fn load_embeds(&self) -> impl Iterator<Item = MessageEmbed> {
         let links = futures::future::join_all(
             self.links.iter().cloned()
