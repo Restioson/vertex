@@ -10,6 +10,7 @@ pub enum OkResponse {
     AddRoom { community: CommunityId, room: RoomStructure },
     MessageId { id: MessageId },
     User { id: UserId },
+    UserProfile(UserProfile),
     Token { device: DeviceId, token: AuthToken },
     Invite { code: InviteCode },
 }
@@ -90,6 +91,7 @@ pub enum ClientRequest {
         old_password: String,
         new_password: String,
     },
+    GetUserProfile(UserId),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

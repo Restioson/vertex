@@ -273,6 +273,7 @@ impl<'a> RequestHandler<'a> {
             ClientRequest::JoinCommunity(code) => self.join_community(code).await,
             ClientRequest::CreateCommunity { name } => self.create_community(name).await,
             ClientRequest::LogOut => self.log_out().await,
+            ClientRequest::GetUserProfile(id) => self.get_user_profile(id).await,
             ClientRequest::ChangeUsername { new_username } => {
                 self.change_username(new_username).await
             }
@@ -381,6 +382,15 @@ impl<'a> RequestHandler<'a> {
         self.ctx.notify_immediately(LogoutThisSession);
 
         Ok(OkResponse::NoData)
+    }
+
+    async fn get_user_profile(self, id: UserId) -> ResponseResult {
+        let opt = self.session.global.database.get_user_profile(id).await?;
+
+        match opt {
+            Some(profile) => Ok(OkResponse::UserProfile(profile)),
+            None => Err(ErrResponse::InvalidUser),
+        }
     }
 
     async fn change_username(self, new_username: String) -> ResponseResult {

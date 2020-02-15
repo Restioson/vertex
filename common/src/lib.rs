@@ -180,6 +180,12 @@ pub enum RemoveCommunityReason {
     Deleted,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct UserProfile {
+    pub username: String,
+    pub display_name: String,
+}
+
 #[macro_export]
 macro_rules! catch {
     { $($tt:tt)* } => {

@@ -3,7 +3,7 @@ use crate::auth::HashSchemeVersion;
 use std::convert::TryFrom;
 use tokio_postgres::{error::SqlState, row::Row, types::ToSql};
 use uuid::Uuid;
-use vertex::{UserId, ProfileVersion};
+use vertex::{UserId, ProfileVersion, UserProfile};
 
 pub(super) const CREATE_USERS_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS users (
@@ -107,6 +107,24 @@ impl Database {
 
         if let Some(row) = opt {
             Ok(Some(UserRecord::try_from(row)?)) // Can't opt::map because of ?
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn get_user_profile(&self, id: UserId) -> DbResult<Option<UserProfile>> {
+        let conn = self.pool.connection().await?;
+        let query = conn
+            .client
+            .prepare("SELECT username, display_name FROM users WHERE id=$1")
+            .await?;
+        let opt = conn.client.query_opt(&query, &[&id.0]).await?;
+
+        if let Some(row) = opt {  // Can't opt::map because of ?
+            Ok(Some(UserProfile {
+                username: row.try_get("username")?,
+                display_name: row.try_get("display_name")?,
+            }))
         } else {
             Ok(None)
         }
