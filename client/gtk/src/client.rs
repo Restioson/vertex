@@ -303,13 +303,18 @@ impl<Ui: ClientUi, S> ClientLoop<Ui, S>
 
         let request = client.request.clone();
 
+        let main_ctx = glib::MainContext::ref_thread_default();
+
         let receiver = Box::pin(async move {
             let mut event_receiver = event_receiver;
             while let Some(result) = event_receiver.next().await {
-                match result {
-                    Ok(event) => client.handle_event(event).await,
-                    Err(err) => client.handle_network_err(err).await,
-                }
+                let client = client.clone();
+                main_ctx.spawn_local(async move {
+                    match result {
+                        Ok(event) => client.handle_event(event).await,
+                        Err(err) => client.handle_network_err(err).await,
+                    }
+                });
             }
         });
 
