@@ -145,10 +145,7 @@ impl Database {
                     .try_get::<&str, Option<i8>>("watching_state")?
                     .map(|v| WatchingState::from(v as u8));
 
-                Ok((
-                    RoomId(row.try_get("id")?),
-                    ws.unwrap_or_default(),
-                ))
+                Ok((RoomId(row.try_get("id")?), ws.unwrap_or_default()))
             })
             .map_err(|e| e.into());
 

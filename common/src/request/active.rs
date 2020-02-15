@@ -13,7 +13,8 @@ pub enum OkResponse {
     UserProfile(UserProfile),
     Token { device: DeviceId, token: AuthToken },
     Invite { code: InviteCode },
-    NewMessages(Vec<ForwardedMessage>),
+    /// Messages ordered youngest to oldest
+    Messages(Vec<ForwardedMessage>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -72,6 +73,13 @@ pub enum ClientRequest {
     GetNewMessages {
         community: CommunityId,
         room: RoomId,
+        max: u64,
+    },
+    /// Get messages older than a certain base message
+    GetMessagesBeforeBase {
+        community: CommunityId,
+        room: RoomId,
+        base: MessageId,
         max: u64,
     },
     CreateCommunity {

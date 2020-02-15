@@ -72,10 +72,7 @@ impl Session {
     pub fn set_looking_at(&mut self, at: (CommunityId, RoomId)) -> Option<()> {
         match self {
             Session::Upgrading => None,
-            Session::Active {
-                actor,
-                ..
-            } => {
+            Session::Active { actor, .. } => {
                 *self = Session::Active {
                     looking_at: Some(at),
                     actor: actor.clone(),

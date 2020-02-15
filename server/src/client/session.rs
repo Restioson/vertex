@@ -352,6 +352,12 @@ impl<'a> RequestHandler<'a> {
                 room,
                 max,
             } => self.get_new_messages(community, room, max as usize).await,
+            ClientRequest::GetMessagesBeforeBase {
+                community,
+                room,
+                base,
+                max,
+            } => self.get_messages_before_base(community, room, base, max as usize).await,
             _ => unimplemented!(),
         }
     }
@@ -701,30 +707,32 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::InvalidCommunity);
         }
 
-        let stream = self
-            .session
-            .global
-            .database
-            .get_new_messages(self.user, community, room, max)
+        let db = &self.session.global.database;
+        let stream = db.get_new_messages(self.user, community, room, max).await?;
+
+        let msgs = stream.map_forwarded_messages().try_collect().await?;
+
+        Ok(OkResponse::Messages(msgs))
+    }
+
+    async fn get_messages_before_base(
+        self,
+        community: CommunityId,
+        room: RoomId,
+        base: MessageId,
+        max: usize,
+    ) -> ResponseResult {
+        if !self.session.in_community(&community) {
+            return Err(ErrResponse::InvalidCommunity);
+        }
+
+        let db = &self.session.global.database;
+        let stream = db
+            .get_messages_before_base(community, room, base, max)
             .await?;
 
-        let msgs = stream
-            .try_filter_map(|(profile_version, record)| async move {
-                match record.content {
-                    Some(content) => Ok(Some(ForwardedMessage {
-                        id: record.id,
-                        community: record.community,
-                        room: record.room,
-                        author: record.author,
-                        author_profile_version: profile_version,
-                        content,
-                    })),
-                    None => Ok(None),
-                }
-            })
-            .try_collect()
-            .await?;
+        let msgs = stream.map_forwarded_messages().try_collect().await?;
 
-        Ok(OkResponse::NewMessages(msgs))
+        Ok(OkResponse::Messages(msgs))
     }
 }
