@@ -71,7 +71,9 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
                 .do_async(|community, (_widget, room): (gtk::ListBox, Option<gtk::ListBoxRow>)| async move {
                     match room {
                         Some(room) => {
-                            // TODO: deselect previous room in ui
+                            if let Some(room) = community.client.selected_room().await {
+                                room.community.widget.room_list.unselect_all();
+                            }
                             let room = room.get_index() as usize;
                             let room = community.get_room(room).await;
                             community.client.select_room(room).await;

@@ -81,7 +81,7 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
             self.client.clone(),
             self.client.message_list().await,
             widget,
-            self.id,
+            self.clone(),
             room.id,
             room.name,
         );

@@ -4,6 +4,7 @@ use crate::{Client, SharedMut};
 
 use super::{ClientUi, Result};
 use super::message::*;
+use crate::client::community::CommunityEntry;
 
 pub trait RoomEntryWidget<Ui: ClientUi>: Clone {
     fn bind_events(&self, room: &RoomEntry<Ui>);
@@ -21,7 +22,7 @@ pub struct RoomEntry<Ui: ClientUi> {
 
     pub message_stream: MessageStream<Ui>,
 
-    pub community: CommunityId,
+    pub community: CommunityEntry<Ui>,
     pub id: RoomId,
 
     state: SharedMut<RoomState>,
@@ -32,7 +33,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
         client: Client<Ui>,
         message_list: MessageList<Ui>,
         widget: Ui::RoomEntryWidget,
-        community: CommunityId,
+        community: CommunityEntry<Ui>,
         id: RoomId,
         name: String,
     ) -> Self {
@@ -68,7 +69,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
 
     async fn send_message_request(&self, content: String) -> Result<()> {
         let request = ClientRequest::SendMessage(ClientSentMessage {
-            to_community: self.community,
+            to_community: self.community.id,
             to_room: self.id,
             content,
         });
@@ -82,7 +83,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
 
 impl<Ui: ClientUi> PartialEq<RoomEntry<Ui>> for RoomEntry<Ui> {
     fn eq(&self, other: &RoomEntry<Ui>) -> bool {
-        self.id == other.id && self.community == other.community
+        self.id == other.id && self.community.id == other.community.id
     }
 }
 
