@@ -166,7 +166,7 @@ impl<Ui: ClientUi> Client<Ui> {
                         content: message.content,
                     }).await;
 
-                    if !self.ui.window_focused() || self.selected_room().await != Some(room) {
+                    if !self.ui.window_focused() || !self.is_selected(room.community, room.id).await {
                         self.notifier.send(&event).await;
                     }
                 } else {
@@ -242,16 +242,17 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
-    pub async fn select_room(&self, room: Option<RoomEntry<Ui>>) -> Result<()> {
-        self.set_looking_at(room.as_ref()).await?;
-
+    pub async fn select_room(&self, room: Option<RoomEntry<Ui>>) {
         if let Some(state) = self.state.upgrade() {
             let mut state = state.write().await;
             self.chat.set_room(room.as_ref()).await;
-            state.selected_room = room;
+            state.selected_room = room.clone();
         }
 
-        Ok(())
+        // TODO: proper error handling: if this fails, something is going very wrong? (or room/community id is just wrong?)
+        if let Err(err) = self.set_looking_at(room.as_ref()).await {
+            println!("failed to select room {:?}", err);
+        }
     }
 
     async fn set_looking_at(&self, room: Option<&RoomEntry<Ui>>) -> Result<()> {
@@ -277,6 +278,13 @@ impl<Ui: ClientUi> Client<Ui> {
                 state.selected_room.as_ref().cloned()
             }
             None => None,
+        }
+    }
+
+    pub async fn is_selected(&self, community: CommunityId, room: RoomId) -> bool {
+        match self.selected_room().await {
+            Some(selected) => selected.id == room && selected.community == community,
+            None => false,
         }
     }
 

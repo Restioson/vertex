@@ -7,6 +7,7 @@ thread_local! {
 
 #[derive(Debug)]
 struct Window {
+    window: gtk::ApplicationWindow,
     overlay: gtk::Overlay,
 }
 
@@ -16,10 +17,17 @@ pub(super) fn init(window: gtk::ApplicationWindow) {
         window.add(&overlay);
         window.show();
 
-        let window = Window { overlay };
+        let window = Window { window, overlay };
 
         cell.set(window).expect("double window initialization");
     });
+}
+
+pub fn is_focused() -> bool {
+    WINDOW.with(|window| {
+        let window = window.get().expect("window not initialized on this thread");
+        window.window.is_active()
+    })
 }
 
 pub fn set_screen<W>(screen: &W)

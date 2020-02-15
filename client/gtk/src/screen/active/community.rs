@@ -74,10 +74,7 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
                         let room = room.get_index() as usize;
                         let room = community.get_room(room).await;
 
-                        // TODO: proper error handling: if this fails, something is going very wrong? (or room/community id is just wrong?)
-                        if let Err(e) = community.client.select_room(room).await {
-                            println!("failed to select room {:?}", e);
-                        }
+                        community.client.select_room(room).await;
                     }
                 })
                 .build_widget_and_option_consumer()

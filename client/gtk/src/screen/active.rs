@@ -89,7 +89,7 @@ impl client::ClientUi for Ui {
     }
 
     fn window_focused(&self) -> bool {
-        self.main.is_focus()
+        window::is_focused()
     }
 }
 
