@@ -155,7 +155,7 @@ async fn main() {
             .default_width(1280)
             .default_height(720);
 
-        if let Ok(icon) = gdk_pixbuf::Pixbuf::new_from_file("res/icon.png") {
+        if let Ok(icon) = gdk_pixbuf::Pixbuf::new_from_file("res/icon.svg") {
             window = window.icon(&icon);
         }
 
