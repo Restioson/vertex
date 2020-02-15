@@ -54,10 +54,11 @@ pub enum Session {
 }
 
 impl Session {
+    #[allow(clippy::option_option)]
     pub fn as_active_looking_at(&self) -> Option<Option<(CommunityId, RoomId)>> {
         match self {
             Session::Upgrading => None,
-            Session::Active { looking_at, .. } => Some(looking_at.clone()),
+            Session::Active { looking_at, .. } => Some(*looking_at),
         }
     }
 
@@ -72,8 +73,8 @@ impl Session {
         match self {
             Session::Upgrading => None,
             Session::Active {
-                looking_at: _,
                 actor,
+                ..
             } => {
                 *self = Session::Active {
                     looking_at: Some(at),

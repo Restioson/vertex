@@ -147,7 +147,7 @@ impl Database {
 
                 Ok((
                     RoomId(row.try_get("id")?),
-                    ws.unwrap_or(WatchingState::default()),
+                    ws.unwrap_or_default(),
                 ))
             })
             .map_err(|e| e.into());
