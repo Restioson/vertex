@@ -182,6 +182,7 @@ pub enum RemoveCommunityReason {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct UserProfile {
+    pub version: ProfileVersion,
     pub username: String,
     pub display_name: String,
 }

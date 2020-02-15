@@ -1,10 +1,10 @@
 use vertex::*;
 
 use crate::{Client, SharedMut};
+use crate::client::community::CommunityEntry;
 
 use super::{ClientUi, Result};
 use super::message::*;
-use crate::client::community::CommunityEntry;
 
 pub trait RoomEntryWidget<Ui: ClientUi>: Clone {
     fn bind_events(&self, room: &RoomEntry<Ui>);
@@ -43,14 +43,20 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
         RoomEntry { client, widget, message_stream, community, id, state }
     }
 
-    pub async fn add_message(&self, author: UserId, content: String) {
-        if let Some(mut message) = self.message_stream.push(author, content).await {
+    pub async fn add_message(&self, message: MessageSource) {
+        if let Some(mut message) = self.message_stream.push(message).await {
             message.set_status(MessageStatus::Ok);
         }
     }
 
     pub async fn send_message(&self, content: String) -> Result<()> {
-        match self.message_stream.push(self.client.user.id(), content.clone()).await {
+        let message = MessageSource {
+            author: self.client.user.id,
+            author_profile_version: None,
+            content: content.clone(),
+        };
+
+        match self.message_stream.push(message).await {
             Some(mut message) => {
                 message.set_status(MessageStatus::Pending);
 

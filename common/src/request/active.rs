@@ -143,7 +143,6 @@ impl Into<Vec<u8>> for ServerMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientReady {
     pub user: UserId,
-    pub username: String,
-    pub display_name: String,
+    pub profile: UserProfile,
     pub communities: Vec<CommunityStructure>,
 }

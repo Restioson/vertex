@@ -13,11 +13,11 @@ pub struct MessageListWidget {
 }
 
 impl MessageListWidget {
-    fn next_group(&mut self, author: UserId) -> &GroupedMessageWidget {
+    fn next_group(&mut self, author: UserId, profile: UserProfile) -> &GroupedMessageWidget {
         match &self.last_group {
             Some(group) if group.author == author => {}
             _ => {
-                let group = GroupedMessageWidget::build(author);
+                let group = GroupedMessageWidget::build(author, profile);
                 self.list.insert(&group.widget, -1);
                 self.last_group = Some(group);
             }
@@ -35,8 +35,8 @@ impl client::MessageListWidget<Ui> for MessageListWidget {
         self.last_group = None;
     }
 
-    fn push_message(&mut self, author: UserId, content: String) -> MessageEntryWidget {
-        let group = self.next_group(author);
+    fn push_message(&mut self, author: UserId, author_profile: UserProfile, content: String) -> MessageEntryWidget {
+        let group = self.next_group(author, author_profile);
         let widget = group.push_message(content);
 
         widget
@@ -74,14 +74,14 @@ pub struct GroupedMessageWidget {
 }
 
 impl GroupedMessageWidget {
-    fn build(author: UserId) -> GroupedMessageWidget {
+    fn build(author: UserId, profile: UserProfile) -> GroupedMessageWidget {
         let builder = gtk::Builder::new_from_file("res/glade/active/message_entry.glade");
 
         let widget: gtk::Box = builder.get_object("message_group").unwrap();
         let entry_list: gtk::ListBox = builder.get_object("entry_list").unwrap();
 
         let author_name: gtk::Label = builder.get_object("author_name").unwrap();
-        author_name.set_text(&format!("{}", author.0));
+        author_name.set_text(&profile.display_name);
         author_name.set_can_focus(false);
 
         widget.show_all();

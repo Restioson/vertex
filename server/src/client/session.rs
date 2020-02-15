@@ -202,8 +202,11 @@ impl ActiveSession {
 
         let ready = ClientReady {
             user: self.user,
-            username: user.username,
-            display_name: user.display_name,
+            profile: UserProfile {
+                version: user.profile_version,
+                username: user.username,
+                display_name: user.display_name,
+            },
             communities,
         };
 
@@ -389,9 +392,7 @@ impl<'a> RequestHandler<'a> {
     }
 
     async fn get_user_profile(self, id: UserId) -> ResponseResult {
-        let opt = self.session.global.database.get_user_profile(id).await?;
-
-        match opt {
+        match self.session.global.database.get_user_profile(id).await? {
             Some(profile) => Ok(OkResponse::UserProfile(profile)),
             None => Err(ErrResponse::InvalidUser),
         }

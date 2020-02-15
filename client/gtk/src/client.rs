@@ -8,6 +8,7 @@ use futures::lock::Mutex;
 
 pub use community::*;
 pub use message::*;
+pub use profile::*;
 pub use room::*;
 pub use user::*;
 use vertex::*;
@@ -19,6 +20,7 @@ mod community;
 mod room;
 mod user;
 mod message;
+mod profile;
 
 pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
 
@@ -60,6 +62,7 @@ pub struct Client<Ui: ClientUi> {
 
     pub ui: Ui,
     pub user: User,
+    pub profiles: ProfileCache,
     pub message_list: MessageList<Ui>,
 
     pub notif_sound: Option<Arc<Mutex<Sound>>>,
@@ -83,11 +86,12 @@ impl<Ui: ClientUi> Client<Ui> {
         let user = User::new(
             request.clone(),
             ready.user,
-            ready.username,
-            ready.display_name,
+            ready.profile,
             ws.device,
             ws.token,
         );
+
+        let profiles = ProfileCache::new(request.clone(), user.clone());
 
         let message_list = MessageList::new(ui.build_message_list());
 
@@ -101,7 +105,7 @@ impl<Ui: ClientUi> Client<Ui> {
             Err(_) => None
         };
 
-        let client = Client { request, ui, user, message_list, notif_sound, state };
+        let client = Client { request, ui, user, profiles, message_list, notif_sound, state };
 
         for community in ready.communities {
             client.add_community(community).await;
@@ -135,7 +139,11 @@ impl<Ui: ClientUi> Client<Ui> {
                 };
 
                 if let Some(room) = room {
-                    room.add_message(message.author, message.content).await;
+                    room.add_message(MessageSource {
+                        author: message.author,
+                        author_profile_version: Some(message.author_profile_version),
+                        content: message.content
+                    }).await;
 
                     if !self.ui.window_focused() || self.selected_room().await != Some(room) {
                         self.system_notification(&event).await;
@@ -168,16 +176,6 @@ impl<Ui: ClientUi> Client<Ui> {
 
         match request.response().await? {
             OkResponse::AddCommunity { community } => Ok(self.add_community(community).await),
-            _ => Err(Error::UnexpectedMessage),
-        }
-    }
-
-    pub async fn get_user_profile(&self, user: UserId) -> Result<UserProfile> {
-        let request = ClientRequest::GetUserProfile(user);
-        let request = self.request.send(request).await?;
-
-        match request.response().await? {
-            OkResponse::UserProfile(profile) => Ok(profile),
             _ => Err(Error::UnexpectedMessage),
         }
     }

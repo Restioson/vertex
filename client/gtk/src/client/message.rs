@@ -11,6 +11,13 @@ use super::ClientUi;
 mod rich;
 mod embed;
 
+#[derive(Debug, Clone)]
+pub struct MessageSource {
+    pub author: UserId,
+    pub author_profile_version: Option<ProfileVersion>,
+    pub content: String,
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum MessageStatus {
     Pending,
@@ -33,7 +40,7 @@ impl<Ui: ClientUi> MessageHandle<Ui> {
 pub trait MessageListWidget<Ui: ClientUi> {
     fn clear(&mut self);
 
-    fn push_message(&mut self, author: UserId, content: String) -> Ui::MessageEntryWidget;
+    fn push_message(&mut self, author: UserId, author_profile: UserProfile, content: String) -> Ui::MessageEntryWidget;
 
     fn bind_events(&self, list: &MessageList<Ui>);
 }
@@ -70,12 +77,14 @@ impl<Ui: ClientUi> MessageList<Ui> {
         state.widget.bind_events(&self);
     }
 
-    async fn push(&self, client: &Client<Ui>, author: UserId, content: String) -> Ui::MessageEntryWidget {
+    async fn push(&self, client: &Client<Ui>, message: MessageSource) -> Ui::MessageEntryWidget {
+        let profile = client.profiles.get(message.author, message.author_profile_version).await.unwrap(); // TODO
+
         let mut state = self.state.write().await;
         let list = &mut state.widget;
 
-        let rich = RichMessage::parse(content);
-        let widget = list.push_message(author, rich.text.clone());
+        let rich = RichMessage::parse(message.content);
+        let widget = list.push_message(message.author, profile, rich.text.clone());
 
         if rich.has_embeds() {
             glib::MainContext::ref_thread_default().spawn_local({
@@ -96,8 +105,8 @@ impl<Ui: ClientUi> MessageList<Ui> {
         let mut messages = Vec::with_capacity(50);
         stream.read_last(50, &mut messages).await;
 
-        for (author, content) in messages {
-            self.push(&stream.client, author, content).await;
+        for message in messages {
+            self.push(&stream.client, message).await;
         }
     }
 
@@ -136,15 +145,15 @@ impl<Ui: ClientUi> MessageList<Ui> {
 
 // TODO: Very naive implementation - to be replaced with sqlite database backend
 pub struct MessageHistory {
-    messages: Vec<(UserId, String)>,
+    messages: Vec<MessageSource>,
 }
 
 impl MessageHistory {
-    pub fn push(&mut self, author: UserId, content: String) {
-        self.messages.push((author, content));
+    pub fn push(&mut self, message: MessageSource) {
+        self.messages.push(message);
     }
 
-    pub fn read_last(&self, count: usize, buf: &mut Vec<(UserId, String)>) {
+    pub fn read_last(&self, count: usize, buf: &mut Vec<MessageSource>) {
         let min = self.messages.len().checked_sub(count + 1).unwrap_or(0);
         for i in min..self.messages.len() {
             buf.push(self.messages[i].clone());
@@ -166,19 +175,19 @@ impl<Ui: ClientUi> MessageStream<Ui> {
         MessageStream { id, client, history }
     }
 
-    pub async fn push(&self, author: UserId, content: String) -> Option<MessageHandle<Ui>> {
-        self.history.write().await.push(author, content.clone());
+    pub async fn push(&self, message: MessageSource) -> Option<MessageHandle<Ui>> {
+        self.history.write().await.push(message.clone());
 
         let list = &self.client.message_list;
         if list.accepts(&self).await {
-            let widget = list.push(&self.client, author, content).await;
+            let widget = list.push(&self.client, message).await;
             Some(MessageHandle { widget })
         } else {
             None
         }
     }
 
-    pub async fn read_last(&self, count: usize, buf: &mut Vec<(UserId, String)>) {
+    pub async fn read_last(&self, count: usize, buf: &mut Vec<MessageSource>) {
         self.history.read().await.read_last(count, buf);
     }
 }

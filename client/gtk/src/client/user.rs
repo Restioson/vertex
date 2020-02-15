@@ -7,14 +7,13 @@ use crate::{net, SharedMut};
 use super::Result;
 
 pub struct UserState {
-    username: String,
-    display_name: String,
+    profile: UserProfile,
 }
 
 #[derive(Clone)]
 pub struct User {
     request: Rc<net::RequestSender>,
-    id: UserId,
+    pub id: UserId,
     device: DeviceId,
     token: AuthToken,
     state: SharedMut<UserState>,
@@ -24,8 +23,7 @@ impl User {
     pub(super) fn new(
         request: Rc<net::RequestSender>,
         id: UserId,
-        username: String,
-        display_name: String,
+        profile: UserProfile,
         device: DeviceId,
         token: AuthToken,
     ) -> Self {
@@ -35,8 +33,7 @@ impl User {
             device,
             token,
             state: SharedMut::new(UserState {
-                username,
-                display_name,
+                profile
             }),
         }
     }
@@ -47,7 +44,7 @@ impl User {
         request.response().await?;
 
         let mut state = self.state.write().await;
-        state.username = username;
+        state.profile.username = username;
 
         Ok(())
     }
@@ -58,7 +55,7 @@ impl User {
         request.response().await?;
 
         let mut state = self.state.write().await;
-        state.display_name = display_name;
+        state.profile.display_name = display_name;
 
         Ok(())
     }
@@ -70,6 +67,7 @@ impl User {
         Ok(())
     }
 
-    #[inline]
-    pub fn id(&self) -> UserId { self.id }
+    pub async fn profile(&self) -> UserProfile {
+        self.state.read().await.profile.clone()
+    }
 }

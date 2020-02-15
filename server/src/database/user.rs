@@ -116,12 +116,13 @@ impl Database {
         let conn = self.pool.connection().await?;
         let query = conn
             .client
-            .prepare("SELECT username, display_name FROM users WHERE id=$1")
+            .prepare("SELECT username, display_name, profile_version FROM users WHERE id=$1")
             .await?;
         let opt = conn.client.query_opt(&query, &[&id.0]).await?;
 
         if let Some(row) = opt {  // Can't opt::map because of ?
             Ok(Some(UserProfile {
+                version: ProfileVersion(row.try_get::<&str, i32>("profile_version")? as u32),
                 username: row.try_get("username")?,
                 display_name: row.try_get("display_name")?,
             }))
