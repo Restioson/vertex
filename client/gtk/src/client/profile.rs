@@ -39,6 +39,16 @@ impl ProfileCache {
         Ok(profile)
     }
 
+    pub async fn get_existing(&self, id: UserId, version: Option<ProfileVersion>) -> Option<UserProfile> {
+        let cache = self.cache.read().await;
+        cache.get(&id).and_then(|profile| {
+            match version {
+                Some(version) if profile.version != version => None,
+                _ => Some(profile.clone()),
+            }
+        })
+    }
+
     async fn request(&self, id: UserId) -> Result<UserProfile> {
         let request = ClientRequest::GetUserProfile(id);
         let request = self.request.send(request).await?;
@@ -47,15 +57,5 @@ impl ProfileCache {
             OkResponse::UserProfile(profile) => Ok(profile),
             _ => Err(Error::UnexpectedMessage),
         }
-    }
-
-    async fn get_existing(&self, id: UserId, version: Option<ProfileVersion>) -> Option<UserProfile> {
-        let cache = self.cache.read().await;
-        cache.get(&id).and_then(|profile| {
-            match version {
-                Some(version) if profile.version != version => None,
-                _ => Some(profile.clone()),
-            }
-        })
     }
 }

@@ -3,11 +3,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use vertex::*;
 
-use crate::{Client, SharedMut};
+use crate::{Client, Error, SharedMut};
 
 use super::ClientUi;
 use super::message::*;
 use super::room::*;
+
+fn create_fallback_profile(author: UserId) -> UserProfile {
+    let name = format!("{}", message.author.0);
+    UserProfile {
+        version: ProfileVersion(0),
+        username: name.clone(),
+        display_name: name,
+    }
+}
 
 pub trait ChatWidget<Ui: ClientUi> {
     fn set_room(&mut self, room: Option<&RoomEntry<Ui>>);
@@ -45,7 +54,14 @@ impl<Ui: ClientUi> Chat<Ui> {
     }
 
     pub(crate) async fn push(&self, client: &Client<Ui>, message: MessageSource) -> Ui::MessageEntryWidget {
-        let profile = client.profiles.get(message.author, message.author_profile_version).await.unwrap(); // TODO
+        let profile = match client.profiles.get(message.author, message.author_profile_version).await {
+            Ok(profile) => profile,
+            Err(err) => {
+                println!("failed to load profile for {:?}: {:?}", message.author, err);
+                client.profiles.get_existing(message.author, None).await
+                    .unwrap_or_else(|| create_fallback_profile(message.author))
+            }
+        };
 
         let mut state = self.state.write().await;
         let list = &mut state.widget;
