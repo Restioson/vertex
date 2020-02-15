@@ -5,11 +5,11 @@ COPY server/Cargo.* .
 
 # Build deps except for vertex_common
 RUN mkdir src/ && rustc --version && echo "fn main() {}" > src/main.rs \
-    && sed -i 's/vertex_common/#vertex_common/g' Cargo.toml && cargo +nightly  build --release
+    && sed -i 's/vertex/#vertex/g' Cargo.toml && cargo +nightly  build --release
 
 # Build vertex_common
 COPY common/ ../common/
-RUN sed -i 's/#vertex_common/vertex_common/g' Cargo.toml && cargo +nightly  build --release && rm src/main.rs
+RUN sed -i 's/#vertex/vertex/g' Cargo.toml && cargo +nightly  build --release && rm src/main.rs
 
 # Build project
 COPY server/src src
