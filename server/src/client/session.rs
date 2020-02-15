@@ -11,7 +11,7 @@ use xtra::prelude::*;
 pub use manager::*;
 use vertex::*;
 
-use crate::community::{CommunityActor, Connect, CreateRoom, GetRoomStructures, Join, COMMUNITIES};
+use crate::community::{CommunityActor, Connect, CreateRoom, GetRoomInfo, Join, COMMUNITIES};
 use crate::database::*;
 use crate::{auth, handle_disconnected, IdentifiedMessage};
 
@@ -191,7 +191,6 @@ impl Handler<AddRoom> for ActiveSession {
 
     fn handle<'a>(&'a mut self, add: AddRoom, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
         async move {
-            let db = &self.global.database;
             let mut user = manager::get_active_user_mut(self.user).unwrap();
 
             if let Some(community) = user.communities.get_mut(&add.community) {
@@ -278,9 +277,17 @@ impl ActiveSession {
         let active = manager::get_active_user(self.user).unwrap();
         let mut communities = Vec::with_capacity(active.communities.len());
 
-        for (id, _user_community) in active.communities.iter() {
+        for (id, user_community) in active.communities.iter() {
             let addr = COMMUNITIES.get(id).unwrap().actor.clone();
-            let rooms = addr.send(GetRoomStructures).await.unwrap(); // TODO errors thing
+            let rooms = addr.send(GetRoomInfo).await.unwrap(); // TODO errors thing
+            let rooms = rooms
+                .into_iter()
+                .map(|info| RoomStructure {
+                    id: info.id,
+                    name: info.name,
+                    unread: user_community.rooms[&info.id].unread, // TODO errors thing
+                })
+                .collect();
             addr.do_send(Connect {
                 user: self.user,
                 device: self.device,
@@ -406,10 +413,7 @@ impl<'a> RequestHandler<'a> {
                 self.get_messages_before_base(community, room, base, max as usize)
                     .await
             }
-            ClientRequest::SetAsRead {
-                community,
-                room,
-            } => self.set_as_read(community, room).await,
+            ClientRequest::SetAsRead { community, room } => self.set_as_read(community, room).await,
             _ => unimplemented!(),
         }
     }
@@ -699,7 +703,11 @@ impl<'a> RequestHandler<'a> {
             let mut user = manager::get_active_user_mut(self.user).unwrap();
 
             if let Some(community) = user.communities.get_mut(&community_id) {
-                let room = RoomStructure { id, name };
+                let room = RoomStructure {
+                    id,
+                    name,
+                    unread: true,
+                };
 
                 community.rooms.insert(
                     room.id,
@@ -804,11 +812,7 @@ impl<'a> RequestHandler<'a> {
         Ok(OkResponse::Messages(msgs))
     }
 
-    async fn set_as_read(
-        self,
-        community: CommunityId,
-        room: RoomId,
-    ) -> ResponseResult {
+    async fn set_as_read(self, community: CommunityId, room: RoomId) -> ResponseResult {
         if !self.session.in_community(&community) {
             return Err(ErrResponse::InvalidCommunity);
         }

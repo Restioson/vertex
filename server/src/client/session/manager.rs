@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use vertex::*;
 
 use super::*;
-use futures::{TryStreamExt, Stream};
+use futures::TryStreamExt;
 use std::collections::HashMap;
 
 lazy_static! {
@@ -93,10 +93,15 @@ impl UserCommunity {
         let stream = db
             .get_user_room_states(user, community)
             .await?
-            .map_ok(|state| (state.room, UserRoom {
-                watching: state.watching_state,
-                unread: state.unread,
-            }));
+            .map_ok(|state| {
+                (
+                    state.room,
+                    UserRoom {
+                        watching: state.watching_state,
+                        unread: state.unread,
+                    },
+                )
+            });
 
         let rooms = stream.try_collect().await?;
 

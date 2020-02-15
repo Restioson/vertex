@@ -171,6 +171,7 @@ pub struct CommunityStructure {
 pub struct RoomStructure {
     pub id: RoomId,
     pub name: String,
+    pub unread: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

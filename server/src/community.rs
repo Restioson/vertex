@@ -55,10 +55,15 @@ impl Message for CreateRoom {
     type Result = DbResult<RoomId>;
 }
 
-pub struct GetRoomStructures;
+pub struct GetRoomInfo;
 
-impl Message for GetRoomStructures {
-    type Result = Vec<RoomStructure>;
+impl Message for GetRoomInfo {
+    type Result = Vec<RoomInfo>;
+}
+
+pub struct RoomInfo {
+    pub id: RoomId,
+    pub name: String,
 }
 
 /// A community is a collection (or "house", if you will) of rooms, as well as some metadata.
@@ -240,6 +245,7 @@ impl Handler<Join> for CommunityActor {
                     .map(|(id, room)| RoomStructure {
                         id: *id,
                         name: room.name.clone(),
+                        unread: true,
                     })
                     .collect(),
             }))
@@ -271,6 +277,7 @@ impl Handler<CreateRoom> for CommunityActor {
                 structure: RoomStructure {
                     id,
                     name: create.name.clone(),
+                    unread: false,
                 },
             };
 
@@ -284,11 +291,11 @@ impl Handler<CreateRoom> for CommunityActor {
     }
 }
 
-impl SyncHandler<GetRoomStructures> for CommunityActor {
-    fn handle(&mut self, _get: GetRoomStructures, _: &mut Context<Self>) -> Vec<RoomStructure> {
+impl SyncHandler<GetRoomInfo> for CommunityActor {
+    fn handle(&mut self, _get: GetRoomInfo, _: &mut Context<Self>) -> Vec<RoomInfo> {
         self.rooms
             .iter()
-            .map(move |(id, room)| RoomStructure {
+            .map(move |(id, room)| RoomInfo {
                 id: *id,
                 name: room.name.clone(),
             })
