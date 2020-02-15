@@ -157,8 +157,8 @@ impl Database {
     ) -> DbResult<impl Stream<Item = DbResult<(RoomId, WatchingState)>>> {
         const QUERY: &str = "
             SELECT rooms.id, watching_state FROM rooms
-            INNER JOIN room_watching_state ON rooms.id = room_watching_state.room
-                WHERE rooms.community = $1 AND room_watching_state.user_id = $2
+            INNER JOIN user_room_states ON rooms.id = user_room_states.room
+                WHERE rooms.community = $1 AND user_room_states.user_id = $2
         ";
 
         let conn = self.pool.connection().await?;
