@@ -155,7 +155,7 @@ impl Database {
                     // Membership row did not exist - user has been successfully added
                     Insert => {
                         let res = self
-                            .create_default_user_room_states(community, user)
+                            .create_default_user_room_states_for_user(community, user)
                             .await?;
                         match res {
                             Ok(_) => Ok(Ok(())),

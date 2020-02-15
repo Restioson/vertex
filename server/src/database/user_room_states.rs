@@ -64,6 +64,7 @@ impl From<u8> for WatchingState {
     }
 }
 
+#[derive(Debug)]
 pub enum SetUserRoomStateError {
     InvalidUser,
     InvalidRoom,
@@ -72,7 +73,7 @@ pub enum SetUserRoomStateError {
 pub struct InvalidUser;
 
 impl Database {
-    pub async fn create_default_user_room_states(
+    pub async fn create_default_user_room_states_for_user(
         &self,
         community: CommunityId,
         user: UserId,
@@ -103,6 +104,30 @@ impl Database {
                 ),
             })
         })
+    }
+
+    pub async fn create_default_user_room_states_for_room(
+        &self,
+        community: CommunityId,
+        room: RoomId,
+    ) -> DbResult<Result<(), SetUserRoomStateError>> {
+        const STMT: &str = "
+            INSERT INTO user_room_states (room, user_id, watching_state, last_read)
+                SELECT $1, community_membership.user_id, $2, NULL::BIGINT
+                    FROM community_membership
+                    WHERE community_membership.community = $3
+        ";
+
+        let conn = self.pool.connection().await?;
+        let stmt = conn.client.prepare(STMT).await?;
+        let args: &[&(dyn ToSql + Sync)] = &[
+            &room.0,
+            &(WatchingState::default() as u8 as i8),
+            &community.0,
+        ];
+        let res = conn.client.execute(&stmt, args).await;
+
+        handle_sql_error(res)
     }
 
     pub async fn set_last_read(

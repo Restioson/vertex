@@ -51,6 +51,16 @@ impl Message for ForwardMessage {
     type Result = ();
 }
 
+#[derive(Debug, Clone)]
+pub struct AddRoom {
+    pub community: CommunityId,
+    pub structure: RoomStructure,
+}
+
+impl Message for AddRoom {
+    type Result = ();
+}
+
 pub struct ActiveSession {
     ws: SplitSink<WebSocket, ws::Message>,
     global: crate::Global,
@@ -165,6 +175,37 @@ impl Handler<ForwardMessage> for ActiveSession {
             };
 
             // Just ignore any errors as probable timing anomalies
+        }
+    }
+}
+
+impl Handler<AddRoom> for ActiveSession {
+    type Responder<'a> = impl Future<Output = ()> + 'a;
+
+    fn handle<'a>(
+        &'a mut self,
+        add: AddRoom,
+        ctx: &'a mut Context<Self>,
+    ) -> Self::Responder<'a> {
+        async move {
+            let db = &self.global.database;
+            let mut user = manager::get_active_user_mut(self.user).unwrap();
+
+            if let Some(community) = user.communities.get_mut(&add.community) {
+                community.rooms.insert(
+                    add.structure.id,
+                    UserRoom { watching: WatchingState::default() },
+                );
+
+                let msg = ServerMessage::Event(ServerEvent::AddRoom {
+                    community: add.community,
+                    structure: add.structure,
+                });
+
+                if self.send(msg).await.is_err() {
+                    ctx.stop()
+                }
+            }
         }
     }
 }
@@ -548,7 +589,7 @@ impl<'a> RequestHandler<'a> {
 
         let db = &self.session.global.database;
         let id = db.create_community(name.clone()).await?;
-        let res = db.create_default_user_room_states(id, self.user).await?;
+        let res = db.create_default_user_room_states_for_user(id, self.user).await?;
 
         match res {
             Ok(_) => {
@@ -557,7 +598,6 @@ impl<'a> RequestHandler<'a> {
             }
             Err(_) => {
                 self.ctx.stop(); // The user did not exist at the time of request
-                // TODO delete community
                 Err(ErrResponse::UserDeleted)
             }
         }
@@ -582,8 +622,6 @@ impl<'a> RequestHandler<'a> {
     }
 
     async fn join_community_by_id(self, id: CommunityId) -> ResponseResult {
-        // TODO: needs to send ServerAction::AddCommunity to other devices
-
         if let Some(community) = COMMUNITIES.get(&id) {
             let join = Join {
                 user: self.user,
@@ -638,6 +676,8 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::InvalidCommunity);
         }
 
+        let community_id = community;
+
         if let Some(community) = COMMUNITIES.get(&community) {
             let create = CreateRoom {
                 creator: self.device,
@@ -649,16 +689,24 @@ impl<'a> RequestHandler<'a> {
                 .await
                 .map_err(handle_disconnected("Community"))??;
 
-            // TODO: needs to send ServerAction::AddRoom to other devices
+            let mut user = manager::get_active_user_mut(self.user).unwrap();
 
-            let room = RoomStructure { id, name };
-            Ok(OkResponse::AddRoom {
-                community: *community.key(),
-                room,
-            })
-        } else {
-            Err(ErrResponse::InvalidCommunity)
+            if let Some(community) = user.communities.get_mut(&community_id) {
+                let room = RoomStructure { id, name };
+
+                community.rooms.insert(
+                    room.id,
+                    UserRoom { watching: WatchingState::default() },
+                );
+
+                return Ok(OkResponse::AddRoom {
+                    community: community_id,
+                    room,
+                });
+            }
         }
+
+        Err(ErrResponse::InvalidCommunity)
     }
 
     async fn create_invite(
