@@ -66,6 +66,7 @@ impl GroupedMessageWidget {
 
         let author_name: gtk::Label = builder.get_object("author_name").unwrap();
         author_name.set_text(&format!("{}", author.0));
+        author_name.set_can_focus(false);
 
         widget.show_all();
 
@@ -98,6 +99,7 @@ impl MessageEntryWidget {
             .label(text.trim())
             .halign(gtk::Align::Start)
             .selectable(true)
+            .can_focus(false)
             .build();
 
         widget.add(&text);
