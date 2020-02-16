@@ -183,20 +183,14 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
             let msg = m.message.clone();
             let db = self.database.clone();
             let author = m.user;
+            let sent = Utc::now();
 
             let (_ord, profile_version) = db
-                .create_message(
-                    id,
-                    author,
-                    msg.to_community,
-                    msg.to_room,
-                    Utc::now(),
-                    msg.content,
-                )
+                .create_message(id, author, msg.to_community, msg.to_room, sent, msg.content)
                 .await?;
 
             let from_device = m.device;
-            let fwd = ForwardedMessage::new(id, m.message, m.user, profile_version);
+            let fwd = ForwardedMessage::new(id, m.message, m.user, profile_version, sent);
             let send = ForwardMessage(fwd);
 
             self.for_each_online_device_except(

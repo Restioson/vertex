@@ -108,6 +108,7 @@ pub struct ForwardedMessage {
     pub room: RoomId,
     pub author: UserId,
     pub author_profile_version: ProfileVersion,
+    pub sent: DateTime<Utc>,
     pub content: String,
 }
 
@@ -117,6 +118,7 @@ impl ForwardedMessage {
         msg: ClientSentMessage,
         author: UserId,
         author_profile_version: ProfileVersion,
+        sent: DateTime<Utc>,
     ) -> Self {
         ForwardedMessage {
             id,
@@ -124,6 +126,7 @@ impl ForwardedMessage {
             room: msg.to_room,
             author,
             author_profile_version,
+            sent,
             content: msg.content,
         }
     }
