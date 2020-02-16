@@ -354,15 +354,8 @@ impl ActiveSession {
             };
 
             let (user, device, perms) = (self.user, self.device, self.perms);
-            let response = RequestHandler {
-                session: self,
-                ctx,
-                user,
-                device,
-                perms,
-            }
-            .handle_request(msg.request)
-            .await;
+            let handler = RequestHandler { session: self, ctx, user, device, perms };
+            let response = handler.handle_request(msg.request).await;
 
             self.send(ServerMessage::Response {
                 id: msg.id,

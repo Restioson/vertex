@@ -95,7 +95,7 @@ impl Database {
         const QUERY: &str = "
             WITH last_message(ord) AS (
                 SELECT COALESCE(
-                    (SELECT MAX(ord) FROM messages GROUP BY messages.community = $1 AND messages.room = $2),
+                    (SELECT MAX(ord) FROM messages WHERE messages.community = $1 AND messages.room = $2),
                     0::BIGINT
                 )
             )
