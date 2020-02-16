@@ -158,18 +158,19 @@ impl Handler<ForwardMessage> for ActiveSession {
         ctx: &'a mut Context<Self>,
     ) -> Self::Responder<'a> {
         async move {
-            let active_user = manager::get_active_user(self.user).unwrap();
+            let mut active_user = manager::get_active_user_mut(self.user).unwrap();
             let (community, room) = (fwd.0.community, fwd.0.room);
             let session = &active_user.sessions[&self.device];
             let looking_at = session.as_active_looking_at().unwrap();
 
-            if let Some(user_community) = active_user.communities.get(&community) {
-                if let Some(user_room) = user_community.rooms.get(&room) {
+            if let Some(user_community) = active_user.communities.get_mut(&community) {
+                if let Some(user_room) = user_community.rooms.get_mut(&room) {
                     let msg = if looking_at == Some((community, room))
                         || user_room.watching == WatchingState::Watching
                     {
                         Some(ServerMessage::Event(ServerEvent::AddMessage(fwd.0)))
                     } else if !user_room.unread {
+                        user_room.unread = true;
                         Some(ServerMessage::Event(ServerEvent::NotifyMessageReady {
                             room,
                             community,

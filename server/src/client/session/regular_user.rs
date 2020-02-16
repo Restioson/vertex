@@ -463,6 +463,18 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::InvalidCommunity);
         }
 
+        let mut active_user = manager::get_active_user_mut(self.user).unwrap();
+
+        if let Some(user_community) = active_user.communities.get_mut(&community) {
+            if let Some(user_room) = user_community.rooms.get_mut(&room) {
+                user_room.unread = false;
+            } else {
+                return Err(ErrResponse::InvalidRoom);
+            }
+        } else {
+            return Err(ErrResponse::InvalidCommunity);
+        }
+
         let db = &self.session.global.database;
         let res = db.set_room_read(room, self.user).await?;
 
