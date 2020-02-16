@@ -269,6 +269,15 @@ impl ActiveSession {
             .contains_key(&id)
     }
 
+    fn in_room(&self, community: &CommunityId, room: &RoomId) -> bool {
+        let user = manager::get_active_user(self.user).unwrap();
+        if let Some(community) = user.communities.get(community) {
+            community.rooms.contains_key(room)
+        } else {
+            false
+        }
+    }
+
     async fn ready(&mut self, ctx: &mut Context<Self>) -> Result<(), ()> {
         // TODO: handle errors better
 
