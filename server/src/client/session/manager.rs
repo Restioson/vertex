@@ -176,16 +176,6 @@ pub fn remove(user: UserId, device: DeviceId) -> Option<Session> {
     None
 }
 
-pub fn remove_all(user: UserId) {
-    if let Some((_, active_user)) = USERS.remove(&user) {
-        for session in active_user.sessions.values() {
-            if let Session::Active { actor, .. } = session {
-                actor.do_send(LogoutThisSession).unwrap()
-            }
-        }
-    }
-}
-
 pub fn get_active_user<'a>(user: UserId) -> Option<ActiveUserRef<'a>> {
     USERS.get(&user)
 }

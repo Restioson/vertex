@@ -2,7 +2,6 @@ use std::fs;
 use std::time::{Duration, Instant};
 
 use crate::client;
-use crate::database::message::CREATE_MESSAGES_TABLE;
 use futures::{Stream, TryStreamExt};
 use l337_postgres::PostgresConnectionManager;
 use log::{error, warn};
@@ -10,6 +9,7 @@ use tokio_postgres::types::ToSql;
 use tokio_postgres::{NoTls, Row};
 use vertex::{AuthError, DeviceId, ErrResponse, UserId};
 
+mod administrators;
 mod communities;
 mod community_membership;
 mod invite_code;
@@ -19,6 +19,7 @@ mod token;
 mod user;
 mod user_room_states;
 
+pub use administrators::*;
 pub use communities::*;
 pub use community_membership::*;
 pub use invite_code::*;
@@ -68,6 +69,8 @@ impl From<DatabaseError> for AuthError {
     }
 }
 
+pub struct InvalidUser;
+
 #[derive(Clone)]
 pub struct Database {
     pool: l337::Pool<PostgresConnectionManager<NoTls>>,
@@ -103,6 +106,7 @@ impl Database {
             CREATE_INVITE_CODES_TABLE,
             CREATE_MESSAGES_TABLE,
             CREATE_USER_ROOM_STATES_TABLE,
+            CREATE_ADMINISTRATORS_TABLE,
         ];
 
         for cmd in &cmds {

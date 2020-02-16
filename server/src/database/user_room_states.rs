@@ -1,4 +1,4 @@
-use crate::database::{Database, DbResult};
+use crate::database::{Database, DbResult, InvalidUser};
 use futures::{Stream, TryStreamExt};
 use std::convert::TryFrom;
 use std::error::Error as ErrorTrait;
@@ -66,8 +66,6 @@ pub enum SetUserRoomStateError {
     InvalidUser,
     InvalidRoom,
 }
-
-pub struct InvalidUser;
 
 impl Database {
     pub async fn create_default_user_room_states_for_user(
@@ -182,11 +180,10 @@ impl Database {
                 rooms.id AS room,
                 user_room_states.watching_state,
                 (
-                    SELECT
-                        user_room_states.last_read IS DISTINCT FROM MAX(messages.ord)
+                    SELECT user_room_states.last_read IS DISTINCT FROM MAX(messages.ord)
                     FROM messages
                     GROUP BY rooms.id
-                ) as unread
+                ) AS unread
             FROM rooms
             INNER JOIN user_room_states ON rooms.id = user_room_states.room
             WHERE rooms.community = $1 AND user_room_states.user_id = $2
