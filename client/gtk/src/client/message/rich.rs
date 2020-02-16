@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 
-use regex::Regex;
-
-use lazy_static::lazy_static;
+use linkify::{LinkFinder, LinkKind};
 use vertex::*;
 
 use crate::client::message::{ErrorEmbed, InviteEmbed, MessageEmbed, OpenGraphEmbed};
-use crate::Result;
-use futures::{stream, StreamExt, Stream};
+use crate::{Result, Error};
+use std::time::Duration;
+use tokio::time;
 
 #[derive(Debug, Clone)]
 pub struct RichMessage {
@@ -17,14 +16,12 @@ pub struct RichMessage {
 
 impl RichMessage {
     pub fn parse(content: String) -> RichMessage {
-        lazy_static! {
-            static ref MATCH_LINK: Regex = Regex::new("https?://[/:a-zA-Z.0-9_~-]*").unwrap();
-        }
-
-        let mut links = Vec::new();
-        for link in MATCH_LINK.captures_iter(&content) {
-            links.push(link[0].to_owned());
-        }
+        let finder = LinkFinder::new();
+        let links = finder
+            .links(&content)
+            .filter(|link| *link.kind() == LinkKind::Url)
+            .map(|link| link.as_str().to_string())
+            .collect();
 
         RichMessage { text: content, links }
     }
@@ -33,27 +30,28 @@ impl RichMessage {
         !self.links.is_empty()
     }
 
-    pub fn load_embeds(&self) -> impl Stream<Item = MessageEmbed> {
-        let links = stream::iter(self.links.clone().into_iter());
+    pub async fn load_embeds(&self) -> impl Iterator<Item = MessageEmbed> {
+        let links = futures::future::join_all(
+            self.links.iter().cloned()
+                .map(|link| async move {
+                    println!("loading for link {}", link);
+                    let result = get_link_metadata(&link).await;
+                    (link, result)
+                })
+        ).await;
 
-        links
-            .then(|link| async move {
-                let result = get_link_metadata(&link).await;
-                (link, result)
-            })
-            .filter_map(move |(url, result)| async move {
-                match result {
-                    Ok(metadata) => build_embed(url, metadata),
-                    Err(err) => {
-                        println!("error trying to load embed from {}: {:?}", url, err);
-                        let embed = ErrorEmbed {
-                            url: url.clone(),
-                            title: url,
-                            // TODO: display error without debug
-                            error: format!("{:?}", err),
-                        };
-                        Some(MessageEmbed::Error(embed))
-                    }
+        links.into_iter()
+            .filter_map(|(url, result)| match result {
+                Ok(metadata) => build_embed(url, metadata),
+                Err(err) => {
+                    println!("error trying to load embed from {}: {:?}", url, err);
+                    let embed = ErrorEmbed {
+                        url: url.clone(),
+                        title: url,
+                        // TODO: display error without debug
+                        error: format!("{:?}", err),
+                    };
+                    Some(MessageEmbed::Error(embed))
                 }
             })
     }
@@ -87,8 +85,13 @@ async fn get_link_metadata(url: &str) -> Result<LinkMetadata> {
     let client: hyper::Client<Connector, hyper::Body> = hyper::Client::builder()
         .build(https);
 
-    // TODO: request gzip + max size + timeout
-    let response = client.get(url.parse::<hyper::Uri>()?).await?;
+    // TODO: request gzip + max size
+    let response = time::timeout(
+        Duration::from_secs(5),
+        client.get(url.parse::<hyper::Uri>()?)
+    )
+        .await
+        .map_err(|_| Error::Timeout)??;
 
     let body = response.into_body();
     let body = hyper::body::to_bytes(body).await?;

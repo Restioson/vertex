@@ -186,7 +186,7 @@ impl<Ui: ClientUi> Client<Ui> {
                     self.notifier.notify_message(
                         &profile,
                         &community.state.read().await.name,
-                            &room.name,
+                        &room.name,
                         &message.content
                     ).await;
                 }
