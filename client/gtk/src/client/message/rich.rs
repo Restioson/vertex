@@ -71,7 +71,7 @@ fn build_embed(url: String, metadata: LinkMetadata) -> Option<MessageEmbed> {
             let embed = OpenGraphEmbed {
                 url,
                 title: og.title,
-                description: og.description,
+                description: og.description.unwrap_or_default(),
             };
             Some(MessageEmbed::OpenGraph(embed))
         }
@@ -111,8 +111,8 @@ fn parse_link_metadata(mut props: HashMap<String, String>) -> LinkMetadata {
         metadata.invite = Some(InviteMeta { code, name })
     }
 
-    let og_tags = (props.remove("og:title"), props.remove("og:description"));
-    if let (Some(title), Some(description)) = og_tags {
+    if let Some(title) = props.remove("og:title") {
+        let description = props.remove("og:description");
         metadata.opengraph = Some(OpenGraphMeta { title, description })
     }
 
@@ -144,7 +144,7 @@ struct LinkMetadata {
 #[derive(Debug, Clone)]
 struct OpenGraphMeta {
     title: String,
-    description: String,
+    description: Option<String>,
 }
 
 #[derive(Debug, Clone)]

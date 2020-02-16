@@ -251,7 +251,6 @@ impl<Ui: ClientUi> Client<Ui> {
     }
 
     pub async fn select_room(&self, room: Option<RoomEntry<Ui>>) {
-        println!("set room {:?}", std::time::Instant::now());
         if let Some(state) = self.state.upgrade() {
             let mut state = state.write().await;
             self.chat.set_room(room.as_ref()).await;
@@ -261,11 +260,8 @@ impl<Ui: ClientUi> Client<Ui> {
         // TODO: handle errors: room id wrong; unexpected response?
         match &room {
             Some(room) => {
-                println!("send select {:?}", std::time::Instant::now());
                 let state = self.send_select_room(room).await.unwrap();
-                println!("begin update {:?}", std::time::Instant::now());
                 room.update(state).await.unwrap();
-                println!("finish update {:?}", std::time::Instant::now());
             }
             None => self.send_deselect_room().await.unwrap(),
         }
