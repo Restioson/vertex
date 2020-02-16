@@ -1,8 +1,6 @@
 use crate::database::{Database, DbResult};
 use futures::{Stream, TryStreamExt};
 use std::convert::TryFrom;
-use std::iter;
-use tokio_postgres::types::ToSql;
 use tokio_postgres::Row;
 use uuid::Uuid;
 use vertex::{CommunityId, RoomId};
@@ -37,14 +35,8 @@ impl TryFrom<Row> for RoomRecord {
 impl Database {
     // TODO(room_persistence): load at boot
     pub async fn get_room(&self, id: RoomId) -> DbResult<Option<RoomRecord>> {
-        let conn = self.pool.connection().await?;
-        let query = conn
-            .client
-            .prepare("SELECT * FROM rooms WHERE id=$1")
-            .await?;
-        let opt = conn.client.query_opt(&query, &[&id.0]).await?;
-
-        if let Some(row) = opt {
+        let row = self.query_opt("SELECT * FROM rooms WHERE id=$1", &[&id.0]).await?;
+        if let Some(row) = row {
             Ok(Some(RoomRecord::try_from(row)?))
         } else {
             Ok(None)
@@ -67,11 +59,8 @@ impl Database {
         community: CommunityId,
     ) -> DbResult<impl Stream<Item = DbResult<RoomRecord>>> {
         const QUERY: &str = "SELECT * FROM rooms WHERE community = $1";
-        let conn = self.pool.connection().await?;
-        let query = conn.client.prepare(QUERY).await?;
-        let args = iter::once(&community.0 as &dyn ToSql);
 
-        let stream = conn.client.query_raw(&query, args).await?;
+        let stream = self.query_stream(QUERY, &[&community.0]).await?;
         let stream = stream
             .and_then(|row| async move { RoomRecord::try_from(row) })
             .map_err(|e| e.into());

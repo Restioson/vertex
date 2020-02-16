@@ -12,7 +12,7 @@ pub use room::*;
 pub use user::*;
 use vertex::*;
 
-use crate::{net, SharedMut, WeakSharedMut};
+use crate::{net, screen, SharedMut, WeakSharedMut, window};
 use crate::{Error, Result};
 
 mod community;
@@ -98,7 +98,7 @@ impl<Ui: ClientUi> Client<Ui> {
 
         let profiles = ProfileCache::new(request.clone(), user.clone());
 
-        let chat = Chat::new(ui.build_chat_widget());
+        let chat = Chat::new(request.clone(), ui.build_chat_widget());
         chat.set_room(None).await;
 
         let state = SharedMut::new(ClientState {
@@ -160,11 +160,7 @@ impl<Ui: ClientUi> Client<Ui> {
                 };
 
                 if let Some(room) = room {
-                    room.add_message(MessageSource {
-                        author: message.author,
-                        author_profile_version: Some(message.author_profile_version),
-                        content: message.content,
-                    }).await;
+                    room.message_stream.push(message.into()).await;
 
                     if !self.ui.window_focused() || !self.is_selected(room.community, room.id).await {
                         self.notifier.send(&event).await;
@@ -183,12 +179,17 @@ impl<Ui: ClientUi> Client<Ui> {
 
     async fn handle_network_err(&self, err: tungstenite::Error) {
         println!("network error: {:?}", err);
+
+        let error = format!("{}", err);
+        let screen = screen::loading::build_error(error, || crate::start());
+        window::set_screen(&screen);
+
         self.abort_handle.abort();
     }
 
     pub async fn create_community(&self, name: &str) -> Result<CommunityEntry<Ui>> {
         let request = ClientRequest::CreateCommunity { name: name.to_owned() };
-        let request = self.request.send(request).await?;
+        let request = self.request.send(request).await;
 
         match request.response().await? {
             OkResponse::AddCommunity { community } => Ok(self.add_community(community).await),
@@ -198,7 +199,7 @@ impl<Ui: ClientUi> Client<Ui> {
 
     pub async fn join_community(&self, invite: InviteCode) -> Result<CommunityEntry<Ui>> {
         let request = ClientRequest::JoinCommunity(invite);
-        let request = self.request.send(request).await?;
+        let request = self.request.send(request).await;
 
         match request.response().await? {
             OkResponse::AddCommunity { community } => Ok(self.add_community(community).await),
@@ -249,17 +250,30 @@ impl<Ui: ClientUi> Client<Ui> {
             state.selected_room = room.clone();
         }
 
-        // TODO: proper error handling: if this fails, something is going very wrong? (or room/community id is just wrong?)
-        if let Err(err) = self.set_looking_at(room.as_ref()).await {
-            println!("failed to select room {:?}", err);
+        // TODO: handle errors: room id wrong; unexpected response?
+        match &room {
+            Some(room) => {
+                let state = self.send_select_room(room).await.unwrap();
+                room.update(state).await.unwrap();
+            }
+            None => self.send_deselect_room().await.unwrap(),
         }
     }
 
-    async fn set_looking_at(&self, room: Option<&RoomEntry<Ui>>) -> Result<()> {
-        let request = self.request.send(ClientRequest::SetLookingAt(
-            room.map(|room| (room.community, room.id))
-        )).await?;
+    async fn send_select_room(&self, room: &RoomEntry<Ui>) -> Result<RoomState> {
+        let request = self.request.send(ClientRequest::SelectRoom {
+            community: room.community,
+            room: room.id,
+        }).await;
 
+        match request.response().await? {
+            OkResponse::RoomState(state) => Ok(state),
+            _ => Err(Error::UnexpectedMessage),
+        }
+    }
+
+    async fn send_deselect_room(&self) -> Result<()> {
+        let request = self.request.send(ClientRequest::DeselectRoom).await;
         request.response().await?;
         Ok(())
     }
@@ -288,10 +302,9 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
-    pub async fn log_out(&self) -> Result<()> {
-        let request = self.request.send(ClientRequest::LogOut).await?;
-        request.response().await?;
-        Ok(())
+    pub async fn log_out(&self) {
+        self.request.send(ClientRequest::LogOut).await;
+        self.abort_handle.abort();
     }
 }
 
@@ -329,9 +342,7 @@ impl<Ui: ClientUi, S> ClientLoop<Ui, S>
         let keep_alive = Box::pin(async move {
             let mut ticker = tokio::time::interval(HEARTBEAT_INTERVAL);
             loop {
-                if let Err(_) = request.net().ping().await {
-                    break;
-                }
+                request.net().ping().await;
                 ticker.tick().await;
             }
         });

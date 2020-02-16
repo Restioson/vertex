@@ -44,7 +44,7 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
 
     pub async fn create_invite(&self, expiration: Option<DateTime<Utc>>) -> Result<InviteCode> {
         let request = ClientRequest::CreateInvite { community: self.id, expiration_date: expiration };
-        let request = self.client.request.send(request).await?;
+        let request = self.client.request.send(request).await;
 
         match request.response().await? {
             OkResponse::Invite { code } => Ok(code),
@@ -54,7 +54,7 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
 
     pub async fn create_room(&self, name: &str) -> Result<RoomEntry<Ui>> {
         let request = ClientRequest::CreateRoom { name: name.to_owned(), community: self.id };
-        let request = self.client.request.send(request).await?;
+        let request = self.client.request.send(request).await;
 
         let response = request.response().await?;
 

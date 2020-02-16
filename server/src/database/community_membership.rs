@@ -1,6 +1,5 @@
 use std::convert::TryFrom;
 use std::error::Error;
-use std::iter;
 use tokio_postgres::error::{DbError, SqlState};
 use tokio_postgres::Row;
 use vertex::{CommunityId, UserId};
@@ -42,17 +41,8 @@ impl Database {
     ) -> DbResult<impl Stream<Item = DbResult<CommunityMember>>> {
         const QUERY: &str = "SELECT * from community_membership WHERE user_id = $1";
 
-        let conn = self.pool.connection().await?;
-
-        let query = conn.client.prepare(QUERY).await?;
-        let rows = {
-            let args = iter::once(&user.0 as &(dyn ToSql + Sync));
-            conn.client
-                .query_raw(&query, args.map(|x| x as &dyn ToSql))
-                .await?
-        };
-
-        let stream = rows
+        let stream = self.query_stream(QUERY, &[&user.0]).await?;
+        let stream = stream
             .and_then(|row| async move { Ok(CommunityMember::try_from(row)?) })
             .map_err(|e| e.into());
 
@@ -67,14 +57,8 @@ impl Database {
         const QUERY: &str = "
             SELECT * from community_membership
                 WHERE community = $1 AND user_id = $2";
-        let conn = self.pool.connection().await?;
 
-        let query = conn.client.prepare(QUERY).await?;
-        let opt = conn
-            .client
-            .query_opt(&query, &[&community.0, &user.0])
-            .await?;
-
+        let opt = self.query_opt(QUERY, &[&community.0, &user.0]).await?;
         if let Some(row) = opt {
             Ok(Some(CommunityMember::try_from(row)?)) // Can't opt::map because of ?
         } else {

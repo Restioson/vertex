@@ -122,20 +122,16 @@ impl Database {
             SELECT community FROM invite_codes WHERE id=$1
         ";
 
-        let conn = self.pool.connection().await?;
-        let query = conn.client.prepare(QUERY).await?;
-
         let id = match InviteCodeRecord::parse_id(code) {
             Ok(id) => id,
             Err(e) => return Ok(Err(e)),
         };
-        let args: &[&(dyn ToSql + Sync)] = &[&id];
 
-        let row_opt = conn.client.query_opt(&query, args).await?;
-        if let Some(row) = row_opt {
-            Ok(Ok(Some(CommunityId(row.try_get("community")?))))
-        } else {
-            Ok(Ok(None))
-        }
+        let community = match self.query_opt(QUERY, &[&id]).await? {
+            Some(row) => Some(CommunityId(row.try_get("community")?)),
+            None => None,
+        };
+
+        Ok(Ok(community))
     }
 }

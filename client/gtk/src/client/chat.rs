@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use vertex::*;
 
-use crate::{Client, Error, SharedMut};
+use crate::{Client, net, SharedMut};
 
 use super::ClientUi;
 use super::message::*;
@@ -33,13 +33,15 @@ pub struct ChatState<Ui: ClientUi> {
 
 #[derive(Clone)]
 pub struct Chat<Ui: ClientUi> {
+    request: Rc<net::RequestSender>,
     state: SharedMut<ChatState<Ui>>,
     reading_new: Rc<AtomicBool>,
 }
 
 impl<Ui: ClientUi> Chat<Ui> {
-    pub(super) fn new(widget: Ui::ChatWidget) -> Self {
+    pub(super) fn new(request: Rc<net::RequestSender>, widget: Ui::ChatWidget) -> Self {
         Chat {
+            request,
             state: SharedMut::new(ChatState {
                 widget,
                 stream: None,
@@ -53,8 +55,16 @@ impl<Ui: ClientUi> Chat<Ui> {
         state.widget.bind_events(client, &self);
     }
 
-    pub(crate) async fn push(&self, client: &Client<Ui>, message: MessageSource) -> Ui::MessageEntryWidget {
-        let profile = match client.profiles.get(message.author, message.author_profile_version).await {
+    pub(crate) async fn push_historic(
+        &self,
+        client: &Client<Ui>,
+        message: HistoricMessage
+    ) -> Ui::MessageEntryWidget {
+        let author_profile = client.profiles.get(
+            message.author,
+            Some(message.author_profile_version),
+        ).await;
+        let author_profile = match author_profile {
             Ok(profile) => profile,
             Err(err) => {
                 println!("failed to load profile for {:?}: {:?}", message.author, err);
@@ -63,11 +73,21 @@ impl<Ui: ClientUi> Chat<Ui> {
             }
         };
 
+        self.push(client, message.author, author_profile, message.content).await
+    }
+
+    pub(crate) async fn push(
+        &self,
+        client: &Client<Ui>,
+        author: UserId,
+        author_profile: UserProfile,
+        content: String,
+    ) -> Ui::MessageEntryWidget {
         let mut state = self.state.write().await;
         let list = &mut state.widget;
 
-        let rich = RichMessage::parse(message.content);
-        let widget = list.push_message(message.author, profile, rich.text.clone());
+        let rich = RichMessage::parse(content);
+        let widget = list.push_message(author, author_profile, rich.text.clone());
 
         if rich.has_embeds() {
             glib::MainContext::ref_thread_default().spawn_local({
@@ -87,17 +107,8 @@ impl<Ui: ClientUi> Chat<Ui> {
     pub(crate) async fn accepts(&self, accepts: &MessageStream<Ui>) -> bool {
         let state = self.state.read().await;
         match &state.stream {
-            Some(stream) => stream.id == accepts.id,
+            Some(stream) => stream.community == accepts.community && stream.room == accepts.room,
             None => false,
-        }
-    }
-
-    async fn populate_list(&self, stream: &MessageStream<Ui>) {
-        let mut messages = Vec::with_capacity(50);
-        stream.read_last(50, &mut messages).await;
-
-        for message in messages {
-            self.push(&stream.client, message).await;
         }
     }
 
@@ -105,13 +116,9 @@ impl<Ui: ClientUi> Chat<Ui> {
         match room {
             Some(room) => {
                 let stream = &room.message_stream;
-                {
-                    let mut state = self.state.write().await;
-                    state.stream = Some(stream.clone());
-                    state.widget.set_room(Some(&room));
-                }
-
-                self.populate_list(&stream).await;
+                let mut state = self.state.write().await;
+                state.stream = Some(stream.clone());
+                state.widget.set_room(Some(&room));
             }
             None => {
                 let mut state = self.state.write().await;
@@ -121,8 +128,13 @@ impl<Ui: ClientUi> Chat<Ui> {
         }
     }
 
-    pub fn set_reading_new(&self, reading_new: bool) {
+    pub async fn set_reading_new(&self, reading_new: bool) {
         self.reading_new.store(reading_new, Ordering::SeqCst);
+
+        let state = self.state.read().await;
+        if let Some(stream) = &state.stream {
+            stream.mark_as_read().await;
+        }
     }
 
     pub fn reading_new(&self) -> bool {

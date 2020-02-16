@@ -40,7 +40,7 @@ impl User {
 
     pub async fn change_username(&self, username: String) -> Result<()> {
         let request = ClientRequest::ChangeUsername { new_username: username.clone() };
-        let request = self.request.send(request).await?;
+        let request = self.request.send(request).await;
         request.response().await?;
 
         let mut state = self.state.write().await;
@@ -51,7 +51,7 @@ impl User {
 
     pub async fn change_display_name(&self, display_name: String) -> Result<()> {
         let request = ClientRequest::ChangeDisplayName { new_display_name: display_name.clone() };
-        let request = self.request.send(request).await?;
+        let request = self.request.send(request).await;
         request.response().await?;
 
         let mut state = self.state.write().await;
@@ -62,7 +62,7 @@ impl User {
 
     pub async fn change_password(&self, old_password: String, new_password: String) -> Result<()> {
         let request = ClientRequest::ChangePassword { old_password, new_password };
-        let request = self.request.send(request).await?;
+        let request = self.request.send(request).await;
         request.response().await?;
         Ok(())
     }

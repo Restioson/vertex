@@ -32,7 +32,7 @@ impl TryFrom<Row> for UserRoomState {
         Ok(UserRoomState {
             room: RoomId(row.try_get("room")?),
             watching_state: WatchingState::from(ws),
-            unread: row.try_get("unread")?,
+            unread: row.try_get::<&str, Option<bool>>("unread")?.unwrap_or(false),
         })
     }
 }
@@ -132,7 +132,7 @@ impl Database {
     ) -> DbResult<Result<(), SetUserRoomStateError>> {
         const STMT: &str = "
             WITH last_read_ord(ord) AS (
-                COALESCE(SELECT MAX(ord) FROM messages GROUP BY room = $2, 0::BIGINT)
+                SELECT COALESCE(SELECT MAX(ord) FROM messages GROUP BY room = $2, 0::BIGINT)
             )
             UPDATE user_room_states
                 SET last_read = last_read_ord.ord
@@ -189,14 +189,7 @@ impl Database {
             WHERE rooms.community = $1 AND user_room_states.user_id = $2
         ";
 
-        let conn = self.pool.connection().await?;
-        let query = conn.client.prepare(QUERY).await?;
-        let args = &[&community.0, &user.0]; // I hate
-        let stream = conn
-            .client
-            .query_raw(&query, args.iter().map(|x| x as &dyn ToSql))
-            .await?;
-
+        let stream = self.query_stream(QUERY, &[&community.0, &user.0]).await?;
         let stream = stream
             .and_then(|row| async move { Ok(UserRoomState::try_from(row)?) })
             .map_err(|e| e.into());

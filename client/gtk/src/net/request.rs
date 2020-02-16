@@ -136,15 +136,15 @@ pub struct RequestSender {
 }
 
 impl RequestSender {
-    pub async fn send(&self, request: ClientRequest) -> Result<Request> {
+    pub async fn send(&self, request: ClientRequest) -> Request {
         let id = self.id_gen.next();
 
         let receiver = self.tracker.enqueue(id).expect("unable to enqueue message");
 
         let message = ClientMessage { id, request };
-        self.net.send(message).await?;
+        self.net.send(message).await;
 
-        Ok(Request(receiver))
+        Request(receiver)
     }
 
     #[inline]

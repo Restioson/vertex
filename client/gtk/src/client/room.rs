@@ -31,37 +31,30 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
         id: RoomId,
         name: String,
     ) -> Self {
-        let message_stream = MessageStream::new(id.0, client.clone());
+        let message_stream = MessageStream::new(community, id, client.clone());
         RoomEntry { client, widget, message_stream, community, id, name }
     }
 
-    pub async fn add_message(&self, message: MessageSource) {
-        if let Some(mut message) = self.message_stream.push(message).await {
-            message.set_status(MessageStatus::Ok);
-        }
+    pub async fn update(&self, state: RoomState) -> Result<()> {
+        self.message_stream.update(state).await
     }
 
-    pub async fn send_message(&self, content: String) -> Result<()> {
-        let message = MessageSource {
-            author: self.client.user.id,
-            author_profile_version: None,
-            content: content.clone(),
-        };
+    pub async fn send_message(&self, content: String) {
+        let user = self.client.user.id;
+        let profile = self.client.user.profile().await;
 
-        match self.message_stream.push(message).await {
-            Some(mut message) => {
-                message.set_status(MessageStatus::Pending);
+        let mut message = self.client.chat.push(
+            &self.client,
+            user, profile,
+            content.clone(),
+        ).await;
 
-                let result = self.send_message_request(content).await;
+        message.set_status(MessageStatus::Pending);
 
-                match result {
-                    Ok(_) => message.set_status(MessageStatus::Ok),
-                    Err(_) => message.set_status(MessageStatus::Err),
-                }
-
-                result
-            }
-            None => self.send_message_request(content).await
+        let result = self.send_message_request(content).await;
+        match result {
+            Ok(_) => message.set_status(MessageStatus::Ok),
+            Err(_) => message.set_status(MessageStatus::Err),
         }
     }
 
@@ -72,7 +65,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
             content,
         });
 
-        let request = self.client.request.send(request).await?;
+        let request = self.client.request.send(request).await;
         request.response().await?;
 
         Ok(())

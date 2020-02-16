@@ -51,7 +51,7 @@ impl ProfileCache {
 
     async fn request(&self, id: UserId) -> Result<UserProfile> {
         let request = ClientRequest::GetUserProfile(id);
-        let request = self.request.send(request).await?;
+        let request = self.request.send(request).await;
 
         match request.response().await? {
             OkResponse::UserProfile(profile) => Ok(profile),

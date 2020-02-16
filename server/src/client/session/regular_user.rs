@@ -44,20 +44,14 @@ impl<'a> RequestHandler<'a> {
                 community,
                 expiration_date,
             } => self.create_invite(community, expiration_date).await,
-            ClientRequest::SetLookingAt(room) => self.set_looking_at(room).await,
-            ClientRequest::GetNewMessages {
+            ClientRequest::SelectRoom { community, room } => self.select_room(community, room).await,
+            ClientRequest::DeselectRoom => self.deselect_room().await,
+            ClientRequest::ReadMessages {
                 community,
                 room,
-                max,
-            } => self.get_new_messages(community, room, max as usize).await,
-            ClientRequest::GetMessagesBeforeBase {
-                community,
-                room,
-                base,
-                max,
+                selector,
             } => {
-                self.get_messages_before_base(community, room, base, max as usize)
-                    .await
+                self.read_message_history(community, room, selector).await
             }
             ClientRequest::SetAsRead { community, room } => self.set_as_read(community, room).await,
             _ => unimplemented!(),
@@ -400,71 +394,58 @@ impl<'a> RequestHandler<'a> {
         }
     }
 
-    async fn set_looking_at(self, room: Option<(CommunityId, RoomId)>) -> ResponseResult {
+    async fn select_room(self, community: CommunityId, room: RoomId) -> ResponseResult {
         let mut active_user = manager::get_active_user_mut(self.user).unwrap();
 
-        if let Some((community, room)) = room {
-            if let Some(community) = active_user.communities.get(&community) {
-                if !community.rooms.contains_key(&room) {
-                    return Err(ErrResponse::InvalidRoom);
-                }
-            } else {
-                return Err(ErrResponse::InvalidCommunity);
+        if let Some(community) = active_user.communities.get(&community) {
+            if !community.rooms.contains_key(&room) {
+                return Err(ErrResponse::InvalidRoom);
             }
+        } else {
+            return Err(ErrResponse::InvalidCommunity);
         }
 
         let session = active_user.sessions.get_mut(&self.device).unwrap();
-        session.set_looking_at(room).unwrap();
+        session.set_looking_at(Some((community, room))).unwrap();
+
+        let db = &self.session.global.database;
+        let room_state = RoomState {
+            newest_message: db.get_newest_message(community, room).await?,
+            last_read: None, // TODO
+        };
+
+        Ok(OkResponse::RoomState(room_state))
+    }
+
+    async fn deselect_room(self) -> ResponseResult {
+        let mut active_user = manager::get_active_user_mut(self.user).unwrap();
+        let session = active_user.sessions.get_mut(&self.device).unwrap();
+        session.set_looking_at(None).unwrap();
 
         Ok(OkResponse::NoData)
     }
 
-    async fn get_new_messages(
+    async fn read_message_history(
         self,
         community: CommunityId,
         room: RoomId,
-        max: usize,
+        selector: MessageSelector,
     ) -> ResponseResult {
-        if !self.session.in_community(&community) {
-            return Err(ErrResponse::InvalidCommunity);
+        if !self.session.in_room(&community, &room) {
+            return Err(ErrResponse::InvalidRoom);
         }
 
-        let db = &self.session.global.database;
-        let stream = db.get_new_messages(self.user, community, room, max).await?;
+        let stream = self.session.global.database
+            .read_messages(community, room, selector)
+            .await?
+            .map_err(|_| ErrResponse::InvalidMessageSelector)?;
 
-        let msgs = stream.map_forwarded_messages().try_collect().await?;
-
-        Ok(OkResponse::Messages(msgs))
-    }
-
-    async fn get_messages_before_base(
-        self,
-        community: CommunityId,
-        room: RoomId,
-        base: MessageId,
-        max: usize,
-    ) -> ResponseResult {
-        if !self.session.in_community(&community) {
-            return Err(ErrResponse::InvalidCommunity);
-        }
-
-        let db = &self.session.global.database;
-        let stream = db
-            .get_messages_before_base(community, room, base, max)
-            .await?;
-
-        let msgs = stream.map_forwarded_messages().try_collect().await?;
-
-        Ok(OkResponse::Messages(msgs))
+        let msgs = stream.map_historic_messages().try_collect().await?;
+        Ok(OkResponse::MessageHistory(msgs))
     }
 
     async fn set_as_read(self, community: CommunityId, room: RoomId) -> ResponseResult {
-        if !self.session.in_community(&community) {
-            return Err(ErrResponse::InvalidCommunity);
-        }
-
         let mut active_user = manager::get_active_user_mut(self.user).unwrap();
-
         if let Some(user_community) = active_user.communities.get_mut(&community) {
             if let Some(user_room) = user_community.rooms.get_mut(&room) {
                 user_room.unread = false;

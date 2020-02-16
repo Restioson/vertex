@@ -13,8 +13,9 @@ pub enum OkResponse {
     UserProfile(UserProfile),
     Token { device: DeviceId, token: AuthToken },
     Invite { code: InviteCode },
+    RoomState(RoomState),
     /// Messages ordered youngest to oldest
-    Messages(Vec<ForwardedMessage>),
+    MessageHistory(Vec<HistoricMessage>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -38,6 +39,7 @@ pub enum ErrResponse {
     InvalidUser,
     AlreadyInCommunity,
     TooManyInviteCodes,
+    InvalidMessageSelector,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,18 +72,16 @@ pub enum ClientRequest {
     LogOut,
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
-    GetNewMessages {
+    ReadMessages {
         community: CommunityId,
         room: RoomId,
-        max: u64,
+        selector: MessageSelector,
     },
-    /// Get messages older than a certain base message
-    GetMessagesBeforeBase {
+    SelectRoom {
         community: CommunityId,
         room: RoomId,
-        base: MessageId,
-        max: u64,
     },
+    DeselectRoom,
     SetAsRead {
         community: CommunityId,
         room: RoomId,
@@ -110,7 +110,6 @@ pub enum ClientRequest {
         new_password: String,
     },
     GetUserProfile(UserId),
-    SetLookingAt(Option<(CommunityId, RoomId)>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

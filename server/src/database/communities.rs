@@ -30,18 +30,8 @@ impl TryFrom<Row> for CommunityRecord {
 
 impl Database {
     // TODO(room_persistence): load at boot
-    pub async fn get_community_metadata(
-        &self,
-        id: CommunityId,
-    ) -> DbResult<Option<CommunityRecord>> {
-        let conn = self.pool.connection().await?;
-        let query = conn
-            .client
-            .prepare("SELECT * FROM communities WHERE id=$1")
-            .await?;
-        let opt = conn.client.query_opt(&query, &[&id.0]).await?;
-
-        if let Some(row) = opt {
+    pub async fn get_community_metadata(&self, id: CommunityId) -> DbResult<Option<CommunityRecord>> {
+        if let Some(row) = self.query_opt("SELECT * FROM communities WHERE id=$1", &[&id.0]).await? {
             Ok(Some(CommunityRecord::try_from(row)?))
         } else {
             Ok(None)
@@ -60,11 +50,7 @@ impl Database {
     pub async fn get_all_communities(
         &self,
     ) -> DbResult<impl Stream<Item = DbResult<CommunityRecord>>> {
-        const QUERY: &str = "SELECT * FROM communities";
-        let conn = self.pool.connection().await?;
-        let query = conn.client.prepare(QUERY).await?;
-
-        let stream = conn.client.query_raw(&query, std::iter::empty()).await?;
+        let stream = self.query_stream("SELECT * FROM communities", &[]).await?;
         let stream = stream
             .and_then(|row| async move { CommunityRecord::try_from(row) })
             .map_err(|e| e.into());

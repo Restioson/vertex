@@ -26,6 +26,7 @@ impl ActiveUser {
     ) -> DbResult<Self> {
         let communities = db.get_communities_for_user(user).await?;
         let db = &db; // To prevent move
+
         let communities = communities
             .and_then(|record| async move {
                 let community = UserCommunity::load(db, user, record.community).await?;

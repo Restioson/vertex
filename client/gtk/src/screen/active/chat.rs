@@ -98,10 +98,10 @@ impl client::ChatWidget<Ui> for ChatWidget {
 
         adjustment.connect_value_changed(
             chat.connector()
-                .do_sync(|chat, adjustment: gtk::Adjustment| {
+                .do_async(|chat, adjustment: gtk::Adjustment| async move {
                     let upper = adjustment.get_upper() - adjustment.get_page_size();
                     let reading_new = adjustment.get_value() + 10.0 >= upper;
-                    chat.set_reading_new(reading_new);
+                    chat.set_reading_new(reading_new).await;
                 })
                 .build_cloned_consumer()
         );

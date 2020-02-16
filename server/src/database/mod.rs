@@ -6,7 +6,7 @@ use futures::{Stream, TryStreamExt};
 use l337_postgres::PostgresConnectionManager;
 use log::{error, warn};
 use tokio_postgres::types::ToSql;
-use tokio_postgres::{NoTls, Row};
+use tokio_postgres::{NoTls, Row, RowStream};
 use vertex::{AuthError, DeviceId, ErrResponse, UserId};
 
 mod administrators;
@@ -93,6 +93,24 @@ impl Database {
         let db = Database { pool };
         db.create_tables().await?;
         Ok(db)
+    }
+
+    pub async fn query_one(&self, query: &str, args: &[&(dyn ToSql + Sync)]) -> DbResult<Row> {
+        let conn = self.pool.connection().await?;
+        let query = conn.client.prepare(query).await?;
+        Ok(conn.client.query_one(&query, args).await?)
+    }
+
+    pub async fn query_opt(&self, query: &str, args: &[&(dyn ToSql + Sync)]) -> DbResult<Option<Row>> {
+        let conn = self.pool.connection().await?;
+        let query = conn.client.prepare(query).await?;
+        Ok(conn.client.query_opt(&query, args).await?)
+    }
+
+    pub async fn query_stream(&self, query: &str, args: &[&(dyn ToSql + Sync)]) -> DbResult<RowStream> {
+        let conn = self.pool.connection().await?;
+        let query = conn.client.prepare(query).await?;
+        Ok(conn.client.query_raw(&query, slice_iter(args)).await?)
     }
 
     async fn create_tables(&self) -> DbResult<()> {
@@ -225,4 +243,11 @@ impl TryFrom<&Row> for InsertIntoTableSource {
             _ => panic!("Invalid AddToRoomSource type!"),
         })
     }
+}
+
+/// Taken from tokio_postgres
+pub fn slice_iter<'a>(
+    s: &'a [&'a (dyn ToSql + Sync)],
+) -> impl ExactSizeIterator<Item = &'a dyn ToSql> + 'a {
+    s.iter().map(|s| *s as _)
 }

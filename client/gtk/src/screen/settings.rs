@@ -40,7 +40,7 @@ fn bind_events(screen: &Screen) {
                     match name.as_str() {
                         "log_out" => {
                             token_store::forget_token();
-                            screen.client.log_out().await.expect("failed to revoke token");
+                            screen.client.log_out().await;
 
                             let screen = screen::login::build().await;
                             window::set_screen(&screen.main);

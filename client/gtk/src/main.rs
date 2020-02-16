@@ -120,7 +120,7 @@ impl Server {
     pub fn url(&self) -> &Url { &self.0 }
 }
 
-async fn start() {
+pub async fn start() {
     match token_store::get_stored_token() {
         Some(parameters) => {
             screen::active::start(parameters).await;

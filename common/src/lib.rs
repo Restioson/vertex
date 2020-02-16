@@ -71,6 +71,37 @@ pub struct ClientSentMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomState {
+    pub newest_message: Option<MessageId>,
+    pub last_read: Option<MessageId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MessageSelector {
+    Before {
+        message: MessageId,
+        count: usize,
+    },
+    After {
+        message: MessageId,
+        count: usize,
+    },
+    UpTo {
+        from: MessageId,
+        up_to: MessageId,
+        count: usize,
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistoricMessage {
+    pub id: MessageId,
+    pub author: UserId,
+    pub author_profile_version: ProfileVersion,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForwardedMessage {
     pub id: MessageId,
     pub community: CommunityId,
@@ -94,6 +125,17 @@ impl ForwardedMessage {
             author,
             author_profile_version,
             content: msg.content,
+        }
+    }
+}
+
+impl Into<HistoricMessage> for ForwardedMessage {
+    fn into(self) -> HistoricMessage {
+        HistoricMessage {
+            id: self.id,
+            author: self.author,
+            author_profile_version: self.author_profile_version,
+            content: self.content,
         }
     }
 }

@@ -81,14 +81,9 @@ pub enum ChangeUsernameError {
 
 impl Database {
     pub async fn get_user_by_id(&self, id: UserId) -> DbResult<Option<UserRecord>> {
-        let conn = self.pool.connection().await?;
-        let query = conn
-            .client
-            .prepare("SELECT * FROM users WHERE id=$1")
-            .await?;
-        let opt = conn.client.query_opt(&query, &[&id.0]).await?;
-
-        if let Some(row) = opt {
+        let query = "SELECT * FROM users WHERE id=$1";
+        let row = self.query_opt(query, &[&id.0]).await?;
+        if let Some(row) = row {
             Ok(Some(UserRecord::try_from(row)?)) // Can't opt::map because of ?
         } else {
             Ok(None)
@@ -96,14 +91,9 @@ impl Database {
     }
 
     pub async fn get_user_by_name(&self, name: String) -> DbResult<Option<UserRecord>> {
-        let conn = self.pool.connection().await?;
-        let query = conn
-            .client
-            .prepare("SELECT * FROM users WHERE username=$1")
-            .await?;
-        let opt = conn.client.query_opt(&query, &[&name]).await?;
-
-        if let Some(row) = opt {
+        let query = "SELECT * FROM users WHERE username=$1";
+        let row = self.query_opt(query, &[&name]).await?;
+        if let Some(row) = row {
             Ok(Some(UserRecord::try_from(row)?)) // Can't opt::map because of ?
         } else {
             Ok(None)
@@ -111,13 +101,8 @@ impl Database {
     }
 
     pub async fn get_user_profile(&self, id: UserId) -> DbResult<Option<UserProfile>> {
-        let conn = self.pool.connection().await?;
-        let query = conn
-            .client
-            .prepare("SELECT username, display_name, profile_version FROM users WHERE id=$1")
-            .await?;
-        let opt = conn.client.query_opt(&query, &[&id.0]).await?;
-
+        let query = "SELECT username, display_name, profile_version FROM users WHERE id=$1";
+        let opt = self.query_opt(query, &[&id.0]).await?;
         if let Some(row) = opt {
             // Can't opt::map because of ?
             Ok(Some(UserProfile {
