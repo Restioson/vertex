@@ -28,7 +28,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="halign">start</property>
-                    <property name="pixbuf">../../feather/settings.svg</property>
+                    <property name="pixbuf">res/feather/settings.svg</property>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -73,7 +73,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="halign">start</property>
-                    <property name="pixbuf">../../feather/user-plus.svg</property>
+                    <property name="pixbuf">res/feather/user-plus.svg</property>
                   </object>
                   <packing>
                     <property name="expand">False</property>

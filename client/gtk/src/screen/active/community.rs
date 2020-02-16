@@ -3,8 +3,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use gtk::prelude::*;
 
+use lazy_static::lazy_static;
+
 use crate::client;
 use crate::connect::AsConnector;
+use crate::Glade;
 use crate::window;
 
 use super::*;
@@ -19,7 +22,11 @@ pub struct CommunityEntryWidget {
 
 impl CommunityEntryWidget {
     pub fn build(name: String) -> Self {
-        let builder = gtk::Builder::new_from_file("res/glade/active/community_entry.glade");
+        lazy_static! {
+            static ref GLADE: Glade = Glade::open("res/glade/active/community_entry.glade").unwrap();
+        }
+
+        let builder: gtk::Builder = GLADE.builder();
 
         let community_header: gtk::Box = builder.get_object("community_header").unwrap();
 
@@ -90,7 +97,11 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
 }
 
 fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
-    let builder = gtk::Builder::new_from_file("res/glade/active/community_menu.glade");
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("res/glade/active/community_menu.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
 
     let menu: gtk::Popover = builder.get_object("community_menu").unwrap();
     let invite_button: gtk::Button = builder.get_object("invite_button").unwrap();
@@ -104,7 +115,11 @@ fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
                 // TODO: error handling
                 let invite = community_entry.create_invite(None).await.expect("failed to create invite");
 
-                let builder = gtk::Builder::new_from_file("res/glade/active/dialog/invite_community.glade");
+                lazy_static! {
+                    static ref GLADE: Glade = Glade::open("res/glade/active/dialog/invite_community.glade").unwrap();
+                }
+
+                let builder: gtk::Builder = GLADE.builder();
                 let main: gtk::Box = builder.get_object("main").unwrap();
 
                 let code_view: gtk::TextView = builder.get_object("code_view").unwrap();

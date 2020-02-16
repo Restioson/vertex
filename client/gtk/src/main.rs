@@ -1,6 +1,9 @@
 #![feature(type_alias_impl_trait)]
 
-use std::ops;
+use std::{io, ops};
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 use std::rc::{Rc, Weak};
 
 use gio::prelude::*;
@@ -12,6 +15,7 @@ use url::Url;
 use vertex::*;
 
 pub use crate::client::Client;
+use std::sync::Arc;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -36,6 +40,23 @@ pub fn https_ignore_invalid_certs() -> hyper_tls::HttpsConnector<hyper::client::
     http.enforce_http(false);
 
     (http, tls).into()
+}
+
+#[derive(Clone)]
+pub struct Glade(Arc<String>);
+
+impl Glade {
+    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Glade> {
+        let mut file = File::open(path)?;
+        let mut source = String::new();
+        file.read_to_string(&mut source)?;
+        Ok(Glade(Arc::new(source)))
+    }
+
+    #[inline]
+    pub fn builder(&self) -> gtk::Builder {
+        gtk::Builder::new_from_string(&self.0)
+    }
 }
 
 pub struct SharedMut<T>(Rc<RwLock<T>>);

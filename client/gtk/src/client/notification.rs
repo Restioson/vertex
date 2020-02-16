@@ -26,10 +26,11 @@ impl Notifier {
     }
 
     pub async fn notify_message(&self, author: &UserProfile, content: &str) {
-        let body = format!("{}: {}", author.display_name, content);
+        let title = author.display_name.clone();
+        let content = content.to_owned();
 
         #[cfg(windows)]
-            notifica::notify("Vertex", &body);
+            notifica::notify(&title, &content);
 
         #[cfg(unix)]
             {
@@ -39,10 +40,10 @@ impl Notifier {
 
                 tokio::task::spawn_blocking(move || {
                     let res = notify_rust::Notification::new()
-                        .summary("Vertex")
+                        .summary(&title)
                         .appname("Vertex")
                         .icon(&icon_path.to_str().unwrap())
-                        .body(&body)
+                        .body(&content)
                         .show();
 
                     if let Ok(handle) = res {

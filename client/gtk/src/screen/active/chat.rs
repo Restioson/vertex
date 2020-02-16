@@ -17,7 +17,11 @@ pub struct ChatWidget {
 
 impl ChatWidget {
     pub fn build() -> Self {
-        let builder = gtk::Builder::new_from_file("res/glade/active/chat.glade");
+        lazy_static! {
+            static ref GLADE: Glade = Glade::open("res/glade/active/chat.glade").unwrap();
+        }
+
+        let builder: gtk::Builder = GLADE.builder();
 
         let main: gtk::Box = builder.get_object("chat").unwrap();
 

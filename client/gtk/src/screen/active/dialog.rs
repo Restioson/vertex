@@ -1,15 +1,21 @@
 use gtk::prelude::*;
 
+use lazy_static::lazy_static;
 use vertex::*;
 
 use crate::{Client, TryGetText};
 use crate::connect::AsConnector;
+use crate::Glade;
 use crate::window;
 
 use super::Ui;
 
 pub fn show_add_community(client: Client<Ui>) {
-    let builder = gtk::Builder::new_from_file("res/glade/active/dialog/add_community.glade");
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("res/glade/active/dialog/add_community.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
     let main: gtk::Box = builder.get_object("main").unwrap();
 
     let create_community_button: gtk::Button = builder.get_object("create_community_button").unwrap();
@@ -42,7 +48,11 @@ pub fn show_add_community(client: Client<Ui>) {
 }
 
 pub fn show_create_community(client: Client<Ui>) {
-    let builder = gtk::Builder::new_from_file("res/glade/active/dialog/create_community.glade");
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("res/glade/active/dialog/create_community.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
     let main: gtk::Box = builder.get_object("main").unwrap();
 
     let name_entry: gtk::Entry = builder.get_object("name_entry").unwrap();
@@ -72,7 +82,11 @@ pub fn show_create_community(client: Client<Ui>) {
 }
 
 pub fn show_join_community(client: Client<Ui>) {
-    let builder = gtk::Builder::new_from_file("res/glade/active/dialog/join_community.glade");
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("res/glade/active/dialog/join_community.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
     let main: gtk::Box = builder.get_object("main").unwrap();
 
     let code_entry: gtk::Entry = builder.get_object("invite_code_entry").unwrap();

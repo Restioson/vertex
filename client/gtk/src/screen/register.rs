@@ -1,7 +1,10 @@
 use gtk::prelude::*;
 
+use lazy_static::lazy_static;
+
 use crate::{auth, AuthParameters, Error, Result, Server, token_store, TryGetText, window};
 use crate::connect::AsConnector;
+use crate::Glade;
 use crate::screen;
 
 #[derive(Clone)]
@@ -19,8 +22,11 @@ pub struct Screen {
 }
 
 pub async fn build() -> Screen {
-    let builder = gtk::Builder::new_from_file("res/glade/register/register.glade");
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("res/glade/register/register.glade").unwrap();
+    }
 
+    let builder: gtk::Builder = GLADE.builder();
     let screen = Screen {
         main: builder.get_object("viewport").unwrap(),
         instance_entry: builder.get_object("instance_entry").unwrap(),

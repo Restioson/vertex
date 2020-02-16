@@ -72,7 +72,7 @@
           <object class="GtkImage">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="pixbuf">../../feather/menu.svg</property>
+            <property name="pixbuf">res/feather/menu.svg</property>
           </object>
         </child>
       </object>

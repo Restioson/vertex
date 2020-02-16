@@ -1,11 +1,18 @@
 use futures::Future;
 use gtk::prelude::*;
 
+use lazy_static::lazy_static;
+
 use crate::{screen, window};
 use crate::connect::AsConnector;
+use crate::Glade;
 
 pub fn build() -> gtk::Viewport {
-    let builder = gtk::Builder::new_from_file("res/glade/loading/loading.glade");
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("res/glade/loading/loading.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
     builder.get_object("viewport").unwrap()
 }
 
@@ -13,7 +20,11 @@ pub fn build_error<F, Fut>(error: String, retry: F) -> gtk::Viewport
     where F: Fn() -> Fut + 'static,
           Fut: Future<Output = ()> + 'static
 {
-    let builder = gtk::Builder::new_from_file("res/glade/loading/error.glade");
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("res/glade/loading/error.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
     let viewport = builder.get_object("viewport").unwrap();
 
     let error_label: gtk::Label = builder.get_object("error_label").unwrap();

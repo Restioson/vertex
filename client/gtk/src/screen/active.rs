@@ -3,6 +3,7 @@ use gtk::prelude::*;
 use chat::*;
 use community::*;
 use dialog::*;
+use lazy_static::lazy_static;
 use message::*;
 use room::*;
 
@@ -10,6 +11,7 @@ use crate::{AuthParameters, Client, Error, Result, TryGetText};
 use crate::auth;
 use crate::client;
 use crate::connect::AsConnector;
+use crate::Glade;
 use crate::screen;
 use crate::window;
 
@@ -30,7 +32,11 @@ pub struct Ui {
 
 impl Ui {
     fn build() -> Self {
-        let builder = gtk::Builder::new_from_file("res/glade/active/main.glade");
+        lazy_static! {
+            static ref GLADE: Glade = Glade::open("res/glade/active/main.glade").unwrap();
+        }
+
+        let builder = GLADE.builder();
 
         let main: gtk::Box = builder.get_object("main").unwrap();
         let content: gtk::Box = builder.get_object("content").unwrap();

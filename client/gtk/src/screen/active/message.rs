@@ -3,6 +3,7 @@ use gtk::prelude::*;
 use vertex::*;
 
 use crate::client::{self, InviteEmbed, MessageEmbed, MessageStatus, OpenGraphEmbed};
+use crate::Glade;
 
 use super::*;
 
@@ -14,7 +15,11 @@ pub struct GroupedMessageWidget {
 
 impl GroupedMessageWidget {
     pub fn build(author: UserId, profile: UserProfile) -> GroupedMessageWidget {
-        let builder = gtk::Builder::new_from_file("res/glade/active/message_entry.glade");
+        lazy_static! {
+            static ref GLADE: Glade = Glade::open("res/glade/active/message_entry.glade").unwrap();
+        }
+
+        let builder: gtk::Builder = GLADE.builder();
 
         let widget: gtk::Box = builder.get_object("message_group").unwrap();
         let entry_list: gtk::ListBox = builder.get_object("entry_list").unwrap();
@@ -98,7 +103,11 @@ fn build_embed(client: &Client<Ui>, embed: MessageEmbed) -> gtk::Widget {
 }
 
 fn build_opengraph_embed(embed: OpenGraphEmbed) -> gtk::Widget {
-    let builder = gtk::Builder::new_from_file("res/glade/active/embed/opengraph.glade");
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("res/glade/active/embed/opengraph.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
     let opengraph: gtk::Box = builder.get_object("opengraph").unwrap();
 
     let title_label: gtk::Label = builder.get_object("title").unwrap();
@@ -111,7 +120,11 @@ fn build_opengraph_embed(embed: OpenGraphEmbed) -> gtk::Widget {
 }
 
 fn build_invite_embed(client: &Client<Ui>, embed: InviteEmbed) -> gtk::Widget {
-    let builder = gtk::Builder::new_from_file("res/glade/active/embed/invite.glade");
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("res/glade/active/embed/invite.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
     let invite: gtk::Box = builder.get_object("invite").unwrap();
 
     let name_label: gtk::Label = builder.get_object("community_name").unwrap();
