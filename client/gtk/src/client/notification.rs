@@ -11,6 +11,12 @@ pub struct Notifier {
     sound: Option<Rc<RefCell<Sound>>>,
 }
 
+impl Default for Notifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Notifier {
     pub fn new() -> Self {
         let sound = Sound::new("res/notification_sound_clearly.ogg").ok();

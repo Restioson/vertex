@@ -63,7 +63,7 @@ pub struct Receiver {
 
 impl Receiver {
     pub fn stream(self) -> impl Stream<Item = tungstenite::Result<vertex::ServerMessage>> {
-        let error = self.error.map(|error| Err(error));
+        let error = self.error.map(Err);
 
         futures::stream::select(self.stream, error)
             .filter_map(move |result| futures::future::ready(

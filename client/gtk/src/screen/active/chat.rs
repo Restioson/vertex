@@ -74,9 +74,7 @@ impl client::ChatWidget<Ui> for ChatWidget {
 
     fn push_message(&mut self, author: UserId, author_profile: UserProfile, content: String) -> MessageEntryWidget {
         let group = self.next_group(author, author_profile);
-        let widget = group.push_message(content);
-
-        widget
+        group.push_message(content)
     }
 
     fn bind_events(&self, client: &Client<Ui>, chat: &client::Chat<Ui>) {
@@ -87,7 +85,7 @@ impl client::ChatWidget<Ui> for ChatWidget {
                         let content = entry.try_get_text().unwrap_or_default();
                         if !content.trim().is_empty() {
                             entry.set_text("");
-                            let _ = selected_room.send_message(content).await;
+                            selected_room.send_message(content).await;
                         }
                     }
                 })

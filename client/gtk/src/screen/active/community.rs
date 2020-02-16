@@ -94,7 +94,7 @@ fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
 
     let menu: gtk::Popover = builder.get_object("community_menu").unwrap();
     let invite_button: gtk::Button = builder.get_object("invite_button").unwrap();
-    let settings_button: gtk::Button = builder.get_object("settings_button").unwrap();
+    let _settings_button: gtk::Button = builder.get_object("settings_button").unwrap();
 
     invite_button.connect_button_release_event(
         (menu.clone(), community_entry).connector()

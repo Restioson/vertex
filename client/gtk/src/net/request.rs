@@ -64,7 +64,7 @@ struct EnqueuedRequest(oneshot::Sender<Result<OkResponse>>);
 
 impl EnqueuedRequest {
     fn handle(self, result: ResponseResult) {
-        let result = result.map_err(|err| Error::ErrorResponse(err));
+        let result = result.map_err(Error::ErrorResponse);
         let _ = self.0.send(result); // We don't care if the channel has closed
     }
 }

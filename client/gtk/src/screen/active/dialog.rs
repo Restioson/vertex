@@ -32,7 +32,6 @@ pub fn show_add_community(client: Client<Ui>) {
     join_community_button.connect_button_release_event(
         client.connector()
             .do_sync({
-                let dialog = dialog.clone();
                 move |client, _| {
                     dialog.close();
                     show_join_community(client);

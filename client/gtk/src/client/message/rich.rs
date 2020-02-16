@@ -48,7 +48,7 @@ impl RichMessage {
                     println!("error trying to load embed from {}: {:?}", url, err);
                     let embed = ErrorEmbed {
                         url: url.clone(),
-                        title: url.clone(),
+                        title: url,
                         // TODO: display error without debug
                         error: format!("{:?}", err),
                     };
@@ -105,19 +105,15 @@ fn parse_link_metadata(mut props: HashMap<String, String>) -> LinkMetadata {
         invite: None,
     };
 
-    match (props.remove("vertex:invite_code"), props.remove("vertex:invite_name")) {
-        (Some(code), Some(name)) => {
-            let code = InviteCode(code);
-            metadata.invite = Some(InviteMeta { code, name })
-        }
-        _ => (),
+    let invite_details = (props.remove("vertex:invite_code"), props.remove("vertex:invite_name"));
+    if let (Some(code), Some(name)) = invite_details {
+        let code = InviteCode(code);
+        metadata.invite = Some(InviteMeta { code, name })
     }
 
-    match (props.remove("og:title"), props.remove("og:description")) {
-        (Some(title), Some(description)) => {
-            metadata.opengraph = Some(OpenGraphMeta { title, description })
-        }
-        _ => (),
+    let og_tags = (props.remove("og:title"), props.remove("og:description"));
+    if let (Some(title), Some(description)) = og_tags {
+        metadata.opengraph = Some(OpenGraphMeta { title, description })
     }
 
     metadata
@@ -129,11 +125,10 @@ fn collect_metadata_props(html: scraper::Html) -> HashMap<String, String> {
     let select_meta = scraper::Selector::parse("head meta").unwrap();
     for element in html.select(&select_meta) {
         let element = element.value();
-        match (element.attr("property"), element.attr("content")) {
-            (Some(property), Some(content)) => {
-                map.insert(property.to_owned(), content.to_owned());
-            }
-            _ => (),
+        let meta_info = (element.attr("property"), element.attr("content"));
+
+        if let (Some(property), Some(content)) = meta_info {
+            map.insert(property.to_owned(), content.to_owned());
         }
     }
 

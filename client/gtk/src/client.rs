@@ -162,7 +162,7 @@ impl<Ui: ClientUi> Client<Ui> {
         println!("network error: {:?}", err);
 
         let error = format!("{}", err);
-        let screen = screen::loading::build_error(error, || crate::start());
+        let screen = screen::loading::build_error(error,  crate::start);
         window::set_screen(&screen);
 
         self.abort_handle.abort();
@@ -170,7 +170,7 @@ impl<Ui: ClientUi> Client<Ui> {
 
     async fn handle_add_room(&self, community: CommunityId, room: RoomStructure) {
         if let Some(community) = self.community_by_id(community).await {
-            community.add_room(structure).await;
+            community.add_room(room).await;
         } else {
             println!("received AddRoom for invalid community: {:?}", community);
         }

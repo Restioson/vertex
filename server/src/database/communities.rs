@@ -30,8 +30,14 @@ impl TryFrom<Row> for CommunityRecord {
 
 impl Database {
     // TODO(room_persistence): load at boot
-    pub async fn get_community_metadata(&self, id: CommunityId) -> DbResult<Option<CommunityRecord>> {
-        if let Some(row) = self.query_opt("SELECT * FROM communities WHERE id=$1", &[&id.0]).await? {
+    pub async fn get_community_metadata(
+        &self,
+        id: CommunityId,
+    ) -> DbResult<Option<CommunityRecord>> {
+        if let Some(row) = self
+            .query_opt("SELECT * FROM communities WHERE id=$1", &[&id.0])
+            .await?
+        {
             Ok(Some(CommunityRecord::try_from(row)?))
         } else {
             Ok(None)

@@ -44,15 +44,15 @@ impl<'a> RequestHandler<'a> {
                 community,
                 expiration_date,
             } => self.create_invite(community, expiration_date).await,
-            ClientRequest::SelectRoom { community, room } => self.select_room(community, room).await,
+            ClientRequest::SelectRoom { community, room } => {
+                self.select_room(community, room).await
+            }
             ClientRequest::DeselectRoom => self.deselect_room().await,
             ClientRequest::ReadMessages {
                 community,
                 room,
                 selector,
-            } => {
-                self.read_message_history(community, room, selector).await
-            }
+            } => self.read_message_history(community, room, selector).await,
             ClientRequest::SetAsRead { community, room } => self.set_as_read(community, room).await,
             _ => unimplemented!(),
         }
@@ -435,7 +435,8 @@ impl<'a> RequestHandler<'a> {
             return Err(ErrResponse::InvalidRoom);
         }
 
-        let stream = self.session.global.database
+        let db = &self.session.global.database;
+        let stream = db
             .read_messages(community, room, selector)
             .await?
             .map_err(|_| ErrResponse::InvalidMessageSelector)?;

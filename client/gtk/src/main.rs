@@ -52,12 +52,12 @@ impl<T> SharedMut<T> {
     }
 
     #[inline]
-    pub async fn read<'a>(&'a self) -> impl ops::Deref<Target = T> + 'a {
+    pub async fn read(&self) -> impl ops::Deref<Target = T> + '_ {
         self.0.read().await
     }
 
     #[inline]
-    pub async fn write<'a>(&'a self) -> impl ops::Deref<Target = T> + ops::DerefMut + 'a {
+    pub async fn write(&self) -> impl ops::Deref<Target = T> + ops::DerefMut + '_ {
         self.0.write().await
     }
 
@@ -77,7 +77,7 @@ impl<T> Clone for WeakSharedMut<T> {
 impl<T> WeakSharedMut<T> {
     #[inline]
     pub fn upgrade(&self) -> Option<SharedMut<T>> {
-        self.0.upgrade().map(|upgrade| SharedMut(upgrade))
+        self.0.upgrade().map(SharedMut)
     }
 }
 

@@ -2,6 +2,8 @@ use std::pin::Pin;
 
 use futures::Future;
 
+type AsyncFn<Shared, Args> = dyn Fn(Shared, Args) -> Pin<Box<dyn Future<Output = ()>>>;
+
 pub trait AsConnector: Clone {
     fn connector<Args: Clone>(&self) -> Connector<Self, Args>;
 }
@@ -14,7 +16,7 @@ impl<T: Clone> AsConnector for T {
 
 pub struct Connector<Shared: Clone, Args: Clone> {
     shared: Shared,
-    do_async: Vec<Box<dyn Fn(Shared, Args) -> Pin<Box<dyn Future<Output = ()>>>>>,
+    do_async: Vec<Box<AsyncFn<Shared, Args>>>,
     do_sync: Vec<Box<dyn Fn(Shared, Args)>>,
     inhibit: bool,
 }

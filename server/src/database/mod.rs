@@ -101,13 +101,21 @@ impl Database {
         Ok(conn.client.query_one(&query, args).await?)
     }
 
-    pub async fn query_opt(&self, query: &str, args: &[&(dyn ToSql + Sync)]) -> DbResult<Option<Row>> {
+    pub async fn query_opt(
+        &self,
+        query: &str,
+        args: &[&(dyn ToSql + Sync)],
+    ) -> DbResult<Option<Row>> {
         let conn = self.pool.connection().await?;
         let query = conn.client.prepare(query).await?;
         Ok(conn.client.query_opt(&query, args).await?)
     }
 
-    pub async fn query_stream(&self, query: &str, args: &[&(dyn ToSql + Sync)]) -> DbResult<RowStream> {
+    pub async fn query_stream(
+        &self,
+        query: &str,
+        args: &[&(dyn ToSql + Sync)],
+    ) -> DbResult<RowStream> {
         let conn = self.pool.connection().await?;
         let query = conn.client.prepare(query).await?;
         Ok(conn.client.query_raw(&query, slice_iter(args)).await?)

@@ -32,7 +32,9 @@ impl TryFrom<Row> for UserRoomState {
         Ok(UserRoomState {
             room: RoomId(row.try_get("room")?),
             watching_state: WatchingState::from(ws),
-            unread: row.try_get::<&str, Option<bool>>("unread")?.unwrap_or(false),
+            unread: row
+                .try_get::<&str, Option<bool>>("unread")?
+                .unwrap_or(false),
         })
     }
 }
