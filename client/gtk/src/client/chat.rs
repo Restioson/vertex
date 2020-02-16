@@ -9,15 +9,6 @@ use super::ClientUi;
 use super::message::*;
 use super::room::*;
 
-fn create_fallback_profile(author: UserId) -> UserProfile {
-    let name = format!("{}", author.0);
-    UserProfile {
-        version: ProfileVersion(0),
-        username: name.clone(),
-        display_name: name,
-    }
-}
-
 pub trait ChatWidget<Ui: ClientUi> {
     fn set_room(&mut self, room: Option<&RoomEntry<Ui>>);
 
@@ -60,20 +51,8 @@ impl<Ui: ClientUi> Chat<Ui> {
         client: &Client<Ui>,
         message: HistoricMessage
     ) -> Ui::MessageEntryWidget {
-        let author_profile = client.profiles.get(
-            message.author,
-            Some(message.author_profile_version),
-        ).await;
-        let author_profile = match author_profile {
-            Ok(profile) => profile,
-            Err(err) => {
-                println!("failed to load profile for {:?}: {:?}", message.author, err);
-                client.profiles.get_existing(message.author, None).await
-                    .unwrap_or_else(|| create_fallback_profile(message.author))
-            }
-        };
-
-        self.push(client, message.author, author_profile, message.content).await
+        let profile = client.profiles.get_or_default(message.author, message.author_profile_version).await;
+        self.push(client, message.author, profile, message.content).await
     }
 
     pub(crate) async fn push(

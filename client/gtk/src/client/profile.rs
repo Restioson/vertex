@@ -5,6 +5,15 @@ use vertex::*;
 
 use crate::{client, Error, net, Result, SharedMut};
 
+fn create_default_profile(user: UserId) -> UserProfile {
+    let name = format!("{}", user.0);
+    UserProfile {
+        version: ProfileVersion(0),
+        username: name.clone(),
+        display_name: name,
+    }
+}
+
 // TODO: invalidate old records
 #[derive(Clone)]
 pub struct ProfileCache {
@@ -22,19 +31,27 @@ impl ProfileCache {
         }
     }
 
-    pub async fn get(&self, id: UserId, version: Option<ProfileVersion>) -> Result<UserProfile> {
+    pub async fn get_or_default(&self, id: UserId, version: ProfileVersion) -> UserProfile {
+        match self.get(id, version).await {
+            Ok(profile) => profile,
+            Err(err) => {
+                println!("failed to get profile for {:?}: {:?}", id, err);
+                let existing = self.get_existing(id, None).await;
+                existing.unwrap_or_else(|| create_default_profile(id))
+            }
+        }
+    }
+
+    pub async fn get(&self, id: UserId, version: ProfileVersion) -> Result<UserProfile> {
         if id == self.user.id {
             return Ok(self.user.profile().await);
         }
 
-        if let Some(existing) = self.get_existing(id, version).await {
+        if let Some(existing) = self.get_existing(id, Some(version)).await {
             return Ok(existing);
         }
 
         let profile = self.request(id).await?;
-
-        let mut cache = self.cache.write().await;
-        cache.insert(id, profile.clone());
 
         Ok(profile)
     }
@@ -54,7 +71,11 @@ impl ProfileCache {
         let request = self.request.send(request).await;
 
         match request.response().await? {
-            OkResponse::UserProfile(profile) => Ok(profile),
+            OkResponse::UserProfile(profile) => {
+                let mut cache = self.cache.write().await;
+                cache.insert(id, profile.clone());
+                Ok(profile)
+            }
             _ => Err(Error::UnexpectedMessage),
         }
     }

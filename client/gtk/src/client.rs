@@ -145,33 +145,14 @@ impl<Ui: ClientUi> Client<Ui> {
         match event.clone() {
             ServerEvent::AddCommunity(structure) => {
                 self.add_community(structure).await;
-            }
-            ServerEvent::AddRoom { community, structure } => {
-                if let Some(community) = self.community_by_id(community).await {
-                    community.add_room(structure).await;
-                } else {
-                    println!("received AddRoom for invalid community: {:?}", community);
-                }
-            }
-            ServerEvent::AddMessage(message) => {
-                let room = match self.community_by_id(message.community).await {
-                    Some(community) => community.room_by_id(message.room).await,
-                    None => None,
-                };
-
-                if let Some(room) = room {
-                    room.message_stream.push(message.into()).await;
-
-                    if !self.ui.window_focused() || !self.is_selected(room.community, room.id).await {
-                        self.notifier.send(&event).await;
-                    }
-                } else {
-                    println!("received message for invalid room: {:?}#{:?}", message.community, message.room);
-                }
-            }
+            },
+            ServerEvent::AddRoom { community, structure } => self.handle_add_room(community, structure).await,
+            ServerEvent::AddMessage(message) => self.handle_add_message(message).await,
             ServerEvent::SessionLoggedOut => {
+                let screen = screen::login::build().await;
+                window::set_screen(&screen.main);
+
                 self.abort_handle.abort();
-                println!("session logged out");
             }
             unexpected => println!("unhandled server event: {:?}", unexpected),
         }
@@ -185,6 +166,32 @@ impl<Ui: ClientUi> Client<Ui> {
         window::set_screen(&screen);
 
         self.abort_handle.abort();
+    }
+
+    async fn handle_add_room(&self, community: CommunityId, room: RoomStructure) {
+        if let Some(community) = self.community_by_id(community).await {
+            community.add_room(structure).await;
+        } else {
+            println!("received AddRoom for invalid community: {:?}", community);
+        }
+    }
+
+    async fn handle_add_message(&self, message: ForwardedMessage) {
+        let room = match self.community_by_id(message.community).await {
+            Some(community) => community.room_by_id(message.room).await,
+            None => None,
+        };
+
+        if let Some(room) = room {
+            if !self.ui.window_focused() || !self.is_selected(room.community, room.id).await {
+                let profile = self.profiles.get_or_default(message.author, message.author_profile_version).await;
+                self.notifier.notify_message(&profile, &message.content).await;
+            }
+
+            room.message_stream.push(message.into()).await;
+        } else {
+            println!("received message for invalid room: {:?}#{:?}", message.community, message.room);
+        }
     }
 
     pub async fn create_community(&self, name: &str) -> Result<CommunityEntry<Ui>> {

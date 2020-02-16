@@ -41,9 +41,6 @@ fn bind_events(screen: &Screen) {
                         "log_out" => {
                             token_store::forget_token();
                             screen.client.log_out().await;
-
-                            let screen = screen::login::build().await;
-                            window::set_screen(&screen.main);
                         }
                         "close" => {
                             window::set_screen(&screen.client.ui.main);
