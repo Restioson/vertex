@@ -14,7 +14,7 @@ pub trait CommunityEntryWidget<Ui: ClientUi>: Clone {
 }
 
 pub struct CommunityState<Ui: ClientUi> {
-    name: String,
+    pub name: String,
     rooms: Vec<RoomEntry<Ui>>,
 }
 
@@ -25,7 +25,7 @@ pub struct CommunityEntry<Ui: ClientUi> {
     pub widget: Ui::CommunityEntryWidget,
 
     pub id: CommunityId,
-    state: SharedMut<CommunityState<Ui>>,
+    pub state: SharedMut<CommunityState<Ui>>,
 }
 
 impl<Ui: ClientUi> CommunityEntry<Ui> {

@@ -177,21 +177,26 @@ impl<Ui: ClientUi> Client<Ui> {
     }
 
     async fn handle_add_message(&self, message: ForwardedMessage) {
-        let room = match self.community_by_id(message.community).await {
-            Some(community) => community.room_by_id(message.room).await,
-            None => None,
-        };
+        let community = self.community_by_id(message.community).await;
 
-        if let Some(room) = room {
-            if !self.ui.window_focused() || !self.is_selected(room.community, room.id).await {
-                let profile = self.profiles.get_or_default(message.author, message.author_profile_version).await;
-                self.notifier.notify_message(&profile, &message.content).await;
+        if let Some(community) = community {
+            if let Some(room) = community.room_by_id(message.room).await {
+                if !self.ui.window_focused() || !self.is_selected(room.community, room.id).await {
+                    let profile = self.profiles.get_or_default(message.author, message.author_profile_version).await;
+                    self.notifier.notify_message(
+                        &profile,
+                        &community.state.read().await.name,
+                            &room.name,
+                        &message.content
+                    ).await;
+                }
+
+                room.message_stream.push(message.into()).await;
+                return;
             }
-
-            room.message_stream.push(message.into()).await;
-        } else {
-            println!("received message for invalid room: {:?}#{:?}", message.community, message.room);
         }
+
+        println!("received message for invalid room: {:?}#{:?}", message.community, message.room);
     }
 
     pub async fn create_community(&self, name: &str) -> Result<CommunityEntry<Ui>> {

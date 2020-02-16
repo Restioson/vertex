@@ -7,6 +7,7 @@ use vertex::*;
 
 use crate::client::message::{ErrorEmbed, InviteEmbed, MessageEmbed, OpenGraphEmbed};
 use crate::Result;
+use futures::{stream, StreamExt, Stream};
 
 #[derive(Debug, Clone)]
 pub struct RichMessage {
@@ -32,27 +33,27 @@ impl RichMessage {
         !self.links.is_empty()
     }
 
-    pub async fn load_embeds(&self) -> impl Iterator<Item = MessageEmbed> {
-        let links = futures::future::join_all(
-            self.links.iter().cloned()
-                .map(|link| async move {
-                    let result = get_link_metadata(&link).await;
-                    (link, result)
-                })
-        ).await;
+    pub fn load_embeds(&self) -> impl Stream<Item = MessageEmbed> {
+        let links = stream::iter(self.links.clone().into_iter());
 
-        links.into_iter()
-            .filter_map(|(url, result)| match result {
-                Ok(metadata) => build_embed(url, metadata),
-                Err(err) => {
-                    println!("error trying to load embed from {}: {:?}", url, err);
-                    let embed = ErrorEmbed {
-                        url: url.clone(),
-                        title: url,
-                        // TODO: display error without debug
-                        error: format!("{:?}", err),
-                    };
-                    Some(MessageEmbed::Error(embed))
+        links
+            .then(|link| async move {
+                let result = get_link_metadata(&link).await;
+                (link, result)
+            })
+            .filter_map(move |(url, result)| async move {
+                match result {
+                    Ok(metadata) => build_embed(url, metadata),
+                    Err(err) => {
+                        println!("error trying to load embed from {}: {:?}", url, err);
+                        let embed = ErrorEmbed {
+                            url: url.clone(),
+                            title: url,
+                            // TODO: display error without debug
+                            error: format!("{:?}", err),
+                        };
+                        Some(MessageEmbed::Error(embed))
+                    }
                 }
             })
     }

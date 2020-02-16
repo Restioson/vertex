@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use futures::StreamExt;
 
 use vertex::*;
 
@@ -72,8 +73,12 @@ impl<Ui: ClientUi> Chat<Ui> {
             glib::MainContext::ref_thread_default().spawn_local({
                 let client = client.clone();
                 let mut widget = widget.clone();
+
                 async move {
-                    for embed in rich.load_embeds().await {
+                    let embeds = rich.load_embeds();
+                    futures::pin_mut!(embeds);
+
+                    while let Some(embed) = embeds.next().await {
                         widget.push_embed(&client, embed);
                     }
                 }
