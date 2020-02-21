@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::env;
 use std::rc::Rc;
 
 use ears::{AudioController, Sound};

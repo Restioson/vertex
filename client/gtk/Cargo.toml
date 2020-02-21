@@ -26,7 +26,7 @@ gtk = { version = "0.8", features = ["v3_20"] }
 url = { version = "2.1", features = ["serde"] }
 
 uuid = { version = "^0.8", features = ["serde", "v4"] }
-keyring = "^0.7"
+keyring = "0.8"
 
 chrono = "0.4"
 

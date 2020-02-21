@@ -1,6 +1,5 @@
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use futures::StreamExt;
 
 use vertex::*;
 
@@ -75,10 +74,8 @@ impl<Ui: ClientUi> Chat<Ui> {
                 let mut widget = widget.clone();
 
                 async move {
-                    let embeds = rich.load_embeds();
-                    futures::pin_mut!(embeds);
-
-                    while let Some(embed) = embeds.next().await {
+                    let embeds = rich.load_embeds().await;
+                    for embed in embeds {
                         widget.push_embed(&client, embed);
                     }
                 }
