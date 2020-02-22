@@ -7,14 +7,15 @@ use crate::Glade;
 
 use super::*;
 
-pub struct GroupedMessageWidget {
+#[derive(Clone)]
+pub struct MessageGroupWidget {
     pub author: UserId,
     pub widget: gtk::Box,
     pub entry_list: gtk::ListBox,
 }
 
-impl GroupedMessageWidget {
-    pub fn build(author: UserId, profile: UserProfile) -> GroupedMessageWidget {
+impl MessageGroupWidget {
+    pub fn build(author: UserId, profile: UserProfile) -> MessageGroupWidget {
         lazy_static! {
             static ref GLADE: Glade = Glade::open("res/glade/active/message_entry.glade").unwrap();
         }
@@ -30,12 +31,16 @@ impl GroupedMessageWidget {
 
         widget.show_all();
 
-        GroupedMessageWidget { author, widget, entry_list }
+        MessageGroupWidget { author, widget, entry_list }
     }
 
     pub fn push_message(&self, content: String) -> MessageEntryWidget {
-        let entry = MessageEntryWidget::build(content);
-        self.entry_list.add(&entry.widget);
+        let entry = MessageEntryWidget {
+            group: self.clone(),
+            content: MessageContentWidget::build(content),
+        };
+
+        self.entry_list.add(&entry.content.widget);
         self.entry_list.show_all();
 
         entry
@@ -43,13 +48,13 @@ impl GroupedMessageWidget {
 }
 
 #[derive(Clone)]
-pub struct MessageEntryWidget {
+struct MessageContentWidget {
     widget: gtk::Box,
     text: gtk::Label,
 }
 
-impl MessageEntryWidget {
-    pub fn build(text: String) -> MessageEntryWidget {
+impl MessageContentWidget {
+    pub fn build(text: String) -> MessageContentWidget {
         let widget = gtk::BoxBuilder::new()
             .name("message")
             .orientation(gtk::Orientation::Vertical)
@@ -65,13 +70,30 @@ impl MessageEntryWidget {
 
         widget.add(&text);
 
-        MessageEntryWidget { widget, text }
+        MessageContentWidget { widget, text }
+    }
+}
+
+#[derive(Clone)]
+pub struct MessageEntryWidget {
+    group: MessageGroupWidget,
+    content: MessageContentWidget,
+}
+
+impl MessageEntryWidget {
+    pub fn remove_from(&self, list: &gtk::ListBox) {
+        self.group.entry_list.remove(&self.content.widget);
+
+        // TODO: this is quite expensive to allocate a vec; is there another way?
+        if self.group.entry_list.get_children().is_empty() {
+            list.remove(&self.group.widget);
+        }
     }
 }
 
 impl client::MessageEntryWidget<Ui> for MessageEntryWidget {
-    fn set_status(&mut self, status: client::MessageStatus) {
-        let style = self.text.get_style_context();
+    fn set_status(&self, status: client::MessageStatus) {
+        let style = self.content.text.get_style_context();
         style.remove_class("pending");
         style.remove_class("error");
 
@@ -82,18 +104,17 @@ impl client::MessageEntryWidget<Ui> for MessageEntryWidget {
         }
     }
 
-    fn push_embed(&mut self, client: &Client<Ui>, embed: MessageEmbed) {
+    fn push_embed(&self, client: &Client<Ui>, embed: MessageEmbed) {
         let embed = build_embed(client, embed);
-        self.widget.add(&embed);
+        self.content.widget.add(&embed);
     }
 }
 
-// TODO: cache glade source in memory so it doesn't have to be reloaded every time
 fn build_embed(client: &Client<Ui>, embed: MessageEmbed) -> gtk::Widget {
     match embed {
         MessageEmbed::OpenGraph(og) => build_opengraph_embed(og),
         MessageEmbed::Invite(invite) => build_invite_embed(client, invite),
-        // TODO: Own embed for errors
+        // TODO: custom embed for errors
         MessageEmbed::Error(error) => build_opengraph_embed(OpenGraphEmbed {
             url: error.url,
             title: error.title,

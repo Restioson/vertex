@@ -4,9 +4,7 @@ use chrono::{DateTime, Utc};
 use futures::{Stream, TryStream, TryStreamExt};
 use tokio_postgres::Row;
 
-use vertex::{
-    CommunityId, HistoricMessage, MessageId, MessageSelector, ProfileVersion, RoomId, UserId,
-};
+use vertex::{Bound, CommunityId, Message, MessageId, MessageSelector, ProfileVersion, RoomId, UserId};
 
 use crate::database::{Database, DatabaseError, DbResult};
 
@@ -16,7 +14,7 @@ const SERVER_MAX: usize = 50;
 #[derive(Debug, Copy, Clone)]
 pub struct InvalidSelector;
 
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct MessageOrdinal(pub u64);
 
 pub(super) const CREATE_MESSAGES_TABLE: &str = "
@@ -119,7 +117,17 @@ impl Database {
         }
     }
 
-    async fn get_message_ord(&self, id: MessageId) -> DbResult<Option<MessageOrdinal>> {
+    pub async fn get_message_id(&self, ord: MessageOrdinal) -> DbResult<Option<MessageId>> {
+        const QUERY: &str = "SELECT id FROM messages WHERE ord = $1";
+        match self.query_opt(QUERY, &[&(ord.0 as i64)]).await? {
+            Some(row) => Ok(Some(
+                MessageId(row.try_get("id")?),
+            )),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn get_message_ord(&self, id: MessageId) -> DbResult<Option<MessageOrdinal>> {
         const QUERY: &str = "SELECT ord FROM messages WHERE id = $1";
         match self.query_opt(QUERY, &[&id.0]).await? {
             Some(row) => Ok(Some(
@@ -129,95 +137,54 @@ impl Database {
         }
     }
 
-    pub async fn read_messages(
+    pub async fn get_messages(
         &self,
         community: CommunityId,
         room: RoomId,
         selector: MessageSelector,
+        count: usize,
     ) -> DbResult<
         Result<impl Stream<Item = DbResult<(ProfileVersion, MessageRecord)>>, InvalidSelector>,
     > {
-        // TODO: query duplication?
-        let stream = match selector {
-            MessageSelector::Before { message, count } => {
-                let message = match self.get_message_ord(message).await? {
-                    Some(message) => message,
-                    None => return Ok(Err(InvalidSelector)),
-                };
-
-                let query = "
-                    SELECT messages.*, users.profile_version FROM messages
-                    INNER JOIN users ON messages.author = users.id
-                        WHERE messages.community = $1 AND messages.room = $2
-                        AND messages.ord <= $3
-                        ORDER BY ord DESC
-                        LIMIT $4
-                ";
-                self.query_stream(
-                    query,
-                    &[
-                        &community.0,
-                        &room.0,
-                        &(message.0 as i64),
-                        &(count.min(SERVER_MAX) as i64),
-                    ],
-                )
-                .await?
-            }
-            MessageSelector::After { message, count } => {
-                let message = match self.get_message_ord(message).await? {
-                    Some(message) => message,
-                    None => return Ok(Err(InvalidSelector)),
-                };
-
-                let query = "
-                    SELECT messages.*, users.profile_version FROM messages
-                    INNER JOIN users ON messages.author = users.id
-                        WHERE messages.community = $1 AND messages.room = $2
-                        AND messages.ord > $3
-                        ORDER BY ord DESC
-                        LIMIT $4
-                ";
-                self.query_stream(
-                    query,
-                    &[
-                        &community.0,
-                        &room.0,
-                        &(message.0 as i64),
-                        &(count.min(SERVER_MAX) as i64),
-                    ],
-                )
-                .await?
-            }
-            MessageSelector::UpTo { from, up_to, count } => {
-                let from = self.get_message_ord(from).await?;
-                let up_to = self.get_message_ord(up_to).await?;
-                let (from, up_to) = match (from, up_to) {
-                    (Some(from), Some(up_to)) => (from, up_to),
-                    _ => return Ok(Err(InvalidSelector)),
-                };
-
-                let query = "
-                    SELECT messages.*, users.profile_version FROM messages
-                    INNER JOIN users ON messages.author = users.id
-                        WHERE community = $1 AND room = $2
-                        AND ord <= $3 && ord > $4
-                        ORDER BY ord DESC
-                        LIMIT $5
-                ";
-                self.query_stream(
-                    query,
-                    &[
-                        &community.0,
-                        &room.0,
-                        &(from.0 as i64),
-                        &(up_to.0 as i64),
-                        &(count.min(SERVER_MAX) as i64),
-                    ],
-                )
-                .await?
-            }
+        let bound = match selector {
+            MessageSelector::Before(bound) => bound,
+            MessageSelector::After(bound) => bound,
         };
+
+        let bound_message = match self.get_message_ord(*bound.get()).await? {
+            Some(message) => message,
+            None => return Ok(Err(InvalidSelector)),
+        };
+
+        let comparator = match selector {
+            MessageSelector::Before(_) => "<",
+            MessageSelector::After(_) => ">",
+        };
+
+        let comparator = match bound {
+            Bound::Inclusive(_) => format!("{}=", comparator),
+            _ => comparator.to_owned(),
+        };
+
+        let query = format!(
+            "SELECT messages.*, users.profile_version FROM messages
+            INNER JOIN users ON messages.author = users.id
+                WHERE messages.community = $1 AND messages.room = $2
+                AND messages.ord {} $4
+                ORDER BY ord DESC
+                LIMIT $3",
+            comparator
+        );
+
+        let stream = self.query_stream(
+            &query,
+            &[
+                &community.0,
+                &room.0,
+                &(count.min(SERVER_MAX) as i64),
+                &(bound_message.0 as i64),
+            ],
+        ).await?;
 
         let stream = stream
             .and_then(|row| async move {
@@ -234,9 +201,9 @@ impl Database {
 }
 
 pub trait MessageStreamExt: Stream<Item = DbResult<(ProfileVersion, MessageRecord)>> {
-    type Historic: Stream<Item = DbResult<HistoricMessage>> + Sized;
+    type Output: Stream<Item = DbResult<Message>> + Sized;
 
-    fn map_historic_messages(self) -> Self::Historic
+    fn map_messages(self) -> Self::Output
     where
         Self: Sized;
 }
@@ -246,18 +213,19 @@ where
     S: Stream<Item = DbResult<(ProfileVersion, MessageRecord)>>,
     S: TryStream<Ok = (ProfileVersion, MessageRecord), Error = DatabaseError>,
 {
-    type Historic = impl Stream<Item = DbResult<HistoricMessage>> + Sized;
+    type Output = impl Stream<Item = DbResult<Message>> + Sized;
 
-    fn map_historic_messages(self) -> Self::Historic
+    fn map_messages(self) -> Self::Output
     where
         Self: Sized,
     {
         self.try_filter_map(|(profile_version, record)| async move {
             match record.content {
-                Some(content) => Ok(Some(HistoricMessage {
+                Some(content) => Ok(Some(Message {
                     id: record.id,
                     author: record.author,
                     author_profile_version: profile_version,
+                    sent: record.date,
                     content,
                 })),
                 None => Ok(None),

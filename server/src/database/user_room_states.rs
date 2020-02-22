@@ -1,17 +1,17 @@
-use crate::database::{Database, DbResult, InvalidUser};
+use crate::database::{Database, DbResult, InvalidUser, MessageOrdinal};
 use futures::{Stream, TryStreamExt};
 use std::convert::TryFrom;
 use std::error::Error as ErrorTrait;
 use tokio_postgres::error::{DbError, Error, SqlState};
 use tokio_postgres::types::ToSql;
 use tokio_postgres::Row;
-use vertex::{CommunityId, RoomId, UserId};
+use vertex::*;
 
 pub(super) const CREATE_USER_ROOM_STATES_TABLE: &str = r#"
     CREATE TABLE IF NOT EXISTS user_room_states (
         room             UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
         user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        watching_state   "char" NOT NULL,
+        watch_level      "char" NOT NULL,
         last_read        BIGINT,
 
         UNIQUE(user_id, room)
@@ -19,7 +19,7 @@ pub(super) const CREATE_USER_ROOM_STATES_TABLE: &str = r#"
 
 pub struct UserRoomState {
     pub room: RoomId,
-    pub watching_state: WatchingState,
+    pub watch_level: WatchLevel,
     pub unread: bool,
 }
 
@@ -27,11 +27,11 @@ impl TryFrom<Row> for UserRoomState {
     type Error = tokio_postgres::Error;
 
     fn try_from(row: Row) -> Result<UserRoomState, tokio_postgres::Error> {
-        let ws = row.try_get::<&str, i8>("watching_state")? as u8;
+        let ws = row.try_get::<&str, i8>("watch_level")? as u8;
 
         Ok(UserRoomState {
             room: RoomId(row.try_get("room")?),
-            watching_state: WatchingState::from(ws),
+            watch_level: WatchLevel::from(ws),
             unread: row
                 .try_get::<&str, Option<bool>>("unread")?
                 .unwrap_or(false),
@@ -41,24 +41,24 @@ impl TryFrom<Row> for UserRoomState {
 
 #[derive(Eq, PartialEq, Debug)]
 #[repr(u8)]
-pub enum WatchingState {
+pub enum WatchLevel {
     Watching = 0,
     NotWatching = 1,
     MentionsOnly = 2,
 }
 
-impl Default for WatchingState {
+impl Default for WatchLevel {
     fn default() -> Self {
-        WatchingState::NotWatching
+        WatchLevel::NotWatching
     }
 }
 
-impl From<u8> for WatchingState {
+impl From<u8> for WatchLevel {
     fn from(val: u8) -> Self {
         match val {
-            0 => WatchingState::Watching,
-            1 => WatchingState::NotWatching,
-            _ => WatchingState::default(),
+            0 => WatchLevel::Watching,
+            1 => WatchLevel::NotWatching,
+            _ => WatchLevel::default(),
         }
     }
 }
@@ -76,7 +76,7 @@ impl Database {
         user: UserId,
     ) -> DbResult<Result<(), InvalidUser>> {
         const STMT: &str = "
-            INSERT INTO user_room_states (room, user_id, watching_state, last_read)
+            INSERT INTO user_room_states (room, user_id, watch_level, last_read)
                 SELECT rooms.id, $1, $2, NULL::BIGINT
                     FROM rooms
                     WHERE rooms.community = $3
@@ -86,7 +86,7 @@ impl Database {
         let stmt = conn.client.prepare(STMT).await?;
         let args: &[&(dyn ToSql + Sync)] = &[
             &user.0,
-            &(WatchingState::default() as u8 as i8),
+            &(WatchLevel::default() as u8 as i8),
             &community.0,
         ];
         let res = conn.client.execute(&stmt, args).await;
@@ -109,7 +109,7 @@ impl Database {
         room: RoomId,
     ) -> DbResult<Result<(), SetUserRoomStateError>> {
         const STMT: &str = "
-            INSERT INTO user_room_states (room, user_id, watching_state, last_read)
+            INSERT INTO user_room_states (room, user_id, watch_level, last_read)
                 SELECT $1, community_membership.user_id, $2, NULL::BIGINT
                     FROM community_membership
                     WHERE community_membership.community = $3
@@ -119,7 +119,7 @@ impl Database {
         let stmt = conn.client.prepare(STMT).await?;
         let args: &[&(dyn ToSql + Sync)] = &[
             &room.0,
-            &(WatchingState::default() as u8 as i8),
+            &(WatchLevel::default() as u8 as i8),
             &community.0,
         ];
         let res = conn.client.execute(&stmt, args).await;
@@ -134,7 +134,7 @@ impl Database {
     ) -> DbResult<Result<(), SetUserRoomStateError>> {
         const STMT: &str = "
             WITH last_read_ord(ord) AS (
-                SELECT COALESCE(SELECT MAX(ord) FROM messages GROUP BY room = $2, 0::BIGINT)
+                SELECT COALESCE((SELECT MAX(ord) FROM messages GROUP BY room = $2), 0::BIGINT)
             )
             UPDATE user_room_states
                 SET last_read = last_read_ord.ord
@@ -151,22 +151,37 @@ impl Database {
         handle_sql_error(res)
     }
 
-    pub async fn set_watching(
+    pub async fn get_last_read(&self, user: UserId, room: RoomId) -> DbResult<Option<MessageId>> {
+        const QUERY: &str = "SELECT last_read FROM user_room_states WHERE user_id = $1 AND room = $2";
+
+        let ord = match self.query_opt(QUERY, &[&user.0, &room.0]).await? {
+            Some(row) => row.try_get::<&str, Option<i64>>("last_read")?
+                .map(|last_read| MessageOrdinal(last_read as u64)),
+            None => None,
+        };
+
+        match ord {
+            Some(ord) => self.get_message_id(ord).await,
+            None => Ok(None),
+        }
+    }
+
+    pub async fn set_watch_level(
         &self,
         room: RoomId,
         user: UserId,
-        state: WatchingState,
+        level: WatchLevel,
     ) -> DbResult<Result<(), SetUserRoomStateError>> {
         const STMT: &str = "
             UPDATE user_room_states
-                SET watching_state = $3
+                SET watch_level = $3
                 WHERE user_id = $1 AND room = $2
             ";
 
         let conn = self.pool.connection().await?;
 
         let stmt = conn.client.prepare(STMT).await?;
-        let args: &[&(dyn ToSql + Sync)] = &[&user.0, &room.0, &(state as u8 as i8)];
+        let args: &[&(dyn ToSql + Sync)] = &[&user.0, &room.0, &(level as u8 as i8)];
         let res = conn.client.execute(&stmt, args).await;
 
         handle_sql_error(res)
@@ -180,7 +195,7 @@ impl Database {
         const QUERY: &str = "
             SELECT
                 rooms.id AS room,
-                user_room_states.watching_state,
+                user_room_states.watch_level,
                 (
                     SELECT user_room_states.last_read IS DISTINCT FROM MAX(messages.ord)
                     FROM messages

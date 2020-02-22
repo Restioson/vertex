@@ -98,7 +98,7 @@ impl UserCommunity {
                 (
                     state.room,
                     UserRoom {
-                        watching: state.watching_state,
+                        watch_level: state.watch_level,
                         unread: state.unread,
                     },
                 )
@@ -112,7 +112,7 @@ impl UserCommunity {
 
 #[derive(Debug)]
 pub struct UserRoom {
-    pub watching: WatchingState,
+    pub watch_level: WatchLevel,
     pub unread: bool,
 }
 

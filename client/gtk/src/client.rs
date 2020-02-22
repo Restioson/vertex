@@ -12,7 +12,7 @@ pub use room::*;
 pub use user::*;
 use vertex::*;
 
-use crate::{net, screen, SharedMut, WeakSharedMut, window};
+use crate::{net, scheduler, screen, SharedMut, WeakSharedMut, window};
 use crate::{Error, Result};
 
 mod community;
@@ -35,8 +35,12 @@ pub trait ClientUi: Sized + Clone + 'static {
 
     fn bind_events(&self, client: &Client<Self>);
 
+    fn select_room(&self, room: &RoomEntry<Self>) -> Self::ChatWidget;
+
+    fn deselect_room(&self);
+
     fn add_community(&self, name: String) -> Self::CommunityEntryWidget;
-    fn build_chat_widget(&self) -> Self::ChatWidget;
+
     fn window_focused(&self) -> bool;
 }
 
@@ -56,6 +60,7 @@ async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
 
 pub struct ClientState<Ui: ClientUi> {
     pub communities: Vec<CommunityEntry<Ui>>,
+    pub chat: Option<Chat<Ui>>,
     selected_room: Option<RoomEntry<Ui>>,
 }
 
@@ -66,7 +71,6 @@ pub struct Client<Ui: ClientUi> {
     pub ui: Ui,
     pub user: User,
     pub profiles: ProfileCache,
-    pub chat: Chat<Ui>,
 
     notifier: Notifier,
 
@@ -98,11 +102,9 @@ impl<Ui: ClientUi> Client<Ui> {
 
         let profiles = ProfileCache::new(request.clone(), user.clone());
 
-        let chat = Chat::new(request.clone(), ui.build_chat_widget());
-        chat.set_room(None).await;
-
         let state = SharedMut::new(ClientState {
             communities: Vec::new(),
+            chat: None,
             selected_room: None,
         });
 
@@ -113,11 +115,11 @@ impl<Ui: ClientUi> Client<Ui> {
             ui,
             user,
             profiles,
-            chat,
             notifier: Notifier::new(),
             abort_handle,
             state: state.downgrade(),
         };
+        client.ui.deselect_room();
 
         client.bind_events().await;
 
@@ -125,8 +127,7 @@ impl<Ui: ClientUi> Client<Ui> {
             client.add_community(community).await;
         }
 
-        let ctx = glib::MainContext::ref_thread_default();
-        ctx.spawn_local(ClientLoop {
+        scheduler::spawn(ClientLoop {
             client: client.clone(),
             event_receiver,
             abort_signal,
@@ -138,16 +139,15 @@ impl<Ui: ClientUi> Client<Ui> {
 
     async fn bind_events(&self) {
         self.ui.bind_events(&self);
-        self.chat.bind_events(&self).await;
     }
 
     async fn handle_event(&self, event: ServerEvent) {
         match event.clone() {
             ServerEvent::AddCommunity(structure) => {
                 self.add_community(structure).await;
-            },
+            }
             ServerEvent::AddRoom { community, structure } => self.handle_add_room(community, structure).await,
-            ServerEvent::AddMessage(message) => self.handle_add_message(message).await,
+            ServerEvent::AddMessage { community, room, message } => self.handle_add_message(community, room, message).await,
             ServerEvent::SessionLoggedOut => {
                 let screen = screen::login::build().await;
                 window::set_screen(&screen.main);
@@ -162,7 +162,7 @@ impl<Ui: ClientUi> Client<Ui> {
         println!("network error: {:?}", err);
 
         let error = format!("{}", err);
-        let screen = screen::loading::build_error(error,  crate::start);
+        let screen = screen::loading::build_error(error, crate::start);
         window::set_screen(&screen);
 
         self.abort_handle.abort();
@@ -176,27 +176,30 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
-    async fn handle_add_message(&self, message: ForwardedMessage) {
-        let community = self.community_by_id(message.community).await;
-
-        if let Some(community) = community {
-            if let Some(room) = community.room_by_id(message.room).await {
+    async fn handle_add_message(&self, community: CommunityId, room: RoomId, message: Message) {
+        if let Some(community) = self.community_by_id(community).await {
+            if let Some(room) = community.room_by_id(room).await {
                 if !self.ui.window_focused() || !self.is_selected(room.community, room.id).await {
                     let profile = self.profiles.get_or_default(message.author, message.author_profile_version).await;
                     self.notifier.notify_message(
                         &profile,
                         &community.state.read().await.name,
                         &room.name,
-                        &message.content
+                        &message.content,
                     ).await;
                 }
 
-                room.message_stream.push(message.into()).await;
+                if let Some(chat) = self.chat_for(room.id).await {
+                    chat.push(message.clone()).await;
+                }
+
+                room.push_message(message).await;
+
                 return;
             }
         }
 
-        println!("received message for invalid room: {:?}#{:?}", message.community, message.room);
+        println!("received message for invalid room: {:?}#{:?}", community, room);
     }
 
     pub async fn create_community(&self, name: &str) -> Result<CommunityEntry<Ui>> {
@@ -255,39 +258,40 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
-    pub async fn select_room(&self, room: Option<RoomEntry<Ui>>) {
+    pub async fn select_room(&self, room: RoomEntry<Ui>) {
+        let chat = self.ui.select_room(&room);
+        let chat = Chat::new(
+            self.clone(),
+            chat,
+            room.clone(),
+        );
+
         if let Some(state) = self.state.upgrade() {
             let mut state = state.write().await;
-            self.chat.set_room(room.as_ref()).await;
-            state.selected_room = room.clone();
+            state.selected_room = Some(room.clone());
+            state.chat = Some(chat.clone());
         }
 
-        // TODO: handle errors: room id wrong; unexpected response?
-        match &room {
-            Some(room) => {
-                let state = self.send_select_room(room).await.unwrap();
-                room.update(state).await.unwrap();
-            }
-            None => self.send_deselect_room().await.unwrap(),
-        }
-    }
+        // TODO: error handling
+        let update = room.get_updates().await.unwrap();
+        chat.update(update).await;
 
-    async fn send_select_room(&self, room: &RoomEntry<Ui>) -> Result<RoomState> {
-        let request = self.request.send(ClientRequest::SelectRoom {
+        self.request.send(ClientRequest::SelectRoom {
             community: room.community,
             room: room.id,
         }).await;
-
-        match request.response().await? {
-            OkResponse::RoomState(state) => Ok(state),
-            _ => Err(Error::UnexpectedMessage),
-        }
     }
 
-    async fn send_deselect_room(&self) -> Result<()> {
-        let request = self.request.send(ClientRequest::DeselectRoom).await;
-        request.response().await?;
-        Ok(())
+    pub async fn deselect_room(&self) {
+        if let Some(state) = self.state.upgrade() {
+            let mut state = state.write().await;
+            state.selected_room = None;
+            state.chat = None;
+        }
+
+        self.ui.deselect_room();
+
+        self.request.send(ClientRequest::DeselectRoom).await;
     }
 
     pub async fn selected_community(&self) -> Option<CommunityEntry<Ui>> {
@@ -314,6 +318,23 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
+    pub async fn chat_for(&self, room: RoomId) -> Option<Chat<Ui>> {
+        match self.chat().await {
+            Some(chat) if chat.accepts(room) => Some(chat),
+            _ => None,
+        }
+    }
+
+    pub async fn chat(&self) -> Option<Chat<Ui>> {
+        match self.state.upgrade() {
+            Some(state) => {
+                let state = state.read().await;
+                state.chat.as_ref().cloned()
+            }
+            None => None,
+        }
+    }
+
     pub async fn log_out(&self) {
         self.request.send(ClientRequest::LogOut).await;
         self.abort_handle.abort();
@@ -336,13 +357,11 @@ impl<Ui: ClientUi, S> ClientLoop<Ui, S>
 
         let request = client.request.clone();
 
-        let main_ctx = glib::MainContext::ref_thread_default();
-
         let receiver = Box::pin(async move {
             let mut event_receiver = event_receiver;
             while let Some(result) = event_receiver.next().await {
                 let client = client.clone();
-                main_ctx.spawn_local(async move {
+                scheduler::spawn(async move {
                     match result {
                         Ok(event) => client.handle_event(event).await,
                         Err(err) => client.handle_network_err(err).await,

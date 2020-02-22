@@ -72,7 +72,7 @@ impl Database {
         user: UserId,
     ) -> DbResult<Result<(), AddToCommunityError>> {
         const STMT: &str = "
-            INSERT (community, user_id) INTO community_membership
+            INSERT INTO community_membership (community, user_id)
                 VALUES ($1, $2)
                 ON CONFLICT DO NOTHING
         ";

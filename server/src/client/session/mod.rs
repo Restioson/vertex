@@ -20,39 +20,43 @@ mod regular_user;
 #[derive(Debug)]
 pub struct LogoutThisSession;
 
-impl Message for LogoutThisSession {
+impl xtra::Message for LogoutThisSession {
     type Result = ();
 }
 
 pub struct WebSocketMessage(pub(crate) Result<ws::Message, warp::Error>);
 
-impl Message for WebSocketMessage {
+impl xtra::Message for WebSocketMessage {
     type Result = ();
 }
 
 struct CheckHeartbeat;
 
-impl Message for CheckHeartbeat {
+impl xtra::Message for CheckHeartbeat {
     type Result = ();
 }
 
 struct NotifyClientReady;
 
-impl Message for NotifyClientReady {
+impl xtra::Message for NotifyClientReady {
     type Result = ();
 }
 
 #[derive(Debug, Clone)]
 pub struct SendMessage<T: Debug>(pub T);
 
-impl<T: Debug + Send + 'static> Message for SendMessage<T> {
+impl<T: Debug + Send + 'static> xtra::Message for SendMessage<T> {
     type Result = ();
 }
 
 #[derive(Debug, Clone)]
-pub struct ForwardMessage(pub ForwardedMessage);
+pub struct ForwardMessage {
+    pub community: CommunityId,
+    pub room: RoomId,
+    pub message: vertex::Message,
+}
 
-impl Message for ForwardMessage {
+impl xtra::Message for ForwardMessage {
     type Result = ();
 }
 
@@ -62,7 +66,7 @@ pub struct AddRoom {
     pub structure: RoomStructure,
 }
 
-impl Message for AddRoom {
+impl xtra::Message for AddRoom {
     type Result = ();
 }
 
@@ -159,16 +163,20 @@ impl Handler<ForwardMessage> for ActiveSession {
     ) -> Self::Responder<'a> {
         async move {
             let mut active_user = manager::get_active_user_mut(self.user).unwrap();
-            let (community, room) = (fwd.0.community, fwd.0.room);
+            let (community, room) = (fwd.community, fwd.room);
             let session = &active_user.sessions[&self.device];
             let looking_at = session.as_active_looking_at().unwrap();
 
             if let Some(user_community) = active_user.communities.get_mut(&community) {
                 if let Some(user_room) = user_community.rooms.get_mut(&room) {
                     let msg = if looking_at == Some((community, room))
-                        || user_room.watching == WatchingState::Watching
+                        || user_room.watch_level == WatchLevel::Watching
                     {
-                        Some(ServerMessage::Event(ServerEvent::AddMessage(fwd.0)))
+                        Some(ServerMessage::Event(ServerEvent::AddMessage {
+                            community: fwd.community,
+                            room: fwd.room,
+                            message: fwd.message,
+                        }))
                     } else if !user_room.unread {
                         user_room.unread = true;
                         Some(ServerMessage::Event(ServerEvent::NotifyMessageReady {
@@ -203,7 +211,7 @@ impl Handler<AddRoom> for ActiveSession {
                 community.rooms.insert(
                     add.structure.id,
                     UserRoom {
-                        watching: WatchingState::default(),
+                        watch_level: WatchLevel::default(),
                         unread: true,
                     },
                 );
@@ -352,6 +360,8 @@ impl ActiveSession {
                     return Ok(());
                 }
             };
+
+            println!("handling request: {:?}", msg.request);
 
             let (user, device, perms) = (self.user, self.device, self.perms);
             let handler = RequestHandler {

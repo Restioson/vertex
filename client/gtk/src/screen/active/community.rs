@@ -79,9 +79,10 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
                         }
 
                         let room = room.get_index() as usize;
-                        let room = community.get_room(room).await;
-
-                        community.client.select_room(room).await;
+                        match community.get_room(room).await {
+                            Some(room) => community.client.select_room(room).await,
+                            None => community.client.deselect_room().await,
+                        }
                     }
                 })
                 .build_widget_and_option_consumer()

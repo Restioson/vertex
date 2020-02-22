@@ -25,7 +25,8 @@ impl Notifier {
     }
 
     pub async fn notify_message(
-        &self, author: &UserProfile,
+        &self,
+        author: &UserProfile,
         community_name: &str,
         room_name: &str,
         content: &str

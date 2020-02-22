@@ -49,12 +49,14 @@ impl From<tokio_postgres::Error> for DatabaseError {
 
 impl From<DatabaseError> for ErrResponse {
     fn from(e: DatabaseError) -> ErrResponse {
+        let backtrace = backtrace::Backtrace::new();
+
         match e.0 {
-            l337::Error::Internal(e) => {
-                error!("Database connection pooling error: {:#?}", e);
+            l337::Error::Internal(err) => {
+                error!("Database connection pooling error: {:?}\n {:#?}", err, backtrace);
             }
-            l337::Error::External(sql_error) => {
-                error!("Database error: {:#?}", sql_error);
+            l337::Error::External(err) => {
+                error!("Database error: {:?}\n {:#?}", err, backtrace);
             }
         }
 

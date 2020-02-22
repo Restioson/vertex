@@ -2,6 +2,8 @@ use std::pin::Pin;
 
 use futures::Future;
 
+use crate::scheduler;
+
 type AsyncFn<Shared, Args> = dyn Fn(Shared, Args) -> Pin<Box<dyn Future<Output = ()>>>;
 
 pub trait AsConnector: Clone {
@@ -68,10 +70,9 @@ impl<Shared: Clone, Args: Clone> Connector<Shared, Args> {
     fn execute_async(&self, args: &Args) {
         if self.do_async.is_empty() { return; }
 
-        let context = glib::MainContext::ref_thread_default();
         for do_async in &self.do_async {
             let future = do_async(self.shared.clone(), args.clone());
-            context.spawn_local(future);
+            scheduler::spawn(future);
         }
     }
 
@@ -107,8 +108,17 @@ impl<Shared: Clone, Widget: Clone, Event: Clone> Connector<Shared, (Widget, Even
 impl<Shared: Clone, Widget: Clone, Listener: Clone> Connector<Shared, (Widget, Listener)> {
     #[inline]
     pub fn build_widget_listener(self) -> impl Fn(&Widget, &Listener) {
-        move |widget, event| {
-            self.execute((widget.clone(), event.clone()));
+        move |widget, listener| {
+            self.execute((widget.clone(), listener.clone()));
+        }
+    }
+}
+
+impl<Shared: Clone, Widget: Clone, Listener: Clone> Connector<Shared, (Widget, Listener)> {
+    #[inline]
+    pub fn build_widget_and_owned_listener(self) -> impl Fn(&Widget, Listener) {
+        move |widget, listener| {
+            self.execute((widget.clone(), listener));
         }
     }
 }

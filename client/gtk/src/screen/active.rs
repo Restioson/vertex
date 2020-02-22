@@ -10,6 +10,7 @@ use room::*;
 use crate::{AuthParameters, Client, Error, Result, TryGetText};
 use crate::auth;
 use crate::client;
+use crate::client::RoomEntry;
 use crate::connect::AsConnector;
 use crate::Glade;
 use crate::screen;
@@ -28,6 +29,12 @@ pub struct Ui {
     communities: gtk::ListBox,
     settings_button: gtk::Button,
     add_community_button: gtk::Button,
+
+    pub chat: gtk::Box,
+    pub room_name: gtk::Label,
+    pub message_scroll: gtk::ScrolledWindow,
+    pub message_list: gtk::ListBox,
+    pub message_entry: gtk::Entry,
 }
 
 impl Ui {
@@ -36,7 +43,7 @@ impl Ui {
             static ref GLADE: Glade = Glade::open("res/glade/active/main.glade").unwrap();
         }
 
-        let builder = GLADE.builder();
+        let builder: gtk::Builder = GLADE.builder();
 
         let main: gtk::Box = builder.get_object("main").unwrap();
         let content: gtk::Box = builder.get_object("content").unwrap();
@@ -49,6 +56,18 @@ impl Ui {
             communities: builder.get_object("communities").unwrap(),
             settings_button,
             add_community_button: builder.get_object("add_community_button").unwrap(),
+
+            chat: builder.get_object("chat").unwrap(),
+            room_name: builder.get_object("room_name").unwrap(),
+            message_scroll: builder.get_object("message_scroll").unwrap(),
+            message_list: builder.get_object("message_list").unwrap(),
+            message_entry: builder.get_object("message_entry").unwrap(),
+        }
+    }
+
+    fn clear_messages(&self) {
+        for child in self.message_list.get_children() {
+            self.message_list.remove(&child);
         }
     }
 }
@@ -74,6 +93,93 @@ impl client::ClientUi for Ui {
                 .do_sync(|screen, _| show_add_community(screen))
                 .build_widget_event()
         );
+
+        self.message_entry.connect_activate(
+            client.connector()
+                .do_async(|client, entry: gtk::Entry| async move {
+                    if let Some(selected_room) = client.selected_room().await {
+                        let content = entry.try_get_text().unwrap_or_default();
+                        if !content.trim().is_empty() {
+                            entry.set_text("");
+                            selected_room.send_message(content).await;
+                        }
+                    }
+                })
+                .build_cloned_consumer()
+        );
+
+        let adjustment = self.message_scroll.get_vadjustment().unwrap();
+
+        adjustment.connect_value_changed(
+            client.connector()
+                .do_async(|client, adjustment: gtk::Adjustment| async move {
+                    if let Some(chat) = client.chat().await {
+                        let upper = adjustment.get_upper() - adjustment.get_page_size();
+                        let reading_new = adjustment.get_value() + 10.0 >= upper;
+                        chat.set_reading_new(reading_new).await;
+                    }
+                })
+                .build_cloned_consumer()
+        );
+
+        self.message_scroll.connect_edge_reached(
+            client.connector()
+                .do_async(|client, (_scroll, position)| async move {
+                    if let Some(chat) = client.chat().await {
+                        match position {
+                            gtk::PositionType::Top => chat.extend_older().await,
+                            gtk::PositionType::Bottom => chat.extend_newer().await,
+                            _ => (),
+                        }
+                    }
+                })
+                .build_widget_and_owned_listener()
+        );
+
+        self.message_list.connect_size_allocate(
+            (client.clone(), adjustment).connector()
+                .do_async(|(client, adjustment), (_, _)| async move {
+                    if let Some(chat) = client.chat().await {
+                        if chat.reading_new() {
+                            adjustment.set_value(adjustment.get_upper() - adjustment.get_page_size());
+                        }
+                    }
+                })
+                .build_widget_listener()
+        );
+    }
+
+    fn select_room(&self, room: &RoomEntry<Self>) -> ChatWidget {
+        self.clear_messages();
+
+        self.message_entry.set_can_focus(true);
+        self.message_entry.set_editable(true);
+
+        self.message_entry.set_placeholder_text(Some("Send message..."));
+        self.message_entry.get_style_context().remove_class("disabled");
+
+        self.room_name.set_text(&room.name);
+
+        ChatWidget {
+            main: self.chat.clone(),
+            room_name: self.room_name.clone(),
+            message_scroll: self.message_scroll.clone(),
+            message_list: self.message_list.clone(),
+            message_entry: self.message_entry.clone(),
+            front_group: None,
+        }
+    }
+
+    fn deselect_room(&self) {
+        self.clear_messages();
+
+        self.message_entry.set_can_focus(false);
+        self.message_entry.set_editable(false);
+
+        self.message_entry.set_placeholder_text(Some("Select a room to send messages..."));
+        self.message_entry.get_style_context().add_class("disabled");
+
+        self.room_name.set_text("");
     }
 
     fn add_community(&self, name: String) -> CommunityEntryWidget {
@@ -82,16 +188,6 @@ impl client::ClientUi for Ui {
         entry.expander.widget.show_all();
 
         entry
-    }
-
-    fn build_chat_widget(&self) -> ChatWidget {
-        let chat = ChatWidget::build();
-        self.content.add(&chat.main);
-        self.content.set_child_packing(&chat.main, true, true, 0, gtk::PackType::Start);
-
-        self.content.show_all();
-
-        chat
     }
 
     fn window_focused(&self) -> bool {
@@ -108,7 +204,7 @@ pub async fn start(parameters: AuthParameters) {
             window::set_screen(&client.ui.main);
         }
         Err(error) => {
-            println!("Encountered error connecting client: {:?}", error);
+            println!("encountered error connecting client: {:?}", error);
 
             let error = describe_error(error);
             let screen = screen::loading::build_error(error, move || start(parameters.clone()));

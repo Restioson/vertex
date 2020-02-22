@@ -8,14 +8,13 @@ pub enum OkResponse {
     NoData,
     AddCommunity { community: CommunityStructure },
     AddRoom { community: CommunityId, room: RoomStructure },
-    MessageId { id: MessageId },
+    ConfirmMessage(MessageConfirmation),
     User { id: UserId },
     UserProfile(UserProfile),
     Token { device: DeviceId, token: AuthToken },
     Invite { code: InviteCode },
-    RoomState(RoomState),
-    /// Messages ordered youngest to oldest
-    MessageHistory(Vec<HistoricMessage>),
+    RoomUpdate(RoomUpdate),
+    MessageHistory(MessageHistory),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -72,10 +71,17 @@ pub enum ClientRequest {
     LogOut,
     SendMessage(ClientSentMessage),
     EditMessage(Edit),
-    ReadMessages {
+    GetRoomUpdate {
+        community: CommunityId,
+        room: RoomId,
+        last_received: Option<MessageId>,
+        message_count: usize,
+    },
+    GetMessages {
         community: CommunityId,
         room: RoomId,
         selector: MessageSelector,
+        count: usize,
     },
     SelectRoom {
         community: CommunityId,
@@ -127,7 +133,11 @@ pub enum ServerMessage {
 #[non_exhaustive]
 pub enum ServerEvent {
     ClientReady(ClientReady),
-    AddMessage(ForwardedMessage),
+    AddMessage {
+        community: CommunityId,
+        room: RoomId,
+        message: Message,
+    },
     NotifyMessageReady {
         room: RoomId,
         community: CommunityId,

@@ -71,76 +71,61 @@ pub struct ClientSentMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RoomState {
-    pub newest_message: Option<MessageId>,
-    pub last_read: Option<MessageId>,
+pub struct MessageConfirmation {
+    pub id: MessageId,
+    pub time: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MessageSelector {
-    Before {
-        message: MessageId,
-        count: usize,
-    },
-    After {
-        message: MessageId,
-        count: usize,
-    },
-    UpTo {
-        from: MessageId,
-        up_to: MessageId,
-        count: usize,
+pub struct MessageHistory {
+    pub messages: Vec<Message>,
+}
+
+impl MessageHistory {
+    pub fn from_newest_to_oldest(messages: Vec<Message>) -> Self {
+        let mut messages = messages;
+        messages.reverse();
+
+        MessageHistory { messages }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HistoricMessage {
-    pub id: MessageId,
-    pub author: UserId,
-    pub author_profile_version: ProfileVersion,
-    pub content: String,
+pub struct RoomUpdate {
+    pub last_read: Option<MessageId>,
+    pub new_messages: MessageHistory,
+    pub continuous: bool,
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum Bound<T> {
+    Inclusive(T),
+    Exclusive(T),
+}
+
+impl<T> Bound<T> {
+    #[inline]
+    pub fn get(&self) -> &T {
+        match self {
+            Bound::Inclusive(bound) => bound,
+            Bound::Exclusive(bound) => bound,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum MessageSelector {
+    Before(Bound<MessageId>),
+    After(Bound<MessageId>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ForwardedMessage {
+pub struct Message {
     pub id: MessageId,
-    pub community: CommunityId,
-    pub room: RoomId,
     pub author: UserId,
     pub author_profile_version: ProfileVersion,
     pub sent: DateTime<Utc>,
     pub content: String,
-}
-
-impl ForwardedMessage {
-    pub fn new(
-        id: MessageId,
-        msg: ClientSentMessage,
-        author: UserId,
-        author_profile_version: ProfileVersion,
-        sent: DateTime<Utc>,
-    ) -> Self {
-        ForwardedMessage {
-            id,
-            community: msg.to_community,
-            room: msg.to_room,
-            author,
-            author_profile_version,
-            sent,
-            content: msg.content,
-        }
-    }
-}
-
-impl Into<HistoricMessage> for ForwardedMessage {
-    fn into(self) -> HistoricMessage {
-        HistoricMessage {
-            id: self.id,
-            author: self.author,
-            author_profile_version: self.author_profile_version,
-            content: self.content,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

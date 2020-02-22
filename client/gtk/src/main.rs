@@ -1,21 +1,20 @@
 #![feature(type_alias_impl_trait)]
 
-use std::{io, ops};
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read};
 use std::path::Path;
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
 use gio::prelude::*;
 use gtk::prelude::*;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use url::Url;
 
 use vertex::*;
 
 pub use crate::client::Client;
-use std::sync::Arc;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -26,6 +25,7 @@ pub mod net;
 pub mod screen;
 pub mod token_store;
 pub mod window;
+pub mod scheduler;
 
 // TODO: remove
 pub fn https_ignore_invalid_certs() -> hyper_tls::HttpsConnector<hyper::client::HttpConnector> {
@@ -73,14 +73,10 @@ impl<T> SharedMut<T> {
     }
 
     #[inline]
-    pub async fn read(&self) -> impl ops::Deref<Target = T> + '_ {
-        self.0.read().await
-    }
+    pub async fn read(&self) -> RwLockReadGuard<'_, T> { self.0.read().await }
 
     #[inline]
-    pub async fn write(&self) -> impl ops::Deref<Target = T> + ops::DerefMut + '_ {
-        self.0.write().await
-    }
+    pub async fn write(&self) -> RwLockWriteGuard<'_, T> { self.0.write().await }
 
     #[inline]
     pub fn downgrade(&self) -> WeakSharedMut<T> {
@@ -126,7 +122,7 @@ pub struct Server(Url);
 impl Server {
     pub fn parse(url: String) -> Result<Server> {
         let mut url = url;
-        if !url.starts_with("https://") {
+        if !url.starts_with("https://") && !url.starts_with("http://") {
             url.insert_str(0, "https://");
         }
         if !url.ends_with('/') {
@@ -182,8 +178,7 @@ async fn main() {
 
         window::init(window.build());
 
-        let ctx = glib::MainContext::ref_thread_default();
-        ctx.spawn_local(async move {
+        scheduler::spawn(async move {
             let screen = screen::loading::build();
             window::set_screen(&screen);
 

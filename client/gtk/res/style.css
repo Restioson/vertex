@@ -111,7 +111,7 @@ spinner {
 
 spinner:checked {
   opacity: 1;
-  animation: spin 1s linear infinite;
+  animation: spin 0.5s linear infinite;
 }
 
 * {

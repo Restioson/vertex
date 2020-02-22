@@ -28,7 +28,7 @@ pub struct Connect {
     pub session: Address<ActiveSession>,
 }
 
-impl Message for Connect {
+impl xtra::Message for Connect {
     type Result = DbResult<Result<(), ConnectError>>;
 }
 
@@ -42,7 +42,7 @@ pub struct Join {
     pub session: Address<ActiveSession>,
 }
 
-impl Message for Join {
+impl xtra::Message for Join {
     type Result = DbResult<Result<CommunityStructure, AddToCommunityError>>;
 }
 
@@ -51,13 +51,13 @@ pub struct CreateRoom {
     pub name: String,
 }
 
-impl Message for CreateRoom {
+impl xtra::Message for CreateRoom {
     type Result = DbResult<RoomId>;
 }
 
 pub struct GetRoomInfo;
 
-impl Message for GetRoomInfo {
+impl xtra::Message for GetRoomInfo {
     type Result = Vec<RoomInfo>;
 }
 
@@ -171,34 +171,45 @@ impl Handler<Connect> for CommunityActor {
 }
 
 impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
-    type Responder<'a> = impl Future<Output = Result<MessageId, ErrResponse>> + 'a;
+    type Responder<'a> = impl Future<Output = Result<MessageConfirmation, ErrResponse>> + 'a;
     fn handle(
         &mut self,
-        m: IdentifiedMessage<ClientSentMessage>,
+        identified: IdentifiedMessage<ClientSentMessage>,
         _: &mut Context<Self>,
     ) -> Self::Responder<'_> {
         async move {
             let id = MessageId(Uuid::new_v4());
 
-            let msg = m.message.clone();
-            let db = self.database.clone();
-            let author = m.user;
+            let message = identified.message;
+            let author = identified.user;
             let sent = Utc::now();
 
-            let (_ord, profile_version) = db
-                .create_message(id, author, msg.to_community, msg.to_room, sent, msg.content)
+            let (_ord, profile_version) = self.database
+                .create_message(id, author, message.to_community, message.to_room, sent, message.content.clone())
                 .await?;
 
-            let from_device = m.device;
-            let fwd = ForwardedMessage::new(id, m.message, m.user, profile_version, sent);
-            let send = ForwardMessage(fwd);
+            let from_device = identified.device;
+            let send = ForwardMessage {
+                community: message.to_community,
+                room: message.to_room,
+                message: vertex::Message {
+                    id,
+                    author,
+                    author_profile_version: profile_version,
+                    sent,
+                    content: message.content,
+                },
+            };
 
             self.for_each_online_device_except(
                 |addr| addr.do_send(send.clone()),
                 Some(from_device),
             );
 
-            Ok(id)
+            Ok(MessageConfirmation {
+                id,
+                time: sent
+            })
         }
     }
 }

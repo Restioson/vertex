@@ -42,7 +42,7 @@ trait VertexActorMessage: Send + 'static {
 }
 
 impl VertexActorMessage for ClientSentMessage {
-    type Result = MessageId;
+    type Result = MessageConfirmation;
 }
 
 impl VertexActorMessage for Edit {
@@ -55,7 +55,7 @@ struct IdentifiedMessage<T: VertexActorMessage> {
     message: T,
 }
 
-impl<T> Message for IdentifiedMessage<T>
+impl<T> xtra::Message for IdentifiedMessage<T>
 where
     T: VertexActorMessage,
     T::Result: 'static,

@@ -5,6 +5,7 @@ use vertex::*;
 use crate::client;
 
 use super::*;
+use crate::client::{MessageContent, ClientUi};
 
 pub struct ChatWidget {
     pub main: gtk::Box,
@@ -12,110 +13,48 @@ pub struct ChatWidget {
     pub message_scroll: gtk::ScrolledWindow,
     pub message_list: gtk::ListBox,
     pub message_entry: gtk::Entry,
-    pub last_group: Option<GroupedMessageWidget>,
+    pub front_group: Option<MessageGroupWidget>,
 }
 
 impl ChatWidget {
-    pub fn build() -> Self {
-        lazy_static! {
-            static ref GLADE: Glade = Glade::open("res/glade/active/chat.glade").unwrap();
-        }
-
-        let builder: gtk::Builder = GLADE.builder();
-
-        let main: gtk::Box = builder.get_object("chat").unwrap();
-
-        ChatWidget {
-            main,
-            room_name: builder.get_object("room_name").unwrap(),
-            message_scroll: builder.get_object("message_scroll").unwrap(),
-            message_list: builder.get_object("message_list").unwrap(),
-            message_entry: builder.get_object("message_entry").unwrap(),
-            last_group: None,
-        }
-    }
-
-    fn next_group(&mut self, author: UserId, profile: UserProfile) -> &GroupedMessageWidget {
-        match &self.last_group {
+    fn next_group_front(&mut self, author: UserId, profile: UserProfile) -> &MessageGroupWidget {
+        match &self.front_group {
             Some(group) if group.author == author => {}
             _ => {
-                let group = GroupedMessageWidget::build(author, profile);
+                let group = MessageGroupWidget::build(author, profile);
                 self.message_list.insert(&group.widget, -1);
-                self.last_group = Some(group);
+                self.front_group = Some(group);
             }
         }
 
-        self.last_group.as_ref().unwrap()
+        self.front_group.as_ref().unwrap()
     }
 }
 
 impl client::ChatWidget<Ui> for ChatWidget {
-    fn set_room(&mut self, room: Option<&client::RoomEntry<Ui>>) {
-        let enabled = room.is_some();
-        self.message_entry.set_can_focus(enabled);
-        self.message_entry.set_editable(enabled);
-
+    fn clear(&mut self) {
         for child in self.message_list.get_children() {
             self.message_list.remove(&child);
         }
-        self.last_group = None;
-
-        match room {
-            Some(room) => {
-                self.message_entry.set_placeholder_text(Some("Send message..."));
-                self.message_entry.get_style_context().remove_class("disabled");
-
-                self.room_name.set_text(&room.name);
-            },
-            None => {
-                self.message_entry.set_placeholder_text(Some("Select a room to send messages..."));
-                self.message_entry.get_style_context().add_class("disabled");
-
-                self.room_name.set_text("");
-            }
-        }
+        self.front_group = None;
     }
 
-    fn push_message(&mut self, author: UserId, author_profile: UserProfile, content: String) -> MessageEntryWidget {
-        let group = self.next_group(author, author_profile);
-        group.push_message(content)
+    fn add_message_front(&mut self, content: MessageContent) -> MessageEntryWidget {
+        let group = self.next_group_front(content.author, content.profile);
+        group.push_message(content.text)
     }
 
-    fn bind_events(&self, client: &Client<Ui>, chat: &client::Chat<Ui>) {
-        self.message_entry.connect_activate(
-            client.connector()
-                .do_async(|client, entry: gtk::Entry| async move {
-                    if let Some(selected_room) = client.selected_room().await {
-                        let content = entry.try_get_text().unwrap_or_default();
-                        if !content.trim().is_empty() {
-                            entry.set_text("");
-                            selected_room.send_message(content).await;
-                        }
-                    }
-                })
-                .build_cloned_consumer()
-        );
+    fn add_message_back(&mut self, content: MessageContent) -> MessageEntryWidget {
+        // TODO: this isn't correct. we need to group properly
+        let group = MessageGroupWidget::build(content.author, content.profile);
+        self.message_list.insert(&group.widget, 0);
 
-        let adjustment = self.message_scroll.get_vadjustment().unwrap();
+        group.push_message(content.text)
+    }
 
-        adjustment.connect_value_changed(
-            chat.connector()
-                .do_async(|chat, adjustment: gtk::Adjustment| async move {
-                    let upper = adjustment.get_upper() - adjustment.get_page_size();
-                    let reading_new = adjustment.get_value() + 10.0 >= upper;
-                    chat.set_reading_new(reading_new).await;
-                })
-                .build_cloned_consumer()
-        );
-
-        self.message_list.connect_size_allocate(
-            (chat.clone(), adjustment).connector()
-                .do_sync(|(list, adjustment), (_, _)| {
-                    if list.reading_new() {
-                        adjustment.set_value(adjustment.get_upper() - adjustment.get_page_size());
-                    }
-                })
-                .build_widget_listener()
-        );
+    // TODO: ..we need to be able to reference by id
+    //       how??
+    fn remove_message(&mut self, widget: &MessageEntryWidget) {
+        widget.remove_from(&self.message_list);
     }
 }
