@@ -1,4 +1,4 @@
-#![feature(type_alias_impl_trait)]
+#![feature(type_alias_impl_trait, linked_list_cursors)]
 
 use std::fs::File;
 use std::io::{self, Read};

@@ -206,7 +206,7 @@ impl<Ui: ClientUi> Chat<Ui> {
 
         self.room.update(&update).await;
 
-        self.extend(update.new_messages.messages, ChatSide::Front).await;
+        self.extend(update.new_messages.buffer, ChatSide::Front).await;
     }
 
     async fn extend(&self, messages: Vec<Message>, side: ChatSide) {
@@ -230,7 +230,7 @@ impl<Ui: ClientUi> Chat<Ui> {
 
             // TODO: error handling
             let history = self.room.request_messages(selector, MESSAGE_PAGE_SIZE).await.unwrap();
-            self.extend(history.messages, ChatSide::Back).await;
+            self.extend(history.buffer, ChatSide::Back).await;
         }
     }
 
@@ -245,7 +245,7 @@ impl<Ui: ClientUi> Chat<Ui> {
 
             // TODO: error handling
             let history = self.room.request_messages(selector, MESSAGE_PAGE_SIZE).await.unwrap();
-            self.extend(history.messages, ChatSide::Front).await;
+            self.extend(history.buffer, ChatSide::Front).await;
         }
     }
 

@@ -8,7 +8,7 @@ use crate::Glade;
 
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct MessageGroupWidget {
     pub author: UserId,
     pub origin_time: DateTime<Utc>,
@@ -61,7 +61,7 @@ impl MessageGroupWidget {
         self.entry_list.get_children().is_empty()
     }
 
-    fn remove_from(&self, list: &gtk::ListBox) {
+    pub fn remove_from(&self, list: &gtk::ListBox) {
         if let Some(row) = self.widget.get_parent() {
             list.remove(&row);
         }
@@ -102,14 +102,16 @@ pub struct MessageEntryWidget {
 }
 
 impl MessageEntryWidget {
-    pub fn remove_from(&self, list: &gtk::ListBox) {
+    pub fn remove(&self) -> Option<&MessageGroupWidget> {
         if let Some(row) = self.content.widget.get_parent() {
             self.group.entry_list.remove(&row);
 
             if self.group.is_empty() {
-                self.group.remove_from(list);
+                return Some(&self.group);
             }
         }
+
+        None
     }
 }
 

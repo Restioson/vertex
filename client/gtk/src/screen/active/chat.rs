@@ -54,6 +54,21 @@ impl ChatWidget {
             ChatSide::Back => self.groups.back(),
         }
     }
+
+    // TODO: not a great solution
+    fn remove_group(&mut self, group: &MessageGroupWidget) {
+        let mut cursor = self.groups.cursor_front_mut();
+
+        while let Some(current) = cursor.current() {
+            if current == group {
+                cursor.remove_current();
+                group.remove_from(&self.message_list);
+
+                return;
+            }
+            cursor.move_next();
+        }
+    }
 }
 
 impl client::ChatWidget<Ui> for ChatWidget {
@@ -70,6 +85,8 @@ impl client::ChatWidget<Ui> for ChatWidget {
     }
 
     fn remove_message(&mut self, widget: &MessageEntryWidget) {
-        widget.remove_from(&self.message_list);
+        if let Some(group) = widget.remove() {
+            self.remove_group(group);
+        }
     }
 }

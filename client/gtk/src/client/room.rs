@@ -123,8 +123,10 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
             state.message_buffer.clear();
         }
 
-        // TODO: potentially wasteful; we only need to look at last 50 messages
-        for message in &update.new_messages.messages {
+        let messages = &update.new_messages.buffer;
+        let (_, messages) = messages.split_at(messages.len() - MESSAGE_PAGE_SIZE);
+
+        for message in messages.iter() {
             state.message_buffer.push(message.clone());
         }
     }

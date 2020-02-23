@@ -78,7 +78,7 @@ pub struct MessageConfirmation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageHistory {
-    pub messages: Vec<Message>,
+    pub buffer: Vec<Message>,
 }
 
 impl MessageHistory {
@@ -86,7 +86,7 @@ impl MessageHistory {
         let mut messages = messages;
         messages.reverse();
 
-        MessageHistory { messages }
+        MessageHistory { buffer: messages }
     }
 }
 
