@@ -123,8 +123,10 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
             state.message_buffer.clear();
         }
 
-        let messages = &update.new_messages.buffer;
-        let (_, messages) = messages.split_at(messages.len() - MESSAGE_PAGE_SIZE);
+        let mut messages = update.new_messages.buffer.as_slice();
+        if messages.len() > MESSAGE_PAGE_SIZE {
+            messages = &messages[(messages.len() - MESSAGE_PAGE_SIZE)..];
+        }
 
         for message in messages.iter() {
             state.message_buffer.push(message.clone());
