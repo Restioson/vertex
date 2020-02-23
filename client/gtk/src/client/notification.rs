@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::env;
 use std::rc::Rc;
 
 use ears::{AudioController, Sound};
@@ -29,20 +30,28 @@ impl Notifier {
         author: &UserProfile,
         community_name: &str,
         room_name: &str,
-        content: &str
+        content: &str,
     ) {
-        let title = format!("{} in {} - {}", community_name, room_name, author.display_name);
-        let content = content.to_owned();
+        let title = format!("{} in {}", room_name, community_name);
+        let content = format!("{}: {}", author.display_name, content);
+
+        let mut icon_path = env::current_dir().unwrap();
+        icon_path.push("res");
+        icon_path.push("icon.png");
 
         #[cfg(windows)]
-        notifica::notify(&title, &content);
+            tokio::task::spawn_blocking(move || {
+                // TODO: AppId when we have installer
+                let _ = winrt_notification::Toast::new(winrt_notification::Toast::POWERSHELL_APP_ID)
+                    .icon(icon_path.as_path(), winrt_notification::IconCrop::Circular, "Vertex")
+                    .title(&title)
+                    .text1(&content)
+                    .sound(None)
+                    .duration(winrt_notification::Duration::Short)
+                    .show();
+            });
 
         #[cfg(unix)]
-        {
-            let mut icon_path = env::current_dir().unwrap();
-            icon_path.push("res");
-            icon_path.push("icon.png");
-
             tokio::task::spawn_blocking(move || {
                 let res = notify_rust::Notification::new()
                     .summary(&title)
@@ -55,7 +64,6 @@ impl Notifier {
                     handle.on_close(|| {});
                 }
             });
-        };
 
         if let Some(sound) = &self.sound {
             if let Ok(mut sound) = sound.try_borrow_mut() {

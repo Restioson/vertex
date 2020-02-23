@@ -66,4 +66,4 @@ vertex = { path = "../../common" }
 notify-rust = "4.0.0-beta.2"
 
 [target.'cfg(windows)'.dependencies]
-notifica = "1"
+winrt-notification = "0.2"
