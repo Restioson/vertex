@@ -264,7 +264,7 @@ impl<Ui: ClientUi> Client<Ui> {
             self.clone(),
             chat,
             room.clone(),
-        );
+        ).await;
 
         if let Some(state) = self.state.upgrade() {
             let mut state = state.write().await;

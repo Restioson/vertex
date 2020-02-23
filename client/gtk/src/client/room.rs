@@ -1,3 +1,5 @@
+use chrono::Utc;
+
 use vertex::*;
 
 use crate::{Client, Error, Result, SharedMut};
@@ -66,29 +68,30 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
         let profile_version = profile.version;
 
         if let Some(chat) = self.client.chat_for(self.id).await {
-            let widget = chat.push_raw(
+            let pending = chat.push_pending(
                 MessageContent {
                     author: user,
                     profile,
                     text: content.clone(),
+                    time: Utc::now(),
                 }
             ).await;
-
-            widget.set_status(MessageStatus::Pending);
 
             let result = self.send_message_request(content.clone()).await;
             match result {
                 Ok(confirmation) => {
-                    widget.set_status(MessageStatus::Ok);
-                    self.push_message(Message {
+                    let message = Message {
                         id: confirmation.id,
                         author: user,
                         author_profile_version: profile_version,
                         sent: confirmation.time,
                         content,
-                    }).await;
+                    };
+
+                    pending.upgrade(message.clone()).await;
+                    self.push_message(message).await;
                 }
-                Err(_) => widget.set_status(MessageStatus::Err),
+                Err(_) => pending.set_error(),
             }
         }
     }
@@ -147,6 +150,11 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
             Some(last) => Some(last) != state.last_read,
             None => false,
         }
+    }
+
+    pub async fn newest_message(&self) -> Option<MessageId> {
+        let state = self.state.read().await;
+        state.message_buffer.last()
     }
 
     pub async fn push(&self, message: Message) {

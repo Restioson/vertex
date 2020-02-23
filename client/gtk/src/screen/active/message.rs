@@ -1,8 +1,9 @@
+use chrono::{DateTime, Utc};
 use gtk::prelude::*;
 
 use vertex::*;
 
-use crate::client::{self, InviteEmbed, MessageEmbed, MessageStatus, OpenGraphEmbed};
+use crate::client::{self, ChatSide, InviteEmbed, MessageEmbed, MessageStatus, OpenGraphEmbed};
 use crate::Glade;
 
 use super::*;
@@ -10,12 +11,13 @@ use super::*;
 #[derive(Clone)]
 pub struct MessageGroupWidget {
     pub author: UserId,
+    pub origin_time: DateTime<Utc>,
     pub widget: gtk::Box,
     pub entry_list: gtk::ListBox,
 }
 
 impl MessageGroupWidget {
-    pub fn build(author: UserId, profile: UserProfile) -> MessageGroupWidget {
+    pub fn build(author: UserId, profile: UserProfile, origin_time: DateTime<Utc>) -> MessageGroupWidget {
         lazy_static! {
             static ref GLADE: Glade = Glade::open("res/glade/active/message_entry.glade").unwrap();
         }
@@ -31,19 +33,38 @@ impl MessageGroupWidget {
 
         widget.show_all();
 
-        MessageGroupWidget { author, widget, entry_list }
+        MessageGroupWidget { author, origin_time, widget, entry_list }
     }
 
-    pub fn push_message(&self, content: String) -> MessageEntryWidget {
+    pub fn can_combine(&self, user: UserId, time: DateTime<Utc>) -> bool {
+        self.author == user && (time - self.origin_time.clone()).num_minutes().abs() < 10
+    }
+
+    pub fn add_message(&self, content: String, side: ChatSide) -> MessageEntryWidget {
         let entry = MessageEntryWidget {
             group: self.clone(),
             content: MessageContentWidget::build(content),
         };
 
-        self.entry_list.add(&entry.content.widget);
-        self.entry_list.show_all();
+        match side {
+            ChatSide::Front => self.entry_list.add(&entry.content.widget),
+            ChatSide::Back => self.entry_list.insert(&entry.content.widget, 0),
+        }
+
+        entry.content.widget.show_all();
 
         entry
+    }
+
+    fn is_empty(&self) -> bool {
+        // TODO: this is quite expensive to allocate a vec; is there another way?
+        self.entry_list.get_children().is_empty()
+    }
+
+    fn remove_from(&self, list: &gtk::ListBox) {
+        if let Some(row) = self.widget.get_parent() {
+            list.remove(&row);
+        }
     }
 }
 
@@ -82,11 +103,12 @@ pub struct MessageEntryWidget {
 
 impl MessageEntryWidget {
     pub fn remove_from(&self, list: &gtk::ListBox) {
-        self.group.entry_list.remove(&self.content.widget);
+        if let Some(row) = self.content.widget.get_parent() {
+            self.group.entry_list.remove(&row);
 
-        // TODO: this is quite expensive to allocate a vec; is there another way?
-        if self.group.entry_list.get_children().is_empty() {
-            list.remove(&self.group.widget);
+            if self.group.is_empty() {
+                self.group.remove_from(list);
+            }
         }
     }
 }

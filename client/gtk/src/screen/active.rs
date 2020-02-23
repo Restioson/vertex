@@ -15,6 +15,7 @@ use crate::connect::AsConnector;
 use crate::Glade;
 use crate::screen;
 use crate::window;
+use std::collections::LinkedList;
 
 mod community;
 mod dialog;
@@ -166,7 +167,7 @@ impl client::ClientUi for Ui {
             message_scroll: self.message_scroll.clone(),
             message_list: self.message_list.clone(),
             message_entry: self.message_entry.clone(),
-            front_group: None,
+            groups: LinkedList::new(),
         }
     }
 

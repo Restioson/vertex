@@ -134,7 +134,7 @@ impl Database {
     ) -> DbResult<Result<(), SetUserRoomStateError>> {
         const STMT: &str = "
             WITH last_read_ord(ord) AS (
-                SELECT COALESCE((SELECT MAX(ord) FROM messages GROUP BY room = $2), 0::BIGINT)
+                SELECT COALESCE((SELECT MAX(ord) FROM messages WHERE room = $2), 0::BIGINT)
             )
             UPDATE user_room_states
                 SET last_read = last_read_ord.ord

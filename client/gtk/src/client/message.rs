@@ -1,3 +1,5 @@
+use chrono::{DateTime, Utc};
+
 pub use embed::*;
 pub use rich::*;
 use vertex::*;
@@ -30,6 +32,7 @@ pub struct MessageContent {
     pub author: UserId,
     pub profile: UserProfile,
     pub text: String,
+    pub time: DateTime<Utc>,
 }
 
 pub struct MessageRingBuffer {

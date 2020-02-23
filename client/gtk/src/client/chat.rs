@@ -16,21 +16,38 @@ pub const MESSAGE_DROP_COUNT: usize = MESSAGE_PAGE_SIZE * 2;
 pub trait ChatWidget<Ui: ClientUi> {
     fn clear(&mut self);
 
-    fn add_message_front(&mut self, content: MessageContent) -> Ui::MessageEntryWidget;
-
-    fn add_message_back(&mut self, content: MessageContent) -> Ui::MessageEntryWidget;
+    fn add_message(&mut self, content: MessageContent, side: ChatSide) -> Ui::MessageEntryWidget;
 
     fn remove_message(&mut self, widget: &Ui::MessageEntryWidget);
 }
 
+pub struct PendingMessageHandle<'a, Ui: ClientUi> {
+    chat: &'a Chat<Ui>,
+    widget: Ui::MessageEntryWidget,
+}
+
+impl<'a, Ui: ClientUi> PendingMessageHandle<'a, Ui> {
+    pub async fn upgrade(self, message: Message) {
+        let mut state = self.chat.state.write().await;
+        state.widget.remove_message(&self.widget);
+        drop(state);
+
+        self.chat.push(message).await;
+    }
+
+    pub fn set_error(self) {
+        self.widget.set_status(MessageStatus::Err);
+    }
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-enum InsertSide {
+pub enum ChatSide {
     Front,
     Back,
 }
 
 struct ChatEntry<Ui: ClientUi> {
-    id: Option<MessageId>,
+    id: MessageId,
     widget: Ui::MessageEntryWidget,
 }
 
@@ -49,12 +66,9 @@ impl<Ui: ClientUi> ChatState<Ui> {
         }
     }
 
-    fn push_widget(&mut self, content: MessageContent, side: InsertSide) -> Ui::MessageEntryWidget {
+    fn push_widget(&mut self, content: MessageContent, side: ChatSide) -> Ui::MessageEntryWidget {
         let rich = RichMessage::parse(content.text.clone());
-        let widget = match side {
-            InsertSide::Back => self.widget.add_message_back(content),
-            InsertSide::Front => self.widget.add_message_front(content),
-        };
+        let widget = self.widget.add_message(content, side);
 
         if rich.has_embeds() {
             let client = self.client.clone();
@@ -71,47 +85,40 @@ impl<Ui: ClientUi> ChatState<Ui> {
         widget
     }
 
-    fn push(&mut self, id: Option<MessageId>, content: MessageContent, side: InsertSide) -> Ui::MessageEntryWidget {
+    fn push(&mut self, id: MessageId, content: MessageContent, side: ChatSide) -> Ui::MessageEntryWidget {
         let widget = self.push_widget(content, side);
         let entry = ChatEntry { id, widget: widget.clone() };
 
         match side {
-            InsertSide::Front => self.entries.push_back(entry),
-            InsertSide::Back => self.entries.push_front(entry),
+            ChatSide::Front => self.entries.push_front(entry),
+            ChatSide::Back => self.entries.push_back(entry),
         }
 
         if self.entries.len() > MESSAGE_DROP_THRESHOLD {
-            match side {
-                InsertSide::Front => self.drop_back(),
-                InsertSide::Back => self.drop_front(),
-            }
+            self.drop_side(side);
         }
 
         widget
     }
 
-    fn drop_front(&mut self) {
+    fn drop_side(&mut self, side: ChatSide) {
         if self.entries.len() <= MESSAGE_DROP_COUNT {
             return;
         }
 
-        let dropped = self.entries.split_off(self.entries.len() - MESSAGE_DROP_COUNT);
+        let dropped = match side {
+            ChatSide::Front => {
+                self.entries.split_off(self.entries.len() - MESSAGE_DROP_COUNT)
+            }
+            ChatSide::Back => {
+                let result = self.entries.split_off(MESSAGE_DROP_COUNT);
+                std::mem::replace(&mut self.entries, result)
+            }
+        };
+
         for dropped in dropped {
             self.widget.remove_message(&dropped.widget);
         }
-    }
-
-    fn drop_back(&mut self) {
-        if self.entries.len() <= MESSAGE_DROP_COUNT {
-            return;
-        }
-
-        let result = self.entries.split_off(MESSAGE_DROP_COUNT);
-        for dropped in &self.entries {
-            self.widget.remove_message(&dropped.widget);
-        }
-
-        self.entries = result;
     }
 
     fn clear(&mut self) {
@@ -119,8 +126,14 @@ impl<Ui: ClientUi> ChatState<Ui> {
         self.entries.clear();
     }
 
+    #[inline]
     fn oldest_message(&self) -> Option<MessageId> {
-        self.entries.iter().flat_map(|entry| entry.id).next()
+        self.entries.back().map(|entry| entry.id)
+    }
+
+    #[inline]
+    fn newest_message(&self) -> Option<MessageId> {
+        self.entries.front().map(|entry| entry.id)
     }
 }
 
@@ -133,13 +146,18 @@ pub struct Chat<Ui: ClientUi> {
 }
 
 impl<Ui: ClientUi> Chat<Ui> {
-    pub fn new(client: Client<Ui>, widget: Ui::ChatWidget, room: RoomEntry<Ui>) -> Self {
-        Chat {
+    pub async fn new(client: Client<Ui>, widget: Ui::ChatWidget, room: RoomEntry<Ui>) -> Self {
+        let history = room.collect_recent_history().await;
+
+        let chat = Chat {
             client: client.clone(),
             room,
             state: SharedMut::new(ChatState::new(client, widget)),
             reading_new: Rc::new(AtomicBool::new(true)),
-        }
+        };
+        chat.extend(history, ChatSide::Front).await;
+
+        chat
     }
 
     async fn build_content(&self, message: &Message) -> MessageContent {
@@ -147,6 +165,7 @@ impl<Ui: ClientUi> Chat<Ui> {
             author: message.author,
             profile: self.client.profiles.get_or_default(message.author, message.author_profile_version).await,
             text: message.content.clone(),
+            time: message.sent.clone(),
         }
     }
 
@@ -154,49 +173,53 @@ impl<Ui: ClientUi> Chat<Ui> {
         let content = self.build_content(&message).await;
 
         let mut state = self.state.write().await;
-        state.push(Some(message.id), content, InsertSide::Front)
+        state.push(message.id, content, ChatSide::Front)
     }
 
-    pub async fn push_raw(&self, content: MessageContent) -> Ui::MessageEntryWidget {
+    pub async fn push_pending<'a>(&'a self, content: MessageContent) -> PendingMessageHandle<'a, Ui> {
         let mut state = self.state.write().await;
-        state.push(None, content, InsertSide::Front)
+
+        let widget = state.push_widget(content, ChatSide::Front);
+        widget.set_status(MessageStatus::Pending);
+
+        PendingMessageHandle {
+            chat: self,
+            widget,
+        }
     }
 
+    #[inline]
     pub fn accepts(&self, room: RoomId) -> bool {
         self.room.id == room
     }
 
+    #[inline]
     pub async fn clear(&self) {
         self.state.write().await.clear();
     }
 
     pub async fn update(&self, update: RoomUpdate) {
-        self.room.update(&update).await;
-
+        println!("{:?}", update);
         if !update.continuous {
             self.clear().await;
-        } else {
-            let state = self.state.read().await;
-            if state.entries.is_empty() {
-                let history = self.room.collect_recent_history().await;
-                self.extend(history, InsertSide::Front).await;
-            }
         }
 
-        self.extend(update.new_messages.messages, InsertSide::Front).await;
+        self.room.update(&update).await;
+
+        self.extend(update.new_messages.messages, ChatSide::Front).await;
     }
 
-    async fn extend(&self, messages: Vec<Message>, side: InsertSide) {
+    async fn extend(&self, messages: Vec<Message>, side: ChatSide) {
         let mut state = self.state.write().await;
 
         let mut messages = messages;
-        if side == InsertSide::Back {
+        if side == ChatSide::Back {
             messages.reverse();
         }
 
         for message in messages {
             let content = self.build_content(&message).await;
-            state.push(Some(message.id), content, side);
+            state.push(message.id, content, side);
         }
     }
 
@@ -207,14 +230,27 @@ impl<Ui: ClientUi> Chat<Ui> {
 
             // TODO: error handling
             let history = self.room.request_messages(selector, MESSAGE_PAGE_SIZE).await.unwrap();
-            self.extend(history.messages, InsertSide::Back).await;
+            self.extend(history.messages, ChatSide::Back).await;
         }
     }
 
     pub async fn extend_newer(&self) {
-        // TODO
+        let newest_message = self.state.read().await.newest_message();
+        if newest_message == self.room.newest_message().await {
+            return;
+        }
+
+        if let Some(newest_message) = newest_message {
+            let selector = MessageSelector::After(Bound::Exclusive(newest_message));
+
+            // TODO: error handling
+            let history = self.room.request_messages(selector, MESSAGE_PAGE_SIZE).await.unwrap();
+            self.extend(history.messages, ChatSide::Front).await;
+        }
     }
 
+    // TODO: we can only be reading_new when we are at the bottom of the message history!
+    // TODO: marking as read does not handle when new messages are added or when you're scrolling down
     pub async fn set_reading_new(&self, reading_new: bool) {
         let prev_reading_new = self.reading_new.swap(reading_new, Ordering::SeqCst);
         if reading_new && !prev_reading_new {
