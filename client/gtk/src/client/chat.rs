@@ -72,14 +72,12 @@ impl<Ui: ClientUi> ChatState<Ui> {
         let rich = RichMessage::parse(content.text.clone());
         let widget = self.widget.add_message(content, side);
 
-        // TODO: cache embeds
-        // TODO: loading embeds for pending messages causes them to be loaded twice
         if rich.has_embeds() {
             let client = self.client.clone();
             let widget = widget.clone();
 
             scheduler::spawn(async move {
-                let embeds = rich.load_embeds().await;
+                let embeds = rich.load_embeds(&client.embeds).await;
                 for embed in embeds {
                     widget.push_embed(&client, embed);
                 }

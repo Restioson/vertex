@@ -71,6 +71,7 @@ pub struct Client<Ui: ClientUi> {
     pub ui: Ui,
     pub user: User,
     pub profiles: ProfileCache,
+    pub embeds: EmbedCache,
 
     notifier: Notifier,
 
@@ -101,6 +102,7 @@ impl<Ui: ClientUi> Client<Ui> {
         );
 
         let profiles = ProfileCache::new(request.clone(), user.clone());
+        let embeds = EmbedCache::new();
 
         let state = SharedMut::new(ClientState {
             communities: Vec::new(),
@@ -115,6 +117,7 @@ impl<Ui: ClientUi> Client<Ui> {
             ui,
             user,
             profiles,
+            embeds,
             notifier: Notifier::new(),
             abort_handle,
             state: state.downgrade(),
