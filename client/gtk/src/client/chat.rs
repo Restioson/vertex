@@ -199,7 +199,6 @@ impl<Ui: ClientUi> Chat<Ui> {
     }
 
     pub async fn update(&self, update: RoomUpdate) {
-        println!("{:?}", update);
         if !update.continuous {
             self.clear().await;
         }

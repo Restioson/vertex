@@ -361,8 +361,6 @@ impl ActiveSession {
                 }
             };
 
-            println!("handling request: {:?}", msg.request);
-
             let (user, device, perms) = (self.user, self.device, self.perms);
             let handler = RequestHandler {
                 session: self,

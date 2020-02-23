@@ -23,7 +23,7 @@
               <object class="GtkImage">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="pixbuf">res\feather\settings.svg</property>
+                <property name="pixbuf">res/feather/settings.svg</property>
               </object>
             </child>
           </object>
