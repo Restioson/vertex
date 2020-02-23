@@ -237,6 +237,7 @@ popover {
 
 #active #message .embed {
   background: @sidebar_bg_color;
+  min-width: 320px;
   padding: 6px;
   margin: 4px;
   border-radius: 10px;
