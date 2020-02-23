@@ -31,8 +31,6 @@ impl MessageGroupWidget {
         author_name.set_text(&profile.display_name);
         author_name.set_can_focus(false);
 
-        widget.show_all();
-
         MessageGroupWidget { author, origin_time, widget, entry_list }
     }
 
@@ -50,8 +48,6 @@ impl MessageGroupWidget {
             ChatSide::Front => self.entry_list.add(&entry.content.widget),
             ChatSide::Back => self.entry_list.insert(&entry.content.widget, 0),
         }
-
-        entry.content.widget.show_all();
 
         entry
     }

@@ -19,6 +19,8 @@ pub trait ChatWidget<Ui: ClientUi> {
     fn add_message(&mut self, content: MessageContent, side: ChatSide) -> Ui::MessageEntryWidget;
 
     fn remove_message(&mut self, widget: &Ui::MessageEntryWidget);
+
+    fn flush(&mut self);
 }
 
 pub struct PendingMessageHandle<'a, Ui: ClientUi> {
@@ -126,6 +128,10 @@ impl<Ui: ClientUi> ChatState<Ui> {
         self.entries.clear();
     }
 
+    fn flush(&mut self) {
+        self.widget.flush();
+    }
+
     #[inline]
     fn oldest_message(&self) -> Option<MessageId> {
         self.entries.back().map(|entry| entry.id)
@@ -173,13 +179,19 @@ impl<Ui: ClientUi> Chat<Ui> {
         let content = self.build_content(&message).await;
 
         let mut state = self.state.write().await;
-        state.push(message.id, content, ChatSide::Front)
+        let widget = state.push(message.id, content, ChatSide::Front);
+
+        state.flush();
+
+        widget
     }
 
     pub async fn push_pending<'a>(&'a self, content: MessageContent) -> PendingMessageHandle<'a, Ui> {
         let mut state = self.state.write().await;
 
         let widget = state.push_widget(content, ChatSide::Front);
+        state.flush();
+
         widget.set_status(MessageStatus::Pending);
 
         PendingMessageHandle {
@@ -209,17 +221,18 @@ impl<Ui: ClientUi> Chat<Ui> {
     }
 
     async fn extend(&self, messages: Vec<Message>, side: ChatSide) {
-        let mut state = self.state.write().await;
-
         let mut messages = messages;
         if side == ChatSide::Back {
             messages.reverse();
         }
 
+        let mut state = self.state.write().await;
         for message in messages {
             let content = self.build_content(&message).await;
             state.push(message.id, content, side);
         }
+
+        state.flush();
     }
 
     pub async fn extend_older(&self) {

@@ -22,18 +22,15 @@ pub struct ChatWidget {
 impl ChatWidget {
     fn add_group(&mut self, author: UserId, profile: UserProfile, time: DateTime<Utc>, side: ChatSide) {
         let group = MessageGroupWidget::build(author, profile, time);
+        group.widget.hide();
 
         match side {
             ChatSide::Front => {
                 self.message_list.add(&group.widget);
-                group.widget.show_all();
-
                 self.groups.push_front(group);
             }
             ChatSide::Back => {
                 self.message_list.insert(&group.widget, 0);
-                group.widget.show_all();
-
                 self.groups.push_back(group);
             }
         }
@@ -88,5 +85,9 @@ impl client::ChatWidget<Ui> for ChatWidget {
         if let Some(group) = widget.remove() {
             self.remove_group(group);
         }
+    }
+
+    fn flush(&mut self) {
+        self.message_list.show_all();
     }
 }
