@@ -34,7 +34,6 @@ impl RichMessage {
         let links = futures::future::join_all(
             self.links.iter().cloned()
                 .map(|link| async move {
-                    println!("loading for link {}", link);
                     let result = get_link_metadata(&link).await;
                     (link, result)
                 })

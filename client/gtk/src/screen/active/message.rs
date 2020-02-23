@@ -154,8 +154,8 @@ fn build_opengraph_embed(embed: OpenGraphEmbed) -> gtk::Widget {
     let title_label: gtk::Label = builder.get_object("title").unwrap();
     title_label.set_text(&embed.title);
 
-    let description_label: gtk::Label = builder.get_object("description").unwrap();
-    description_label.set_text(&embed.description);
+    let description_buffer: gtk::TextBuffer = builder.get_object("description_buffer").unwrap();
+    description_buffer.set_text(&embed.description);
 
     opengraph.upcast()
 }

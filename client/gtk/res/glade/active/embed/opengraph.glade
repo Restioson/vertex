@@ -2,6 +2,7 @@
 <!-- Generated with glade 3.22.1 -->
 <interface>
   <requires lib="gtk+" version="3.20"/>
+  <object class="GtkTextBuffer" id="description_buffer"/>
   <object class="GtkBox" id="opengraph">
     <property name="name">opengraph</property>
     <property name="visible">True</property>
@@ -15,10 +16,8 @@
         <property name="visible">True</property>
         <property name="can_focus">False</property>
         <property name="halign">start</property>
-        <property name="wrap">True</property>
         <property name="selectable">True</property>
-        <property name="width_chars">50</property>
-        <property name="max_width_chars">50</property>
+        <property name="single_line_mode">True</property>
       </object>
       <packing>
         <property name="expand">False</property>
@@ -27,20 +26,20 @@
       </packing>
     </child>
     <child>
-      <object class="GtkLabel" id="description">
+      <object class="GtkTextView" id="description">
         <property name="name">description</property>
         <property name="visible">True</property>
-        <property name="can_focus">False</property>
-        <property name="halign">start</property>
-        <property name="wrap">True</property>
-        <property name="selectable">True</property>
-        <property name="width_chars">50</property>
-        <property name="max_width_chars">50</property>
+        <property name="can_focus">True</property>
+        <property name="editable">False</property>
+        <property name="wrap_mode">word</property>
+        <property name="cursor_visible">False</property>
+        <property name="buffer">description_buffer</property>
+        <property name="accepts_tab">False</property>
       </object>
       <packing>
         <property name="expand">False</property>
         <property name="fill">True</property>
-        <property name="position">1</property>
+        <property name="position">2</property>
       </packing>
     </child>
     <style>
