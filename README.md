@@ -7,9 +7,20 @@ Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, feder
 
 ### For Developing
 1. Install the latest Rust **nightly** compiler
-2. Install gtk+ development libraries  (guide [here](https://gtk-rs.org/docs-src/requirements))
-3. Install the openssl development package (`sudo apt install libssl-dev` on Linux)
-4. Install OpenAL and libsndfile (guide [here](https://docs.rs/crate/ears/0.7.0))
+
+**Desktop client:**
+1. Install gtk+ development libraries  (guide [here](https://gtk-rs.org/docs-src/requirements))
+2. Install the openssl development package (`sudo apt install libssl-dev` on Linux)
+3. Install OpenAL and libsndfile (guide [here](https://docs.rs/crate/ears/0.7.0))
+
+**Mobile:**
+1. Install Flutter
+
+**Android:**
+1. Install Android SDK and Kotlin
+
+**iOS:**
+1. TBD
 
 ### Server - Docker
 1. Install Docker and Docker Compose. On Linux, this is as simple as `sudo apt install docker.io docker-compose` 
