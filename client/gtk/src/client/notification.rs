@@ -39,7 +39,7 @@ impl Notifier {
 
         #[cfg(unix)]
         {
-            let mut icon_path = env::current_dir().unwrap();
+            let mut icon_path = std::env::current_dir().unwrap();
             icon_path.push("res");
             icon_path.push("icon.png");
 
