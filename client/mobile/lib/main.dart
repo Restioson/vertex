@@ -11,6 +11,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.teal,
       ),
+      darkTheme: ThemeData.dark(),
       home: LoginPage(title: 'Log in to Vertex'),
     );
   }
@@ -47,23 +48,28 @@ class LoginForm extends StatefulWidget {
 }
 
 class LoginFormState extends State<LoginForm> {
-  final _formKey = GlobalKey<FormState>();
+  final formKey = GlobalKey<FormState>();
+  final passwordFieldKey = GlobalKey<FormFieldState>();
 
   @override
   Widget build(BuildContext context) {
     return Form(
-        key: this._formKey,
+        key: this.formKey,
         child: ListView(
           children: <Widget>[
             LoginFormEntry(
-              name: "Instance",
+              name: "Instance URL",
               top: 20,
               validator: (value) {
                 if (!isURL(value)) {
-                  return "Instance must be a valid URL";
+                  return "Instance URL must be valid";
                 }
                 return null;
               },
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 0),
+              child: Divider(),
             ),
             LoginFormEntry(
               name: "Username",
@@ -75,20 +81,31 @@ class LoginFormState extends State<LoginForm> {
               },
             ),
             LoginFormEntry(
+              fieldKey: this.passwordFieldKey,
               name: "Password",
               password: true,
               validator: (value) {
                   if (value.isEmpty) {
-                    return "Password cannot be empty";
+                    return "Username cannot be empty";
                   }
                   return null;
+                }
+            ),
+            LoginFormEntry(
+              name: "Re-enter password",
+              password: true,
+              validator: (value) {
+                if (this.passwordFieldKey.currentState.value != value) {
+                  return "Passwords do not match";
+                }
+                return null;
               },
             ),
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: RaisedButton(
                 onPressed: () {
-                  if (this._formKey.currentState.validate()) {
+                  if (this.formKey.currentState.validate()) {
                     Scaffold
                         .of(context)
                         .showSnackBar(SnackBar(content: Text("Sending to server")));
@@ -110,14 +127,16 @@ class LoginFormEntry extends StatelessWidget {
   final EntryValidator validator;
   final double top;
   final bool password;
+  final Key fieldKey;
 
-  const LoginFormEntry({ this.name, this.validator, this.top = 0, this.password = false });
+  const LoginFormEntry({ this.name, this.validator, this.top = 0, this.password = false, this.fieldKey = null });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(20, this.top, 20, 20),
       child: TextFormField(
+        key: fieldKey,
         decoration: InputDecoration(
           labelText: this.name,
           hintText: this.name,
