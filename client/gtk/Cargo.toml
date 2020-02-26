@@ -4,6 +4,18 @@ version = "0.1.0"
 authors = ["Restioson <restiosondev@gmail.com>", "gegy1000 <gegy1000@gmail.com>"]
 edition = "2018"
 
+homepage = "https://vertex.cf/"
+repository = "https://github.com/Restioson/vertex"
+
+[package.metadata.wix]
+input = "wix/main.wxs"
+include = ["wix/generated/resources.wxs", "wix/generated/binaries.wxs"]
+
+[package.metadata.winres]
+OriginalFilename = "vertex_client.exe"
+FileDescription = "Vertex Client (GTK)"
+LegalCopyright = "Copyright © 2020"
+
 [profile.dev]
 opt-level = 1
 debug = false
@@ -67,3 +79,11 @@ notify-rust = "4.0.0-beta.2"
 
 [target.'cfg(windows)'.dependencies]
 winrt-notification = "0.2"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+path-slash = "0.1"
+xml-rs = "0.8"
+uuid = "0.8"
+walkdir = "2.3"
+rand = "0.7"

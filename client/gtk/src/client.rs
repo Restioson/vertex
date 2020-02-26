@@ -25,6 +25,13 @@ mod notification;
 
 pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
 
+// TODO: This is approaching an MVC-like design. We should fully embrace this in terms of naming
+//        to make code more easily understandable in that it's a commonly understood pattern.
+//       We could also potentially move towards the view always calling the controller, rather
+//         than the controller calling the view. Stuff like events can be done by async polling.
+//         Do need to properly consider this, though. A problematic case in doing that could be e.g.
+//         message adding in the controller; this has to reference the view and thus having multiple
+//         references. Then again, should this code be in the controller or in the view?
 pub trait ClientUi: Sized + Clone + 'static {
     type CommunityEntryWidget: CommunityEntryWidget<Self>;
     type RoomEntryWidget: RoomEntryWidget<Self>;

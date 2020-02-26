@@ -1,0 +1,28 @@
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Fragment>
+        <DirectoryRef Id="LibDirRef">
+            <Directory Id="gdk_pixbuf" Name="gdk-pixbuf-2.0">
+                <Directory Id="pixbuf_ver" Name="2.10.0">
+                    <Directory Id="gdk_pixbuf_loaders" Name="loaders">
+                        <Component Id="pixbuf_loader_png" Win64="yes" Guid="{cb4001a2-ef81-49b8-89d1-c6332146d81b}">
+                            <File Id="libpixbufloader_png.dll" KeyPath="yes" Source="C:\msys64\mingw64\lib\gdk-pixbuf-2.0\2.10.0\loaders\libpixbufloader-png.dll" />
+                        </Component>
+                        <Component Id="pixbuf_loader_svg" Win64="yes" Guid="{e7249061-6a90-4ece-8685-00605dcc361e}">
+                            <File Id="libpixbufloader_svg.dll" KeyPath="yes" Source="C:\msys64\mingw64\lib\gdk-pixbuf-2.0\2.10.0\loaders\libpixbufloader-svg.dll" />
+                        </Component>
+                    </Directory>
+                    <Component Id="loaders_cache" Win64="yes" Guid="{25abc1df-62a0-4c48-8c61-56ac834c12c6}">
+                        <File Id="loaders.cache" KeyPath="yes" Source="wix/loaders.cache" />
+                    </Component>
+                </Directory>
+            </Directory>
+        </DirectoryRef>
+    </Fragment>
+    <Fragment>
+        <ComponentGroup Id="LibGroupId">
+            <ComponentRef Id="pixbuf_loader_png" />
+            <ComponentRef Id="pixbuf_loader_svg" />
+            <ComponentRef Id="loaders_cache" />
+        </ComponentGroup>
+    </Fragment>
+</Wix>
