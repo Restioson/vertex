@@ -97,8 +97,10 @@ async fn register(
     username: String,
     password: String,
 ) -> Result<AuthParameters> {
+    use vertex::prelude::*;
+
     let instance = Server::parse(instance_)?;
-    let credentials = vertex::UserCredentials::new(username, password);
+    let credentials = UserCredentials::new(username, password);
 
     let auth = auth::Client::new(instance.clone());
 
@@ -106,7 +108,7 @@ async fn register(
 
     let token = auth.create_token(
         credentials,
-        vertex::TokenCreationOptions::default(),
+        TokenCreationOptions::default(),
     ).await?;
 
     let parameters = AuthParameters {
@@ -121,6 +123,8 @@ async fn register(
 }
 
 fn describe_error(error: Error) -> &'static str {
+    use vertex::prelude::*;
+
     match error {
         Error::InvalidUrl => "Invalid instance ip",
         Error::Http(http) => if http.is_connect() {
@@ -130,9 +134,9 @@ fn describe_error(error: Error) -> &'static str {
         },
         Error::ProtocolError(_) => "Protocol error: check your server instance?",
         Error::AuthErrorResponse(err) => match err {
-            vertex::AuthError::Internal => "Internal server error",
-            vertex::AuthError::InvalidUsername => "Invalid username",
-            vertex::AuthError::InvalidPassword => "Invalid password",
+            AuthError::Internal => "Internal server error",
+            AuthError::InvalidUsername => "Invalid username",
+            AuthError::InvalidPassword => "Invalid password",
             _ => "Unknown auth error",
         },
 

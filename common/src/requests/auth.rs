@@ -1,4 +1,6 @@
-use crate::*;
+use serde::{Deserialize, Serialize};
+use crate::types::*;
+use crate::requests::TokenCreationOptions;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthenticateRequest {

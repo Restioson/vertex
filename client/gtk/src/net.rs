@@ -47,7 +47,7 @@ impl Sender {
         self.send_raw(tungstenite::Message::Ping(vec![])).await
     }
 
-    pub async fn send(&self, message: vertex::ClientMessage) {
+    pub async fn send(&self, message: vertex::requests::ClientMessage) {
         self.send_raw(tungstenite::Message::Binary(message.into())).await
     }
 
@@ -62,14 +62,14 @@ pub struct Receiver {
 }
 
 impl Receiver {
-    pub fn stream(self) -> impl Stream<Item = tungstenite::Result<vertex::ServerMessage>> {
+    pub fn stream(self) -> impl Stream<Item = tungstenite::Result<vertex::prelude::ServerMessage>> {
         let error = self.error.map(Err);
 
         futures::stream::select(self.stream, error)
             .filter_map(move |result| futures::future::ready(
                 match result {
                     Ok(tungstenite::Message::Binary(bytes)) => {
-                        match serde_cbor::from_slice::<vertex::ServerMessage>(&bytes) {
+                        match vertex::prelude::ServerMessage::from_protobuf_bytes(&bytes) {
                             Ok(message) => Some(Ok(message)),
                             Err(_) => Some(Err(tungstenite::Error::Protocol(Cow::Borrowed("malformed message")))),
                         }

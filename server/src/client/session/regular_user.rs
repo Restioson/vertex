@@ -155,7 +155,7 @@ impl<'a> RequestHandler<'a> {
 
     async fn get_user_profile(self, id: UserId) -> ResponseResult {
         match self.session.global.database.get_user_profile(id).await? {
-            Some(profile) => Ok(OkResponse::UserProfile(profile)),
+            Some(profile) => Ok(OkResponse::Profile(profile)),
             None => Err(ErrResponse::InvalidUser),
         }
     }
@@ -311,7 +311,7 @@ impl<'a> RequestHandler<'a> {
                             });
                     }
 
-                    Ok(OkResponse::AddCommunity { community })
+                    Ok(OkResponse::AddCommunity(community))
                 }
                 Err(AddToCommunityError::AlreadyInCommunity) => {
                     Err(ErrResponse::AlreadyInCommunity)
@@ -392,7 +392,7 @@ impl<'a> RequestHandler<'a> {
             let res = db.create_invite_code(id, expiration_date, max).await?;
 
             match res {
-                Ok(code) => Ok(OkResponse::Invite { code }),
+                Ok(code) => Ok(OkResponse::NewInvite(code)),
                 Err(_) => Err(ErrResponse::TooManyInviteCodes),
             }
         } else {

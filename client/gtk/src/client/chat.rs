@@ -2,7 +2,7 @@ use std::collections::LinkedList;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::{Client, scheduler, SharedMut};
 use crate::client::RoomEntry;
@@ -171,7 +171,7 @@ impl<Ui: ClientUi> Chat<Ui> {
             author: message.author,
             profile: self.client.profiles.get_or_default(message.author, message.author_profile_version).await,
             text: message.content.clone(),
-            time: message.sent.clone(),
+            time: message.time_sent.clone(),
         }
     }
 

@@ -7,7 +7,7 @@ use futures::channel::oneshot;
 use futures::FutureExt;
 use futures::stream::{Stream, StreamExt};
 
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::net;
 use crate::{Result, Error};

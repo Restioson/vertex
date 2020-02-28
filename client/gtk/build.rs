@@ -1,4 +1,8 @@
+#[cfg(windows)]
 type StdResult<T> = Result<T, Box<dyn std::error::Error>>;
+
+#[cfg(not(windows))]
+fn main() {}
 
 #[cfg(windows)]
 fn main() {

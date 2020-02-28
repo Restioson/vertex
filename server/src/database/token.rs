@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use std::convert::TryFrom;
 use tokio_postgres::types::ToSql;
 use tokio_postgres::Row;
-use vertex::{DeviceId, TokenPermissionFlags, UserId};
+use vertex::prelude::*;
 
 pub(super) const CREATE_TOKENS_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS login_tokens (

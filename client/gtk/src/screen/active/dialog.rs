@@ -1,7 +1,7 @@
 use gtk::prelude::*;
 
 use lazy_static::lazy_static;
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::{Client, TryGetText};
 use crate::connect::AsConnector;

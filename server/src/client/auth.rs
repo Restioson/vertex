@@ -2,7 +2,7 @@ use chrono::Utc;
 use rand::RngCore;
 use uuid::Uuid;
 
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::auth;
 use crate::database;

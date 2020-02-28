@@ -10,15 +10,23 @@ pub struct RichMessage {
 }
 
 impl RichMessage {
-    pub fn parse(content: String) -> RichMessage {
-        let finder = LinkFinder::new();
-        let links = finder
-            .links(&content)
-            .filter(|link| *link.kind() == LinkKind::Url)
-            .map(|link| link.as_str().to_string())
-            .collect();
+    pub fn parse(content: Option<String>) -> RichMessage {
+        if let Some(content) = content {
+            let finder = LinkFinder::new();
+            let links = finder
+                .links(&content)
+                .filter(|link| *link.kind() == LinkKind::Url)
+                .map(|link| link.as_str().to_string())
+                .collect();
 
-        RichMessage { text: content, links }
+            RichMessage { text: content, links }
+        } else {
+            // TODO handle deletion
+            RichMessage {
+                text: "<Deleted>".to_string(),
+                links: vec![]
+            }
+        }
     }
 
     pub fn has_embeds(&self) -> bool {

@@ -8,7 +8,7 @@ use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
 
 pub use manager::*;
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::community::{Connect, CreateRoom, GetRoomInfo, Join, COMMUNITIES};
 use crate::database::*;
@@ -53,7 +53,7 @@ impl<T: Debug + Send + 'static> xtra::Message for SendMessage<T> {
 pub struct ForwardMessage {
     pub community: CommunityId,
     pub room: RoomId,
-    pub message: vertex::Message,
+    pub message: vertex::structures::Message,
 }
 
 impl xtra::Message for ForwardMessage {

@@ -1,0 +1,28 @@
+syntax = "proto3";
+package vertex.types;
+
+message UserId {
+    bytes bytes = 1;
+}
+
+message DeviceId {
+    bytes bytes = 1;
+}
+
+message MessageId {
+    bytes bytes = 1;
+}
+
+message CommunityId {
+    bytes bytes = 1;
+}
+
+message RoomId {
+    bytes bytes = 1;
+}
+
+message RequestId {
+    uint32 value = 1;
+}
+
+message None {}

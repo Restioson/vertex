@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use gtk::prelude::*;
 
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::client::{self, ChatSide, InviteEmbed, MessageEmbed, MessageStatus, OpenGraphEmbed};
 use crate::Glade;
@@ -38,7 +38,7 @@ impl MessageGroupWidget {
         self.author == user && (time - self.origin_time.clone()).num_minutes().abs() < 10
     }
 
-    pub fn add_message(&self, content: String, side: ChatSide) -> MessageEntryWidget {
+    pub fn add_message(&self, content: Option<String>, side: ChatSide) -> MessageEntryWidget {
         let entry = MessageEntryWidget {
             group: self.clone(),
             content: MessageContentWidget::build(content),
@@ -71,7 +71,7 @@ struct MessageContentWidget {
 }
 
 impl MessageContentWidget {
-    pub fn build(text: String) -> MessageContentWidget {
+    pub fn build(text: Option<String>) -> MessageContentWidget {
         let widget = gtk::BoxBuilder::new()
             .name("message")
             .orientation(gtk::Orientation::Vertical)
@@ -79,7 +79,7 @@ impl MessageContentWidget {
 
         let text = gtk::LabelBuilder::new()
             .name("message_text")
-            .label(text.trim())
+            .label(text.unwrap_or_else(|| "<Deleted>".to_string()).trim()) // TODO deletion
             .halign(gtk::Align::Start)
             .selectable(true)
             .can_focus(false)

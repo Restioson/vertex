@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use url::Url;
 
-use vertex::*;
+use vertex::prelude::*;
 
 pub use crate::client::Client;
 
@@ -203,6 +203,7 @@ pub enum Error {
     ErrorResponse(ErrResponse),
     AuthErrorResponse(AuthError),
     UnexpectedMessage,
+    DeserializeError(vertex::proto::DeserializeError),
 }
 
 impl From<serde_cbor::Error> for Error {

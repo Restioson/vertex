@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use ears::{AudioController, Sound};
 
-use vertex::*;
+use vertex::prelude::*;
 
 #[derive(Clone)]
 pub struct Notifier {
@@ -30,10 +30,14 @@ impl Notifier {
         author: &UserProfile,
         community_name: &str,
         room_name: &str,
-        content: &str,
+        content: Option<&str>,
     ) {
         let title = format!("{} in {}", room_name, community_name);
-        let content = format!("{}: {}", author.display_name, content);
+        let content = if let Some(content) = content {
+            format!("{}: {}", author.display_name, content)
+        } else {
+            format!("{}: <Deleted>", author.display_name) // TODO deletion
+        };
 
         let mut icon_path = env::current_dir().unwrap();
         icon_path.push("res");

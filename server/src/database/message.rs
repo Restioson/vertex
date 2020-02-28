@@ -4,8 +4,7 @@ use chrono::{DateTime, Utc};
 use futures::{Stream, TryStream, TryStreamExt};
 use tokio_postgres::Row;
 
-use vertex::{Bound, CommunityId, Message, MessageId, MessageSelector, ProfileVersion, RoomId, UserId};
-
+use vertex::prelude::*;
 use crate::database::{Database, DatabaseError, DbResult};
 
 /// Max messages the server will return at one time
@@ -225,8 +224,8 @@ where
                     id: record.id,
                     author: record.author,
                     author_profile_version: profile_version,
-                    sent: record.date,
-                    content,
+                    time_sent: record.date,
+                    content: Some(content),
                 })),
                 None => Ok(None),
             }

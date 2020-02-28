@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 
 pub use embed::*;
 pub use rich::*;
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::Client;
 
@@ -31,7 +31,7 @@ pub enum MessageStatus {
 pub struct MessageContent {
     pub author: UserId,
     pub profile: UserProfile,
-    pub text: String,
+    pub text: Option<String>, // TODO properly handle deletion
     pub time: DateTime<Utc>,
 }
 

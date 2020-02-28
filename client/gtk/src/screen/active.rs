@@ -222,14 +222,15 @@ async fn try_start(parameters: AuthParameters) -> Result<Client<Ui>> {
 }
 
 fn describe_error(error: Error) -> String {
+    use vertex::requests::AuthError;
     match error {
         Error::InvalidUrl => "Invalid instance ip".to_string(),
         Error::Http(http) => format!("{}", http),
         Error::Websocket(ws) => format!("{}", ws),
         Error::ProtocolError(_) => "Protocol error: check your server instance?".to_string(),
         Error::AuthErrorResponse(err) => match err {
-            vertex::AuthError::Internal => "Internal server error".to_string(),
-            vertex::AuthError::InvalidToken => "Invalid token".to_string(),
+            AuthError::Internal => "Internal server error".to_string(),
+            AuthError::InvalidToken => "Invalid token".to_string(),
             _ => "Unknown auth error".to_string(),
         },
 

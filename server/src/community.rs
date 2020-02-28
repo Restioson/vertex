@@ -9,7 +9,7 @@ use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use std::collections::{BTreeSet, HashMap};
 use uuid::Uuid;
-use vertex::*;
+use vertex::prelude::*;
 use xtra::prelude::*;
 use xtra::Disconnected;
 
@@ -182,22 +182,22 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
 
             let message = identified.message;
             let author = identified.user;
-            let sent = Utc::now();
+            let time_sent = Utc::now();
 
             let (_ord, profile_version) = self.database
-                .create_message(id, author, message.to_community, message.to_room, sent, message.content.clone())
+                .create_message(id, author, message.to_community, message.to_room, time_sent, message.content.clone())
                 .await?;
 
             let from_device = identified.device;
             let send = ForwardMessage {
                 community: message.to_community,
                 room: message.to_room,
-                message: vertex::Message {
+                message: vertex::structures::Message {
                     id,
                     author,
                     author_profile_version: profile_version,
-                    sent,
-                    content: message.content,
+                    time_sent,
+                    content: Some(message.content),
                 },
             };
 
@@ -206,10 +206,7 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
                 Some(from_device),
             );
 
-            Ok(MessageConfirmation {
-                id,
-                time: sent
-            })
+            Ok(MessageConfirmation { id, time_sent, })
         }
     }
 }

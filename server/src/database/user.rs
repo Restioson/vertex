@@ -3,7 +3,6 @@ use crate::auth::HashSchemeVersion;
 use std::convert::TryFrom;
 use tokio_postgres::{error::SqlState, row::Row, types::ToSql};
 use uuid::Uuid;
-use vertex::{ProfileVersion, UserId, UserProfile};
 
 pub(super) const CREATE_USERS_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS users (

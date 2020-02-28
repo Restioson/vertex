@@ -6,7 +6,7 @@ use rand::Rng;
 use tokio_postgres::types::ToSql;
 use tokio_postgres::IsolationLevel;
 
-use vertex::{CommunityId, InviteCode};
+use vertex::prelude::*;
 
 use crate::database::{Database, DbResult};
 

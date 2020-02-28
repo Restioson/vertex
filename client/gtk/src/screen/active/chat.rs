@@ -3,7 +3,7 @@ use std::collections::LinkedList;
 use chrono::{DateTime, Utc};
 use gtk::prelude::*;
 
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::client;
 use crate::client::{ChatSide, MessageContent};

@@ -1,0 +1,62 @@
+syntax = "proto3";
+package vertex.responses;
+
+import "types.proto";
+import "structures.proto";
+
+message Response {
+    types.RequestId id = 1;
+    oneof response {
+        Ok ok = 2;
+        Error error = 3;
+    }
+}
+
+message Ok {
+    oneof response {
+        types.None no_data = 1;
+        structures.CommunityStructure add_community = 2;
+        NewRoom add_room = 3;
+        structures.MessageConfirmation confirm_message = 4;
+        types.UserId user_id = 5;
+        structures.UserProfile profile = 6;
+        NewToken new_token = 7;
+        NewInvite new_invite = 8;
+        structures.RoomUpdate room_update = 9;
+        structures.MessageHistory message_history = 10;
+    }
+}
+
+message NewRoom {
+    types.CommunityId community = 1;
+    structures.RoomStructure structure = 2;
+}
+
+message NewToken {
+    types.DeviceId device_id = 1;
+    string token_string = 2;
+}
+
+message NewInvite {
+    string code = 1;
+}
+
+enum Error {
+    Internal = 0;
+    UsernameAlreadyExists = 1;
+    InvalidUsername = 2;
+    InvalidPassword = 3;
+    InvalidDisplayName = 4;
+    UserDeleted = 5;
+    DeviceDoesNotExist = 6;
+    IncorrectUsernameOrPassword = 7;
+    AccessDenied = 8;
+    InvalidRoom = 9;
+    InvalidCommunity = 10;
+    InvalidInviteCode = 11;
+    InvalidUser = 12;
+    AlreadyInCommunity = 13;
+    TooManyInviteCodes = 14;
+    InvalidMessageSelector = 15;
+}
+

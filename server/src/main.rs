@@ -16,7 +16,7 @@ use xtra::Disconnected;
 
 use client::ActiveSession;
 use database::Database;
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::client::{session::WebSocketMessage, Authenticator};
 use crate::community::CommunityActor;

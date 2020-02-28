@@ -10,8 +10,8 @@ pub use notification::*;
 pub use profile::*;
 pub use room::*;
 pub use user::*;
-use vertex::*;
 
+use vertex::prelude::*;
 use crate::{net, scheduler, screen, SharedMut, WeakSharedMut, window};
 use crate::{Error, Result};
 
@@ -195,7 +195,7 @@ impl<Ui: ClientUi> Client<Ui> {
                         &profile,
                         &community.state.read().await.name,
                         &room.name,
-                        &message.content,
+                        message.content.as_ref().map(|s| s as &str),
                     ).await;
                 }
 
@@ -217,7 +217,7 @@ impl<Ui: ClientUi> Client<Ui> {
         let request = self.request.send(request).await;
 
         match request.response().await? {
-            OkResponse::AddCommunity { community } => Ok(self.add_community(community).await),
+            OkResponse::AddCommunity(community) => Ok(self.add_community(community).await),
             _ => Err(Error::UnexpectedMessage),
         }
     }
@@ -227,7 +227,7 @@ impl<Ui: ClientUi> Client<Ui> {
         let request = self.request.send(request).await;
 
         match request.response().await? {
-            OkResponse::AddCommunity { community } => Ok(self.add_community(community).await),
+            OkResponse::AddCommunity(community) => Ok(self.add_community(community).await),
             _ => Err(Error::UnexpectedMessage),
         }
     }

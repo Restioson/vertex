@@ -7,7 +7,7 @@ use l337_postgres::PostgresConnectionManager;
 use log::{error, warn};
 use tokio_postgres::types::ToSql;
 use tokio_postgres::{NoTls, Row, RowStream};
-use vertex::{AuthError, DeviceId, ErrResponse, UserId};
+use vertex::prelude::*;
 
 mod administrators;
 mod communities;

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::{net, SharedMut};
 

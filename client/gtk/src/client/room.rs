@@ -1,7 +1,6 @@
 use chrono::Utc;
 
-use vertex::*;
-
+use vertex::prelude::*;
 use crate::{Client, Error, Result, SharedMut};
 
 use super::ClientUi;
@@ -72,7 +71,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
                 MessageContent {
                     author: user,
                     profile,
-                    text: content.clone(),
+                    text: Some(content.clone()),
                     time: Utc::now(),
                 }
             ).await;
@@ -84,8 +83,8 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
                         id: confirmation.id,
                         author: user,
                         author_profile_version: profile_version,
-                        sent: confirmation.time,
-                        content,
+                        time_sent: confirmation.time_sent,
+                        content: Some(content),
                     };
 
                     pending.upgrade(message.clone()).await;

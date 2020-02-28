@@ -2,7 +2,7 @@
 
 use tokio_tungstenite::WebSocketStream;
 
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::{Error, Result};
 use crate::Server;
@@ -87,7 +87,7 @@ impl Client {
         credentials: UserCredentials,
         display_name: Option<String>,
     ) -> Result<RegisterUserResponse> {
-        let response: AuthResult<RegisterUserResponse> = self.post(
+        let response: AuthResult<RegisterUserResponse> = self.post_auth(
             RegisterUserRequest { credentials, display_name },
             self.server.url().join("client/register")?,
         ).await?;
@@ -100,7 +100,7 @@ impl Client {
         credentials: UserCredentials,
         options: TokenCreationOptions,
     ) -> Result<CreateTokenResponse> {
-        let response: AuthResult<CreateTokenResponse> = self.post(
+        let response: AuthResult<CreateTokenResponse> = self.post_auth(
             CreateTokenRequest { credentials, options },
             self.server.url().join("client/token/create")?,
         ).await?;
@@ -113,7 +113,7 @@ impl Client {
         credentials: UserCredentials,
         device: DeviceId,
     ) -> Result<()> {
-        let response: AuthResult<()> = self.post(
+        let response: AuthResult<()> = self.post_auth(
             RefreshTokenRequest { credentials, device },
             self.server.url().join("client/token/refresh")?,
         ).await?;
@@ -125,14 +125,14 @@ impl Client {
         credentials: UserCredentials,
         device: DeviceId,
     ) -> Result<()> {
-        let response: AuthResult<()> = self.post(
+        let response: AuthResult<()> = self.post_auth(
             RevokeTokenRequest { credentials, device },
             self.server.url().join("client/token/revoke")?,
         ).await?;
         Ok(response?)
     }
 
-    async fn post<Req, Res>(&self, request: Req, url: Url) -> Result<Res>
+    async fn post_auth<Req, Res>(&self, request: Req, url: Url) -> Result<Res>
         where Req: serde::Serialize, Res: serde::de::DeserializeOwned
     {
         let request = hyper::Request::builder()

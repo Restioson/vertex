@@ -2,7 +2,7 @@ use dashmap::DashMap;
 use xtra::Address;
 
 use lazy_static::lazy_static;
-use vertex::*;
+use vertex::prelude::*;
 
 use super::*;
 use futures::TryStreamExt;

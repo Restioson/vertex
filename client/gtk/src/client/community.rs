@@ -1,6 +1,6 @@
 use chrono::prelude::*;
 
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::{Client, SharedMut};
 
@@ -47,7 +47,7 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
         let request = self.client.request.send(request).await;
 
         match request.response().await? {
-            OkResponse::Invite { code } => Ok(code),
+            OkResponse::NewInvite(code) => Ok(code),
             _ => Err(Error::UnexpectedMessage),
         }
     }

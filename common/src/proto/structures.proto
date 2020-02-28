@@ -1,0 +1,68 @@
+syntax = "proto3";
+package vertex.structures;
+
+import "types.proto";
+
+message CommunityStructure {
+    types.CommunityId id = 1;
+    string name = 2;
+    repeated RoomStructure rooms = 3;
+}
+
+message RoomStructure {
+    types.RoomId id = 1;
+    string name = 2;
+    bool unread = 3;
+}
+
+message MessageConfirmation {
+    types.MessageId id = 1;
+    // UTC unix timestamp
+    int64 time_sent = 4;
+}
+
+message Message {
+    types.MessageId id = 1;
+    types.UserId author = 2;
+    uint32 author_profile_version = 3;
+    // UTC unix timestamp
+    int64 time_sent = 4;
+    oneof content { // like Option<T>
+        string present = 6;
+    }
+}
+
+message Edit {
+    types.MessageId message = 1;
+    types.CommunityId community = 2;
+    types.RoomId room = 3;
+    string new_content = 4;
+}
+
+message Delete {
+    types.MessageId message = 1;
+    types.CommunityId community = 2;
+    types.RoomId room = 3;
+}
+
+message MessageHistory {
+    repeated Message messages = 1;
+}
+
+message RoomUpdate {
+    types.MessageId last_read = 1;
+    MessageHistory new_messages = 2;
+    bool continuous = 3;
+}
+
+message ClientReady {
+    types.UserId user = 1;
+    UserProfile profile = 2;
+    repeated CommunityStructure communities = 3;
+}
+
+message UserProfile {
+    uint32 version = 1;
+    string username = 2;
+    string display_name = 3;
+}

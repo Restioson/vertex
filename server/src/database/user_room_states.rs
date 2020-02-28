@@ -5,7 +5,7 @@ use std::error::Error as ErrorTrait;
 use tokio_postgres::error::{DbError, Error, SqlState};
 use tokio_postgres::types::ToSql;
 use tokio_postgres::Row;
-use vertex::*;
+use vertex::prelude::*;
 
 pub(super) const CREATE_USER_ROOM_STATES_TABLE: &str = r#"
     CREATE TABLE IF NOT EXISTS user_room_states (

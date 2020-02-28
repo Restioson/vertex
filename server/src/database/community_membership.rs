@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
 use tokio_postgres::Row;
-use vertex::{CommunityId, UserId};
+use vertex::prelude::*;
 
 use super::*;
 

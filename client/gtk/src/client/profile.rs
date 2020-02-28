@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::{client, Error, net, Result, SharedMut};
 
@@ -71,7 +71,7 @@ impl ProfileCache {
         let request = self.request.send(request).await;
 
         match request.response().await? {
-            OkResponse::UserProfile(profile) => {
+            OkResponse::Profile(profile) => {
                 let mut cache = self.cache.write().await;
                 cache.insert(id, profile.clone());
                 Ok(profile)

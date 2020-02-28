@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use tokio::time;
 
-use vertex::*;
+use vertex::prelude::*;
 
 use crate::{Error, Result};
 use crate::SharedMut;

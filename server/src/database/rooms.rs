@@ -3,7 +3,7 @@ use futures::{Stream, TryStreamExt};
 use std::convert::TryFrom;
 use tokio_postgres::Row;
 use uuid::Uuid;
-use vertex::{CommunityId, RoomId};
+use vertex::prelude::*;
 
 pub(super) const CREATE_ROOMS_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS rooms (

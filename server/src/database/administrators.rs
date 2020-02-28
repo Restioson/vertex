@@ -3,7 +3,7 @@ use bitflags::bitflags;
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
 use tokio_postgres::types::ToSql;
-use vertex::UserId;
+use vertex::prelude::*;
 
 pub(super) const CREATE_ADMINISTRATORS_TABLE: &str = r"
     CREATE TABLE IF NOT EXISTS administrators (
