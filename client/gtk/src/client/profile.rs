@@ -5,9 +5,9 @@ use vertex::prelude::*;
 
 use crate::{client, Error, net, Result, SharedMut};
 
-fn create_default_profile(user: UserId) -> UserProfile {
+fn create_default_profile(user: UserId) -> Profile {
     let name = format!("{}", user.0);
-    UserProfile {
+    Profile {
         version: ProfileVersion(0),
         username: name.clone(),
         display_name: name,
@@ -19,7 +19,7 @@ fn create_default_profile(user: UserId) -> UserProfile {
 pub struct ProfileCache {
     request: Rc<net::RequestSender>,
     user: client::User,
-    cache: SharedMut<HashMap<UserId, UserProfile>>,
+    cache: SharedMut<HashMap<UserId, Profile>>,
 }
 
 impl ProfileCache {
@@ -31,7 +31,7 @@ impl ProfileCache {
         }
     }
 
-    pub async fn get_or_default(&self, id: UserId, version: ProfileVersion) -> UserProfile {
+    pub async fn get_or_default(&self, id: UserId, version: ProfileVersion) -> Profile {
         match self.get(id, version).await {
             Ok(profile) => profile,
             Err(err) => {
@@ -42,7 +42,7 @@ impl ProfileCache {
         }
     }
 
-    pub async fn get(&self, id: UserId, version: ProfileVersion) -> Result<UserProfile> {
+    pub async fn get(&self, id: UserId, version: ProfileVersion) -> Result<Profile> {
         if id == self.user.id {
             return Ok(self.user.profile().await);
         }
@@ -56,7 +56,7 @@ impl ProfileCache {
         Ok(profile)
     }
 
-    pub async fn get_existing(&self, id: UserId, version: Option<ProfileVersion>) -> Option<UserProfile> {
+    pub async fn get_existing(&self, id: UserId, version: Option<ProfileVersion>) -> Option<Profile> {
         let cache = self.cache.read().await;
         cache.get(&id).and_then(|profile| {
             match version {
@@ -66,8 +66,8 @@ impl ProfileCache {
         })
     }
 
-    async fn request(&self, id: UserId) -> Result<UserProfile> {
-        let request = ClientRequest::GetUserProfile(id);
+    async fn request(&self, id: UserId) -> Result<Profile> {
+        let request = ClientRequest::GetProfile(id);
         let request = self.request.send(request).await;
 
         match request.response().await? {

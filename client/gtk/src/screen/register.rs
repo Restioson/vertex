@@ -100,7 +100,7 @@ async fn register(
     use vertex::prelude::*;
 
     let instance = Server::parse(instance_)?;
-    let credentials = UserCredentials::new(username, password);
+    let credentials = Credentials::new(username, password);
 
     let auth = auth::Client::new(instance.clone());
 

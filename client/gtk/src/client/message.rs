@@ -30,7 +30,7 @@ pub enum MessageStatus {
 #[derive(Debug, Clone)]
 pub struct MessageContent {
     pub author: UserId,
-    pub profile: UserProfile,
+    pub profile: Profile,
     pub text: Option<String>, // TODO properly handle deletion
     pub time: DateTime<Utc>,
 }

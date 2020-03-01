@@ -27,7 +27,8 @@ message Message {
     uint32 author_profile_version = 3;
     // UTC unix timestamp
     int64 time_sent = 4;
-    oneof content { // like Option<T>
+    // Option<T>
+    oneof content {
         string present = 6;
     }
 }
@@ -57,12 +58,30 @@ message RoomUpdate {
 
 message ClientReady {
     types.UserId user = 1;
-    UserProfile profile = 2;
+    Profile profile = 2;
     repeated CommunityStructure communities = 3;
 }
 
-message UserProfile {
+message Profile {
     uint32 version = 1;
     string username = 2;
     string display_name = 3;
+}
+
+message Credentials {
+    string username = 1;
+    string password = 2;
+}
+
+message TokenCreationOptions {
+    // Option<T>
+    oneof device_name {
+        string device_name_present = 1;
+    }
+    // Option<T>
+    oneof expiration_datetime {
+        // UTC unix timestamp
+        int64 expiration_datetime_present = 2;
+    }
+    int64 permission_flags = 3;
 }

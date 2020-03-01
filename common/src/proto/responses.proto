@@ -8,7 +8,7 @@ message Response {
     types.RequestId id = 1;
     oneof response {
         Ok ok = 2;
-        Error error = 3;
+        ErrResponse error = 3;
     }
 }
 
@@ -19,8 +19,7 @@ message Ok {
         NewRoom add_room = 3;
         structures.MessageConfirmation confirm_message = 4;
         types.UserId user_id = 5;
-        structures.UserProfile profile = 6;
-        NewToken new_token = 7;
+        structures.Profile profile = 6;
         NewInvite new_invite = 8;
         structures.RoomUpdate room_update = 9;
         structures.MessageHistory message_history = 10;
@@ -32,16 +31,11 @@ message NewRoom {
     structures.RoomStructure structure = 2;
 }
 
-message NewToken {
-    types.DeviceId device_id = 1;
-    string token_string = 2;
-}
-
 message NewInvite {
     string code = 1;
 }
 
-enum Error {
+enum ErrResponse {
     Internal = 0;
     UsernameAlreadyExists = 1;
     InvalidUsername = 2;

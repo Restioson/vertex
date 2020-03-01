@@ -95,7 +95,7 @@ async fn login(
         _ => {
             let auth = auth::Client::new(instance.clone());
             let token = auth.create_token(
-                UserCredentials::new(username, password),
+                Credentials::new(username, password),
                 TokenCreationOptions::default(),
             ).await?;
 

@@ -5,6 +5,7 @@ fn main() {
             "src/proto/structures.proto",
             "src/proto/responses.proto",
             "src/proto/events.proto",
+            "src/proto/requests/auth.proto",
         ],
         &["src/proto"],
     )

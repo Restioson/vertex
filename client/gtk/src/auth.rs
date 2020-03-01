@@ -33,12 +33,12 @@ impl Client {
         Client { server, client }
     }
 
-    pub async fn authenticate(
+    pub async fn login(
         &self,
         device: DeviceId,
         token: AuthToken,
     ) -> Result<AuthenticatedWs> {
-        let request = serde_urlencoded::to_string(AuthenticateRequest { device, token: token.clone() })
+        let request = serde_urlencoded::to_string(Login { device, token: token.clone() })
             .expect("failed to encode authenticate request");
 
         let url = self.server.url().join(&format!("client/authenticate?{}", request))?;
@@ -74,7 +74,7 @@ impl Client {
                 let body = response.into_body();
                 let bytes = hyper::body::to_bytes(body).await?;
 
-                match serde_cbor::from_slice::<AuthResult<()>>(&bytes)? {
+                match AuthResponse::from_protobuf_bytes(&bytes) {
                     Ok(_) => Err(Error::ProtocolError(None)),
                     Err(e) => Err(e.into()),
                 }
@@ -84,66 +84,78 @@ impl Client {
 
     pub async fn register(
         &self,
-        credentials: UserCredentials,
+        credentials: Credentials,
         display_name: Option<String>,
-    ) -> Result<RegisterUserResponse> {
-        let response: AuthResult<RegisterUserResponse> = self.post_auth(
-            RegisterUserRequest { credentials, display_name },
+    ) -> Result<UserId> {
+        let response = self.post_auth(
+            AuthRequest::RegisterUser(RegisterUser { credentials, display_name }),
             self.server.url().join("client/register")?,
         ).await?;
 
-        Ok(response?)
+        match response? {
+            AuthOk::User(user) => Ok(user),
+            _ => Err(Error::UnexpectedMessage),
+        }
     }
 
     pub async fn create_token(
         &self,
-        credentials: UserCredentials,
+        credentials: Credentials,
         options: TokenCreationOptions,
-    ) -> Result<CreateTokenResponse> {
-        let response: AuthResult<CreateTokenResponse> = self.post_auth(
-            CreateTokenRequest { credentials, options },
+    ) -> Result<NewToken> {
+        let response = self.post_auth(
+            AuthRequest::CreateToken(CreateToken { credentials, options }),
             self.server.url().join("client/token/create")?,
         ).await?;
 
-        Ok(response?)
+        match response? {
+            AuthOk::Token(token) => Ok(token),
+            _ => Err(Error::UnexpectedMessage),
+        }
     }
 
     pub async fn refresh_token(
         &self,
-        credentials: UserCredentials,
+        credentials: Credentials,
         device: DeviceId,
     ) -> Result<()> {
-        let response: AuthResult<()> = self.post_auth(
-            RefreshTokenRequest { credentials, device },
+        let response = self.post_auth(
+            AuthRequest::RefreshToken(RefreshToken { credentials, device }),
             self.server.url().join("client/token/refresh")?,
         ).await?;
-        Ok(response?)
+
+        match response? {
+            AuthOk::NoData => Ok(()),
+            _ => Err(Error::UnexpectedMessage),
+        }
     }
 
     pub async fn revoke_token(
         &self,
-        credentials: UserCredentials,
+        credentials: Credentials,
         device: DeviceId,
     ) -> Result<()> {
-        let response: AuthResult<()> = self.post_auth(
-            RevokeTokenRequest { credentials, device },
+        let response = self.post_auth(
+            AuthRequest::RevokeToken(RevokeToken { credentials, device }),
             self.server.url().join("client/token/revoke")?,
         ).await?;
-        Ok(response?)
+
+        match response? {
+            AuthOk::NoData => Ok(()),
+            _ => Err(Error::UnexpectedMessage),
+        }
     }
 
-    async fn post_auth<Req, Res>(&self, request: Req, url: Url) -> Result<Res>
-        where Req: serde::Serialize, Res: serde::de::DeserializeOwned
-    {
+    async fn post_auth(&self, request: AuthRequest, url: Url) -> Result<AuthResponse> {
         let request = hyper::Request::builder()
             .uri(url.as_str().parse::<hyper::Uri>()?)
             .method(hyper::Method::POST)
-            .body(hyper::Body::from(serde_cbor::to_vec(&request)?))
+            .body(hyper::Body::from(request.into(): Vec<u8>))
             .unwrap();
 
         let response = self.client.request(request).await?;
         let bytes = hyper::body::to_bytes(response.into_body()).await?;
 
-        Ok(serde_cbor::from_slice(&bytes)?)
+        Ok(AuthResponse::from_protobuf_bytes(&bytes)?)
     }
 }

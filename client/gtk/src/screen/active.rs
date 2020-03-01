@@ -216,7 +216,7 @@ pub async fn start(parameters: AuthParameters) {
 
 async fn try_start(parameters: AuthParameters) -> Result<Client<Ui>> {
     let auth = auth::Client::new(parameters.instance);
-    let ws = auth.authenticate(parameters.device, parameters.token).await?;
+    let ws = auth.login(parameters.device, parameters.token).await?;
 
     Ok(Client::start(ws, Ui::build()).await?)
 }

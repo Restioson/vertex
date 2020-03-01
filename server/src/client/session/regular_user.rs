@@ -28,7 +28,7 @@ impl<'a> RequestHandler<'a> {
             ClientRequest::JoinCommunity(code) => self.join_community(code).await,
             ClientRequest::CreateCommunity { name } => self.create_community(name).await,
             ClientRequest::LogOut => self.log_out().await,
-            ClientRequest::GetUserProfile(id) => self.get_user_profile(id).await,
+            ClientRequest::GetProfile(id) => self.get_user_profile(id).await,
             ClientRequest::ChangeUsername { new_username } => {
                 self.change_username(new_username).await
             }

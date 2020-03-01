@@ -62,14 +62,14 @@ impl TryFrom<proto::events::ServerMessage> for ServerMessage {
             Event(event) => ServerMessage::Event(event.try_into()?),
             Response(res) => match res.response? {
                 Response::Ok(ok) => ServerMessage::Response {
-                    id: res.id.try_into()?,
+                    id: res.id?.into(),
                     result: Ok(ok.try_into()?),
                 },
                 Response::Error(err) => {
-                    let result = proto::responses::Error::from_i32(err)
+                    let result = proto::responses::ErrResponse::from_i32(err)
                         .ok_or(DeserializeError::InvalidEnumVariant)?;
                     ServerMessage::Response {
-                        id: res.id.try_into()?,
+                        id: res.id?.into(),
                         result: Err(result.try_into()?),
                     }
                 },
@@ -176,15 +176,15 @@ impl TryFrom<proto::events::ServerEvent> for ServerEvent {
             ClientReady(ready) => ServerEvent::ClientReady(ready.try_into()?),
             AddMessage(add) => {
                 ServerEvent::AddMessage {
-                    community: add.community.try_into()?,
-                    room: add.room.try_into()?,
-                    message: add.message.try_into()?,
+                    community: add.community?.try_into()?,
+                    room: add.room?.try_into()?,
+                    message: add.message?.try_into()?,
                 }
             },
             NotifyMessageReady(notify) => {
                 ServerEvent::NotifyMessageReady {
-                    community: notify.community.try_into()?,
-                    room: notify.room.try_into()?,
+                    community: notify.community?.try_into()?,
+                    room: notify.room?.try_into()?,
                 }
             }
             Edit(edit) => ServerEvent::Edit(edit.try_into()?),
@@ -192,8 +192,8 @@ impl TryFrom<proto::events::ServerEvent> for ServerEvent {
             SessionLoggedOut(_) => ServerEvent::SessionLoggedOut,
             AddRoom(room) => {
                 ServerEvent::AddRoom {
-                    community: room.community.try_into()?,
-                    structure: room.structure.try_into()?,
+                    community: room.community?.try_into()?,
+                    structure: room.structure?.try_into()?,
                 }
             },
             AddCommunity(community) => ServerEvent::AddCommunity(community.try_into()?),
@@ -202,7 +202,7 @@ impl TryFrom<proto::events::ServerEvent> for ServerEvent {
                 let reason = reason.ok_or(DeserializeError::InvalidEnumVariant)?;
 
                 ServerEvent::RemoveCommunity {
-                    id: remove.id.try_into()?,
+                    id: remove.id?.try_into()?,
                     reason: reason.try_into()?,
                 }
             }

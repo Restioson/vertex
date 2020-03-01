@@ -12,11 +12,11 @@ pub struct Authenticator {
 }
 
 impl Authenticator {
-    pub async fn authenticate(
+    pub async fn login(
         &self,
         device: DeviceId,
         pass: AuthToken,
-    ) -> AuthResult<(UserId, DeviceId, TokenPermissionFlags)> {
+    ) -> Result<(UserId, DeviceId, TokenPermissionFlags), AuthError> {
         let token = match self.global.database.get_token(device).await? {
             Some(token) => token,
             None => return Err(AuthError::InvalidToken),
@@ -65,20 +65,20 @@ impl Authenticator {
 
     pub async fn create_user(
         &self,
-        credentials: UserCredentials,
+        credentials: Credentials,
         display_name: String,
-    ) -> AuthResult<RegisterUserResponse> {
+    ) -> AuthResponse {
         if !auth::valid_password(&credentials.password, &self.global.config) {
-            return Err(AuthError::InvalidPassword);
+            return AuthResponse::Err(AuthError::InvalidPassword);
         }
 
         let username = match auth::prepare_username(&credentials.username, &self.global.config) {
             Ok(name) => name,
-            Err(auth::TooShort) => return Err(AuthError::InvalidUsername),
+            Err(auth::TooShort) => return AuthResponse::Err(AuthError::InvalidUsername),
         };
 
         if !auth::valid_display_name(&display_name, &self.global.config) {
-            return Err(AuthError::InvalidDisplayName);
+            return AuthResponse::Err(AuthError::InvalidDisplayName);
         }
 
         let (hash, hash_version) = auth::hash(credentials.password).await;
@@ -87,17 +87,20 @@ impl Authenticator {
         let user_id = user.id;
 
         match self.global.database.create_user(user).await? {
-            Ok(()) => Ok(RegisterUserResponse { user: user_id }),
-            Err(_) => Err(AuthError::UsernameAlreadyExists),
+            Ok(()) => AuthResponse::Ok(AuthOk::User(user_id)),
+            Err(_) => AuthResponse::Err(AuthError::UsernameAlreadyExists),
         }
     }
 
     pub async fn create_token(
         &self,
-        credentials: UserCredentials,
+        credentials: Credentials,
         options: TokenCreationOptions,
-    ) -> AuthResult<CreateTokenResponse> {
-        let user = self.verify_credentials(credentials).await?;
+    ) -> AuthResponse {
+        let user = match self.verify_credentials(credentials).await? {
+            AuthOk::User(user) => user,
+            _ => return AuthResponse::Err(AuthError::InvalidMessage)
+        };
 
         let mut token_bytes: [u8; 32] = [0; 32]; // 256 bits
         rand::thread_rng().fill_bytes(&mut token_bytes);
@@ -115,7 +118,7 @@ impl Authenticator {
             device,
             device_name: options.device_name,
             last_used: Utc::now(),
-            expiration_date: options.expiration_date,
+            expiration_date: options.expiration_datetime,
             permission_flags: options.permission_flags,
         };
 
@@ -126,50 +129,47 @@ impl Authenticator {
             panic!("Newly generated UUID conflicts with another!");
         }
 
-        Ok(CreateTokenResponse {
-            device,
-            token: auth_token,
-        })
+        AuthResponse::Ok(AuthOk::Token(NewToken { device, token: auth_token }))
     }
 
     pub async fn refresh_token(
         &self,
-        credentials: UserCredentials,
+        credentials: Credentials,
         to_refresh: DeviceId,
-    ) -> AuthResult<()> {
+    ) -> AuthResponse {
         self.verify_credentials(credentials).await?;
         match self.global.database.refresh_token(to_refresh).await? {
-            Ok(_) => Ok(()),
-            Err(_) => Err(AuthError::InvalidToken),
+            Ok(_) => AuthResponse::Ok(AuthOk::NoData),
+            Err(_) => AuthResponse::Err(AuthError::InvalidToken),
         }
     }
 
     pub async fn revoke_token(
         &self,
-        credentials: UserCredentials,
+        credentials: Credentials,
         to_revoke: DeviceId,
-    ) -> AuthResult<()> {
+    ) -> AuthResponse {
         self.verify_credentials(credentials).await?;
         match self.global.database.revoke_token(to_revoke).await? {
-            Ok(_) => Ok(()),
-            Err(_) => Err(AuthError::InvalidToken),
+            Ok(_) => AuthResponse::Ok(AuthOk::NoData),
+            Err(_) => AuthResponse::Err(AuthError::InvalidToken),
         }
     }
 
-    async fn verify_credentials(&self, credentials: UserCredentials) -> AuthResult<UserId> {
+    async fn verify_credentials(&self, credentials: Credentials) -> AuthResponse {
         let username = auth::normalize_username(&credentials.username, &self.global.config);
         let password = credentials.password;
 
         let user = match self.global.database.get_user_by_name(username).await? {
             Some(user) => user,
-            None => return Err(AuthError::InvalidUser),
+            None => return AuthResponse::Err(AuthError::InvalidUser),
         };
 
         let id = user.id;
         if auth::verify_user(user, password).await {
-            Ok(id)
+            AuthResponse::Ok(AuthOk::User(id))
         } else {
-            Err(AuthError::IncorrectCredentials)
+            AuthResponse::Err(AuthError::IncorrectCredentials)
         }
     }
 }

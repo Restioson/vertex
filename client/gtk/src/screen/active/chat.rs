@@ -20,7 +20,7 @@ pub struct ChatWidget {
 }
 
 impl ChatWidget {
-    fn add_group(&mut self, author: UserId, profile: UserProfile, time: DateTime<Utc>, side: ChatSide) {
+    fn add_group(&mut self, author: UserId, profile: Profile, time: DateTime<Utc>, side: ChatSide) {
         let group = MessageGroupWidget::build(author, profile, time);
         group.widget.hide();
 
@@ -36,7 +36,7 @@ impl ChatWidget {
         }
     }
 
-    fn next_group(&mut self, author: UserId, profile: UserProfile, time: DateTime<Utc>, side: ChatSide) -> &MessageGroupWidget {
+    fn next_group(&mut self, author: UserId, profile: Profile, time: DateTime<Utc>, side: ChatSide) -> &MessageGroupWidget {
         match self.group_for(side) {
             Some(group) if group.can_combine(author, time) => {}
             _ => self.add_group(author, profile, time, side),

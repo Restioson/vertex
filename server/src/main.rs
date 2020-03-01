@@ -162,9 +162,9 @@ async fn main() {
         .and_then(
             |global: Global, authenticate, ws: warp::ws::Ws| async move {
                 let response: Box<dyn warp::Reply> =
-                    match self::authenticate(global.clone(), ws, authenticate).await {
+                    match self::login(global.clone(), ws, authenticate).await {
                         Ok(response) => Box::new(response),
-                        Err(e) => return reply_cbor(Err(e): Result<(), AuthError>),
+                        Err(e) => return reply_err(e),
                     };
                 Ok(response)
             },
@@ -174,14 +174,14 @@ async fn main() {
         .and(global.clone())
         .and(warp::post())
         .and(warp::body::bytes())
-        .and_then(|global, bytes| async move { reply_cbor(self::register(global, bytes).await) });
+        .and_then(|global, bytes| async move { reply_protobuf(self::register(global, bytes).await) });
 
     let create_token = warp::path("create")
         .and(global.clone())
         .and(warp::post())
         .and(warp::body::bytes())
         .and_then(
-            |global, bytes| async move { reply_cbor(self::create_token(global, bytes).await) },
+            |global, bytes| async move { reply_protobuf(self::create_token(global, bytes).await) },
         );
 
     let revoke_token = warp::path("revoke")
@@ -189,7 +189,7 @@ async fn main() {
         .and(warp::post())
         .and(warp::body::bytes())
         .and_then(
-            |global, bytes| async move { reply_cbor(self::revoke_token(global, bytes).await) },
+            |global, bytes| async move { reply_protobuf(self::revoke_token(global, bytes).await) },
         );
 
     let refresh_token = warp::path("refresh")
@@ -197,7 +197,7 @@ async fn main() {
         .and(warp::post())
         .and(warp::body::bytes())
         .and_then(
-            |global, bytes| async move { reply_cbor(self::refresh_token(global, bytes).await) },
+            |global, bytes| async move { reply_protobuf(self::refresh_token(global, bytes).await) },
         );
 
     let invite = warp::path!("invite" / String)
@@ -224,21 +224,26 @@ async fn main() {
 }
 
 #[inline]
-fn reply_cbor<T: serde::Serialize>(value: T) -> Result<Box<dyn warp::Reply>, Infallible> {
-    Ok(Box::new(serde_cbor::to_vec(&value).unwrap()))
+fn reply_err(err: AuthError) -> Result<Box<dyn warp::Reply>, Infallible> {
+    Ok(Box::new(AuthResponse::Err(err).into(): Vec<u8>))
 }
 
-async fn authenticate(
+#[inline]
+fn reply_protobuf(res: AuthResponse) -> Result<Box<dyn warp::Reply>, Infallible> {
+    Ok(Box::new(res.into(): Vec<u8>))
+}
+
+async fn login(
     global: Global,
     ws: warp::ws::Ws,
-    authenticate: AuthenticateRequest,
+    login: Login,
 ) -> Result<impl warp::Reply, AuthError> {
     let authenticator = Authenticator {
         global: global.clone(),
     };
 
     let (user, device, perms) = authenticator
-        .authenticate(authenticate.device, authenticate.token)
+        .login(login.device, login.token)
         .await?;
 
     match client::session::insert(global.database.clone(), user, device).await? {
@@ -263,9 +268,11 @@ async fn authenticate(
     }
 }
 
-async fn register(global: Global, bytes: bytes::Bytes) -> AuthResult<RegisterUserResponse> {
-    let register: RegisterUserRequest =
-        serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
+async fn register(global: Global, bytes: bytes::Bytes) -> AuthResponse {
+    let register = match AuthRequest::from_protobuf_bytes(&bytes)? {
+        AuthRequest::RegisterUser(register) => register,
+        _ => return AuthResponse::Err(AuthError::WrongEndpoint),
+    };
 
     let credentials = register.credentials;
     let display_name = register
@@ -276,9 +283,11 @@ async fn register(global: Global, bytes: bytes::Bytes) -> AuthResult<RegisterUse
     authenticator.create_user(credentials, display_name).await
 }
 
-async fn create_token(global: Global, bytes: bytes::Bytes) -> AuthResult<CreateTokenResponse> {
-    let create_token: CreateTokenRequest =
-        serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
+async fn create_token(global: Global, bytes: bytes::Bytes) -> AuthResponse {
+    let create_token = match AuthRequest::from_protobuf_bytes(&bytes)? {
+        AuthRequest::CreateToken(create) => create,
+        _ => return AuthResponse::Err(AuthError::WrongEndpoint),
+    };
 
     let authenticator = Authenticator { global };
     authenticator
@@ -286,9 +295,11 @@ async fn create_token(global: Global, bytes: bytes::Bytes) -> AuthResult<CreateT
         .await
 }
 
-async fn refresh_token(global: Global, bytes: bytes::Bytes) -> AuthResult<()> {
-    let refresh_token: RefreshTokenRequest =
-        serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
+async fn refresh_token(global: Global, bytes: bytes::Bytes) -> AuthResponse {
+    let refresh_token = match AuthRequest::from_protobuf_bytes(&bytes)? {
+        AuthRequest::RefreshToken(refresh) => refresh,
+        _ => return AuthResponse::Err(AuthError::WrongEndpoint),
+    };
 
     let authenticator = Authenticator { global };
     authenticator
@@ -296,9 +307,11 @@ async fn refresh_token(global: Global, bytes: bytes::Bytes) -> AuthResult<()> {
         .await
 }
 
-async fn revoke_token(global: Global, bytes: bytes::Bytes) -> AuthResult<()> {
-    let revoke_token: RevokeTokenRequest =
-        serde_cbor::from_slice(&bytes).map_err(|_| AuthError::Internal)?;
+async fn revoke_token(global: Global, bytes: bytes::Bytes) -> AuthResponse {
+    let revoke_token = match AuthRequest::from_protobuf_bytes(&bytes)? {
+        AuthRequest::RevokeToken(revoke) => revoke,
+        _ => return AuthResponse::Err(AuthError::WrongEndpoint),
+    };
 
     let authenticator = Authenticator { global };
     authenticator

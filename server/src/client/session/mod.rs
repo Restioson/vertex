@@ -329,7 +329,7 @@ impl ActiveSession {
 
         let ready = ClientReady {
             user: self.user,
-            profile: UserProfile {
+            profile: Profile {
                 version: user.profile_version,
                 username: user.username,
                 display_name: user.display_name,

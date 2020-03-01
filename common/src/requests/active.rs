@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
-use bitflags::bitflags;
 use crate::structures::*;
 use crate::types::*;
 
@@ -67,14 +66,7 @@ pub enum ClientRequest {
         old_password: String,
         new_password: String,
     },
-    GetUserProfile(UserId),
-}
-
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct TokenCreationOptions {
-    pub device_name: Option<String>,
-    pub expiration_date: Option<DateTime<Utc>>,
-    pub permission_flags: TokenPermissionFlags,
+    GetProfile(UserId),
 }
 
 impl ClientMessage {
@@ -86,48 +78,6 @@ impl ClientMessage {
 impl Into<Vec<u8>> for ClientMessage {
     fn into(self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
-    }
-}
-
-bitflags! {
-    #[derive(Serialize, Deserialize)]
-    pub struct TokenPermissionFlags: i64 {
-        /// All permissions. Should be used for user devices but not for service logins.
-        const ALL = 1;
-        /// Send messages
-        const SEND_MESSAGES = 1 << 1;
-        /// Edit any messages sent by this user
-        const EDIT_ANY_MESSAGES = 1 << 2;
-        /// Edit only messages sent by this device/from this token
-        const EDIT_OWN_MESSAGES = 1 << 3;
-        /// Delete any messages sent by this user
-        const DELETE_ANY_MESSAGES = 1 << 4;
-        /// Edit only messages sent by this device/from this token
-        const DELETE_OWN_MESSAGES = 1 << 5;
-        /// Change the user's name
-        const CHANGE_USERNAME = 1 << 6;
-        /// Change the user's display name
-        const CHANGE_DISPLAY_NAME = 1 << 7;
-        /// Join communities
-        const JOIN_COMMUNITIES = 1 << 8;
-        /// Create communities
-        const CREATE_COMMUNITIES = 1 << 9;
-        /// Create rooms
-        const CREATE_ROOMS = 1 << 10;
-        /// Create invites to communities
-        const CREATE_INVITES = 1 << 11;
-    }
-}
-
-impl TokenPermissionFlags {
-    pub fn has_perms(self, perms: TokenPermissionFlags) -> bool {
-        self.contains(TokenPermissionFlags::ALL) || self.contains(perms)
-    }
-}
-
-impl Default for TokenPermissionFlags {
-    fn default() -> Self {
-        TokenPermissionFlags::ALL
     }
 }
 

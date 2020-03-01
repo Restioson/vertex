@@ -17,7 +17,7 @@ pub struct MessageGroupWidget {
 }
 
 impl MessageGroupWidget {
-    pub fn build(author: UserId, profile: UserProfile, origin_time: DateTime<Utc>) -> MessageGroupWidget {
+    pub fn build(author: UserId, profile: Profile, origin_time: DateTime<Utc>) -> MessageGroupWidget {
         lazy_static! {
             static ref GLADE: Glade = Glade::open("res/glade/active/message_entry.glade").unwrap();
         }

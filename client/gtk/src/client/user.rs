@@ -7,7 +7,7 @@ use crate::{net, SharedMut};
 use super::Result;
 
 pub struct UserState {
-    profile: UserProfile,
+    profile: Profile,
 }
 
 #[derive(Clone)]
@@ -23,7 +23,7 @@ impl User {
     pub(super) fn new(
         request: Rc<net::RequestSender>,
         id: UserId,
-        profile: UserProfile,
+        profile: Profile,
         device: DeviceId,
         token: AuthToken,
     ) -> Self {
@@ -67,7 +67,7 @@ impl User {
         Ok(())
     }
 
-    pub async fn profile(&self) -> UserProfile {
+    pub async fn profile(&self) -> Profile {
         self.state.read().await.profile.clone()
     }
 }

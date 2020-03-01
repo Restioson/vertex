@@ -22,18 +22,6 @@ macro_rules! impl_protobuf_conversions {
                     Uuid::from_slice(&id.bytes).map($name).map_err(Into::into)
                 }
             }
-
-            impl TryFrom<Option<proto::types::$name>> for $name {
-                type Error = proto::DeserializeError;
-
-                fn try_from(id: Option<proto::types::$name>) -> Result<Self, Self::Error> {
-                    if let Some(id) = id {
-                        $name::try_from(id)
-                    } else {
-                        Err(proto::DeserializeError::NullField)
-                    }
-                }
-            }
         )*
     }
 }
@@ -79,18 +67,6 @@ impl From<proto::types::RequestId> for RequestId {
     }
 }
 
-impl TryFrom<Option<proto::types::RequestId>> for RequestId {
-    type Error = proto::DeserializeError;
-
-    fn try_from(id: Option<proto::types::RequestId>) -> Result<Self, Self::Error> {
-        if let Some(id) = id {
-            Ok(RequestId::from(id))
-        } else {
-            Err(proto::DeserializeError::NullField)
-        }
-    }
-}
-
 #[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct ProfileVersion(pub u32);
 
@@ -112,15 +88,3 @@ impl fmt::Display for AuthToken {
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct InviteCode(pub String);
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserCredentials {
-    pub username: String,
-    pub password: String,
-}
-
-impl UserCredentials {
-    pub fn new(username: String, password: String) -> UserCredentials {
-        UserCredentials { username, password }
-    }
-}

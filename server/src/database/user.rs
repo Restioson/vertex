@@ -99,12 +99,12 @@ impl Database {
         }
     }
 
-    pub async fn get_user_profile(&self, id: UserId) -> DbResult<Option<UserProfile>> {
+    pub async fn get_user_profile(&self, id: UserId) -> DbResult<Option<Profile>> {
         let query = "SELECT username, display_name, profile_version FROM users WHERE id=$1";
         let opt = self.query_opt(query, &[&id.0]).await?;
         if let Some(row) = opt {
             // Can't opt::map because of ?
-            Ok(Some(UserProfile {
+            Ok(Some(Profile {
                 version: ProfileVersion(row.try_get::<&str, i32>("profile_version")? as u32),
                 username: row.try_get("username")?,
                 display_name: row.try_get("display_name")?,

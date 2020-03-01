@@ -1,4 +1,4 @@
-#![feature(type_alias_impl_trait, linked_list_cursors)]
+#![feature(type_alias_impl_trait, linked_list_cursors, type_ascription)]
 
 use std::fs::File;
 use std::io::{self, Read};
@@ -13,6 +13,7 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use url::Url;
 
 use vertex::prelude::*;
+use vertex::proto::DeserializeError;
 
 pub use crate::client::Client;
 
@@ -203,7 +204,7 @@ pub enum Error {
     ErrorResponse(ErrResponse),
     AuthErrorResponse(AuthError),
     UnexpectedMessage,
-    DeserializeError(vertex::proto::DeserializeError),
+    DeserializeError(DeserializeError),
 }
 
 impl From<serde_cbor::Error> for Error {
@@ -232,4 +233,10 @@ impl From<AuthError> for Error {
 
 impl From<url::ParseError> for Error {
     fn from(_: url::ParseError) -> Self { Error::InvalidUrl }
+}
+
+impl From<DeserializeError> for Error {
+    fn from(err: DeserializeError) -> Self {
+        Error::DeserializeError(err)
+    }
 }

@@ -1,0 +1,81 @@
+syntax = "proto3";
+package vertex.requests.auth;
+
+import "types.proto";
+import "structures.proto";
+
+message AuthRequest {
+    oneof message {
+        Login login = 1;
+        CreateToken create_token = 2;
+        RefreshToken refresh_token = 3;
+        RevokeToken revoke_token = 4;
+        RegisterUser register_user = 5;
+    }
+}
+
+message AuthResponse {
+    oneof response {
+        AuthOk ok = 1;
+        AuthError error = 2;
+    }
+}
+
+message AuthOk {
+    oneof ok {
+        types.UserId user = 1;
+        NewToken token = 2;
+        types.None no_data = 3;
+    }
+}
+
+enum AuthError {
+    Internal = 0;
+    IncorrectCredentials = 1;
+    InvalidToken = 2;
+    StaleToken = 3;
+    TokenInUse = 4;
+    InvalidUser = 5;
+    UserCompromised = 6;
+    UserLocked = 7;
+    UserBanned = 8;
+    UsernameAlreadyExists = 9;
+    InvalidUsername = 10;
+    InvalidPassword = 11;
+    InvalidDisplayName = 12;
+    WrongEndpoint = 13;
+    InvalidMessage = 14;
+}
+
+message Login {
+    types.DeviceId device = 1;
+    string token_string = 2;
+}
+
+message CreateToken {
+    structures.Credentials credentials = 1;
+    structures.TokenCreationOptions options  = 2;
+}
+
+message NewToken {
+    types.DeviceId device = 1;
+    string token_string = 2;
+}
+
+message RefreshToken {
+    structures.Credentials credentials = 1;
+    types.DeviceId device = 2;
+}
+
+message RevokeToken {
+    structures.Credentials credentials = 1;
+    types.DeviceId device = 2;
+}
+
+message RegisterUser {
+    structures.Credentials credentials = 1;
+    // Option<T>
+    oneof display_name {
+        string present = 2;
+    }
+}

@@ -14,7 +14,13 @@ pub mod events {
     include!(concat!(env!("OUT_DIR"), "/vertex.events.rs"));
 }
 
-#[derive(Debug, Eq, PartialEq)]
+pub mod requests {
+    pub mod auth {
+        include!(concat!(env!("OUT_DIR"), "/vertex.requests.auth.rs"));
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeserializeError {
     InvalidUuid(uuid::Error),
     NullField,

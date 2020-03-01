@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use crate::proto::{self, DeserializeError};
 use crate::types::*;
 use chrono::{DateTime, Utc, NaiveDateTime, TimeZone};
@@ -65,18 +66,6 @@ impl TryFrom<proto::structures::RoomStructure> for RoomStructure {
             name: room.name,
             unread: room.unread,
         })
-    }
-}
-
-impl TryFrom<Option<proto::structures::RoomStructure>> for RoomStructure {
-    type Error = DeserializeError;
-
-    fn try_from(room: Option<proto::structures::RoomStructure>) -> Result<Self, Self::Error> {
-        if let Some(room) = room {
-            room.try_into()
-        } else {
-            Err(DeserializeError::NullField)
-        }
     }
 }
 
@@ -212,8 +201,8 @@ impl TryFrom<proto::structures::Message> for Message {
         let dt = &NaiveDateTime::from_timestamp(message.time_sent, 0);
 
         Ok(Message {
-            id: message.id.try_into()?,
-            author: message.author.try_into()?,
+            id: message.id?.try_into()?,
+            author: message.author?.try_into()?,
             author_profile_version: ProfileVersion(message.author_profile_version),
             time_sent: Utc.from_utc_datetime(&dt),
             content: message.content.map(|c| {
@@ -221,18 +210,6 @@ impl TryFrom<proto::structures::Message> for Message {
                 content
             }),
         })
-    }
-}
-
-impl TryFrom<Option<proto::structures::Message>> for Message {
-    type Error = DeserializeError;
-
-    fn try_from(message: Option<proto::structures::Message>) -> Result<Self, Self::Error> {
-        if let Some(message) = message {
-            message.try_into()
-        } else {
-            Err(DeserializeError::NullField)
-        }
     }
 }
 
@@ -260,9 +237,9 @@ impl TryFrom<proto::structures::Edit> for Edit {
 
     fn try_from(edit: proto::structures::Edit) -> Result<Self, Self::Error> {
         Ok(Edit {
-            message: edit.message.try_into()?,
-            community: edit.community.try_into()?,
-            room: edit.room.try_into()?,
+            message: edit.message?.try_into()?,
+            community: edit.community?.try_into()?,
+            room: edit.room?.try_into()?,
             new_content: edit.new_content,
         })
     }
@@ -290,9 +267,9 @@ impl TryFrom<proto::structures::Delete> for Delete {
 
     fn try_from(delete: proto::structures::Delete) -> Result<Self, Self::Error> {
         Ok(Delete {
-            message: delete.message.try_into()?,
-            community: delete.community.try_into()?,
-            room: delete.room.try_into()?,
+            message: delete.message?.try_into()?,
+            community: delete.community?.try_into()?,
+            room: delete.room?.try_into()?,
         })
     }
 }
@@ -300,7 +277,7 @@ impl TryFrom<proto::structures::Delete> for Delete {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientReady {
     pub user: UserId,
-    pub profile: UserProfile,
+    pub profile: Profile,
     pub communities: Vec<CommunityStructure>,
 }
 
@@ -325,23 +302,23 @@ impl TryFrom<proto::structures::ClientReady> for ClientReady {
             .collect::<Result<Vec<CommunityStructure>, DeserializeError>>()?;
 
         Ok(ClientReady {
-            user: ready.user.try_into()?,
-            profile: ready.profile.try_into()?,
+            user: ready.user?.try_into()?,
+            profile: ready.profile?.try_into()?,
             communities,
         })
     }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct UserProfile {
+pub struct Profile {
     pub version: ProfileVersion,
     pub username: String,
     pub display_name: String,
 }
 
-impl From<UserProfile> for proto::structures::UserProfile {
-    fn from(profile: UserProfile) -> Self {
-        proto::structures::UserProfile {
+impl From<Profile> for proto::structures::Profile {
+    fn from(profile: Profile) -> Self {
+        proto::structures::Profile {
             version: profile.version.0,
             username: profile.username,
             display_name: profile.display_name,
@@ -349,11 +326,11 @@ impl From<UserProfile> for proto::structures::UserProfile {
     }
 }
 
-impl TryFrom<proto::structures::UserProfile> for UserProfile {
+impl TryFrom<proto::structures::Profile> for Profile {
     type Error = DeserializeError;
 
-    fn try_from(profile: proto::structures::UserProfile) -> Result<Self, Self::Error> {
-        Ok(UserProfile {
+    fn try_from(profile: proto::structures::Profile) -> Result<Self, Self::Error> {
+        Ok(Profile {
             version: ProfileVersion(profile.version),
             username: profile.username,
             display_name: profile.display_name,
@@ -361,14 +338,123 @@ impl TryFrom<proto::structures::UserProfile> for UserProfile {
     }
 }
 
-impl TryFrom<Option<proto::structures::UserProfile>> for UserProfile {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Credentials {
+    pub username: String,
+    pub password: String,
+}
+
+impl Credentials {
+    pub fn new(username: String, password: String) -> Credentials {
+        Credentials { username, password }
+    }
+}
+
+impl From<Credentials> for proto::structures::Credentials {
+    fn from(credentials: Credentials) -> Self {
+        proto::structures::Credentials {
+            username: credentials.username,
+            password: credentials.password,
+        }
+    }
+}
+
+impl From<proto::structures::Credentials> for Credentials {
+    fn from(credentials: proto::structures::Credentials) -> Self {
+        Credentials {
+            username: credentials.username,
+            password: credentials.password,
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct TokenCreationOptions {
+    pub device_name: Option<String>,
+    pub expiration_datetime: Option<DateTime<Utc>>,
+    pub permission_flags: TokenPermissionFlags,
+}
+
+impl From<TokenCreationOptions> for proto::structures::TokenCreationOptions {
+    fn from(options: TokenCreationOptions) -> Self {
+        use proto::structures::token_creation_options::{DeviceName, ExpirationDatetime};
+
+        proto::structures::TokenCreationOptions {
+            device_name: if let Some(name) = options.device_name {
+                Some(DeviceName::DeviceNamePresent(name))
+            } else {
+                None
+            },
+            expiration_datetime: if let Some(dt) = options.expiration_datetime {
+                Some(ExpirationDatetime::ExpirationDatetimePresent(dt.timestamp()))
+            } else {
+                None
+            },
+            permission_flags: options.permission_flags.bits,
+        }
+    }
+}
+
+impl TryFrom<proto::structures::TokenCreationOptions> for TokenCreationOptions {
     type Error = DeserializeError;
 
-    fn try_from(profile: Option<proto::structures::UserProfile>) -> Result<Self, Self::Error> {
-        if let Some(profile) = profile {
-            profile.try_into()
-        } else {
-            Err(DeserializeError::NullField)
-        }
+    fn try_from(options: proto::structures::TokenCreationOptions) -> Result<Self, Self::Error> {
+        use proto::structures::token_creation_options::{DeviceName, ExpirationDatetime};
+
+        let device_name = options
+            .device_name
+            .map(|DeviceName::DeviceNamePresent(x)| x);
+
+        let expiration_datetime = options
+            .expiration_datetime
+            .map(|ExpirationDatetime::ExpirationDatetimePresent(x)| x)
+            .map(|timestamp| NaiveDateTime::from_timestamp(timestamp, 0))
+            .map(|dt| Utc.from_utc_datetime(&dt));
+
+        let permission_flags = TokenPermissionFlags::from_bits_truncate(options.permission_flags);
+
+        Ok(TokenCreationOptions { device_name, expiration_datetime, permission_flags })
+    }
+}
+
+bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct TokenPermissionFlags: i64 {
+        /// All permissions. Should be used for user devices but not for service logins.
+        const ALL = 1;
+        /// Send messages
+        const SEND_MESSAGES = 1 << 1;
+        /// Edit any messages sent by this user
+        const EDIT_ANY_MESSAGES = 1 << 2;
+        /// Edit only messages sent by this device/from this token
+        const EDIT_OWN_MESSAGES = 1 << 3;
+        /// Delete any messages sent by this user
+        const DELETE_ANY_MESSAGES = 1 << 4;
+        /// Edit only messages sent by this device/from this token
+        const DELETE_OWN_MESSAGES = 1 << 5;
+        /// Change the user's name
+        const CHANGE_USERNAME = 1 << 6;
+        /// Change the user's display name
+        const CHANGE_DISPLAY_NAME = 1 << 7;
+        /// Join communities
+        const JOIN_COMMUNITIES = 1 << 8;
+        /// Create communities
+        const CREATE_COMMUNITIES = 1 << 9;
+        /// Create rooms
+        const CREATE_ROOMS = 1 << 10;
+        /// Create invites to communities
+        const CREATE_INVITES = 1 << 11;
+    }
+}
+
+impl TokenPermissionFlags {
+    pub fn has_perms(self, perms: TokenPermissionFlags) -> bool {
+        self.contains(TokenPermissionFlags::ALL) || self.contains(perms)
+    }
+}
+
+impl Default for TokenPermissionFlags {
+    fn default() -> Self {
+        TokenPermissionFlags::ALL
     }
 }
