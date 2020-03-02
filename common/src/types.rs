@@ -1,8 +1,8 @@
 use crate::proto;
-use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use std::fmt;
 use uuid::Uuid;
-use std::convert::TryFrom;
+use serde::{Serialize, Deserialize};
 
 macro_rules! impl_protobuf_conversions {
     ($($name:ident $(,)?)*) => {
@@ -26,18 +26,19 @@ macro_rules! impl_protobuf_conversions {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone)]
 pub struct UserId(pub Uuid);
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone)]
 pub struct CommunityId(pub Uuid);
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone)]
 pub struct RoomId(pub Uuid);
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone)]
 pub struct MessageId(pub Uuid);
 
+#[serde(transparent)]
 #[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct DeviceId(pub Uuid);
 
@@ -46,7 +47,7 @@ impl_protobuf_conversions! { DeviceId, MessageId, RoomId, CommunityId, UserId }
 /// Does not need to be sequential; just unique within a desired time-span (or not, if you're a fan
 /// of trying to handle two responses with the same id attached). This exists for the client-side
 /// programmer's ease-of-use only - the server is request-id-agnostic.
-#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
 pub struct RequestId(u32);
 
 impl RequestId {
@@ -67,7 +68,7 @@ impl From<proto::types::RequestId> for RequestId {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone)]
 pub struct ProfileVersion(pub u32);
 
 impl fmt::Display for DeviceId {
@@ -86,5 +87,5 @@ impl fmt::Display for AuthToken {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
 pub struct InviteCode(pub String);

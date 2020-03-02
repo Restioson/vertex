@@ -353,7 +353,7 @@ impl ActiveSession {
             self.heartbeat = Instant::now();
             self.ws.send(ws::Message::ping(vec![])).await?;
         } else if message.is_binary() {
-            let msg: ClientMessage = match serde_cbor::from_slice(message.as_bytes()) {
+            let msg = match ClientMessage::from_protobuf_bytes(message.as_bytes()) {
                 Ok(m) => m,
                 Err(_) => {
                     self.send(ServerMessage::MalformedMessage).await?;

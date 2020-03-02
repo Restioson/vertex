@@ -18,6 +18,10 @@ pub mod requests {
     pub mod auth {
         include!(concat!(env!("OUT_DIR"), "/vertex.requests.auth.rs"));
     }
+
+    pub mod active {
+        include!(concat!(env!("OUT_DIR"), "/vertex.requests.active.rs"));
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

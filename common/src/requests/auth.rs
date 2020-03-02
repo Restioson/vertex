@@ -1,14 +1,20 @@
-use serde::{Deserialize, Serialize};
-use crate::types::*;
-use crate::structures::{TokenCreationOptions, Credentials};
 use crate::proto;
+use crate::proto::DeserializeError;
+use crate::structures::{Credentials, TokenCreationOptions};
+use crate::types::*;
 use std::convert::{TryFrom, TryInto};
 use std::ops::Try;
-use crate::proto::DeserializeError;
+use serde::{Serialize, Deserialize};
+
+/// Not protobuf, but encoded in the url of the endpoint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Login {
+    pub device: DeviceId,
+    pub token: AuthToken,
+}
 
 #[non_exhaustive]
 pub enum AuthRequest {
-    Login(Login),
     CreateToken(CreateToken),
     RefreshToken(RefreshToken),
     RevokeToken(RevokeToken),
@@ -28,7 +34,9 @@ impl Into<Vec<u8>> for AuthRequest {
         use prost::Message;
 
         let mut buf = Vec::new();
-        proto::requests::auth::AuthRequest::from(self).encode(&mut buf).unwrap();
+        proto::requests::auth::AuthRequest::from(self)
+            .encode(&mut buf)
+            .unwrap();
         buf
     }
 }
@@ -39,14 +47,15 @@ impl From<AuthRequest> for proto::requests::auth::AuthRequest {
         use AuthRequest::*;
 
         let inner = match req {
-            Login(login) => Message::Login(login.into()),
             CreateToken(create) => Message::CreateToken(create.into()),
             RefreshToken(refresh) => Message::RefreshToken(refresh.into()),
             RevokeToken(revoke) => Message::RevokeToken(revoke.into()),
             RegisterUser(register) => Message::RegisterUser(register.into()),
         };
 
-        proto::requests::auth::AuthRequest { message: Some(inner) }
+        proto::requests::auth::AuthRequest {
+            message: Some(inner),
+        }
     }
 }
 
@@ -57,7 +66,6 @@ impl TryFrom<proto::requests::auth::AuthRequest> for AuthRequest {
         use proto::requests::auth::auth_request::Message::*;
 
         Ok(match req.message? {
-            Login(login) => AuthRequest::Login(login.try_into()?),
             CreateToken(create) => AuthRequest::CreateToken(create.try_into()?),
             RefreshToken(refresh) => AuthRequest::RefreshToken(refresh.try_into()?),
             RevokeToken(revoke) => AuthRequest::RevokeToken(revoke.try_into()?),
@@ -66,33 +74,7 @@ impl TryFrom<proto::requests::auth::AuthRequest> for AuthRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Login {
-    pub device: DeviceId,
-    pub token: AuthToken,
-}
-
-impl From<Login> for proto::requests::auth::Login {
-    fn from(login: Login) -> Self {
-        proto::requests::auth::Login {
-            device: Some(login.device.into()),
-            token_string: login.token.0,
-        }
-    }
-}
-
-impl TryFrom<proto::requests::auth::Login> for Login {
-    type Error = DeserializeError;
-
-    fn try_from(login: proto::requests::auth::Login) -> Result<Self, Self::Error> {
-        Ok(Login {
-            device: login.device?.try_into()?,
-            token: AuthToken(login.token_string)
-        })
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CreateToken {
     pub credentials: Credentials,
     pub options: TokenCreationOptions,
@@ -118,7 +100,7 @@ impl TryFrom<proto::requests::auth::CreateToken> for CreateToken {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RefreshToken {
     pub credentials: Credentials,
     pub device: DeviceId,
@@ -144,7 +126,7 @@ impl TryFrom<proto::requests::auth::RefreshToken> for RefreshToken {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RevokeToken {
     pub credentials: Credentials,
     pub device: DeviceId,
@@ -170,7 +152,7 @@ impl TryFrom<proto::requests::auth::RevokeToken> for RevokeToken {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RegisterUser {
     pub credentials: Credentials,
     pub display_name: Option<String>,
@@ -186,7 +168,7 @@ impl From<RegisterUser> for proto::requests::auth::RegisterUser {
                 Some(DisplayName::Present(name))
             } else {
                 None
-            }
+            },
         }
     }
 }
@@ -269,7 +251,9 @@ impl Into<Vec<u8>> for AuthResponse {
         use prost::Message;
 
         let mut buf = Vec::new();
-        proto::requests::auth::AuthResponse::from(self).encode(&mut buf).unwrap();
+        proto::requests::auth::AuthResponse::from(self)
+            .encode(&mut buf)
+            .unwrap();
         buf
     }
 }
@@ -283,10 +267,12 @@ impl From<AuthResponse> for proto::requests::auth::AuthResponse {
             AuthResponse::Err(err) => {
                 let error: proto::requests::auth::AuthError = err.into();
                 Response::Error(error as i32)
-            },
+            }
         };
 
-        proto::requests::auth::AuthResponse { response: Some(inner) }
+        proto::requests::auth::AuthResponse {
+            response: Some(inner),
+        }
     }
 }
 
@@ -302,7 +288,7 @@ impl TryFrom<proto::requests::auth::AuthResponse> for AuthResponse {
                 let error = proto::requests::auth::AuthError::from_i32(err)
                     .ok_or(DeserializeError::InvalidEnumVariant)?;
                 AuthResponse::Err(error.try_into()?)
-            },
+            }
         })
     }
 }
@@ -315,8 +301,8 @@ pub enum AuthOk {
 
 impl From<AuthOk> for proto::requests::auth::AuthOk {
     fn from(ok: AuthOk) -> Self {
-        use AuthOk::*;
         use proto::requests::auth::auth_ok::Ok;
+        use AuthOk::*;
 
         let inner = match ok {
             User(user) => Ok::User(user.into()),

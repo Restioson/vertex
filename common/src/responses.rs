@@ -1,13 +1,12 @@
 use crate::proto;
+use crate::proto::DeserializeError;
 use crate::structures::*;
 use crate::types::*;
-use serde::{Deserialize, Serialize};
-use crate::proto::DeserializeError;
 use std::convert::{TryFrom, TryInto};
 
 pub type ResponseResult = Result<OkResponse, ErrResponse>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum OkResponse {
     NoData,
@@ -62,11 +61,9 @@ impl TryFrom<proto::responses::Ok> for OkResponse {
         Ok(match ok.response? {
             NoData(_) => OkResponse::NoData,
             AddCommunity(community) => OkResponse::AddCommunity(community.try_into()?),
-            AddRoom(new_room) => {
-                OkResponse::AddRoom {
-                    community: new_room.community?.try_into()?,
-                    room: new_room.structure?.try_into()?,
-                }
+            AddRoom(new_room) => OkResponse::AddRoom {
+                community: new_room.community?.try_into()?,
+                room: new_room.structure?.try_into()?,
             },
             ConfirmMessage(confirmation) => OkResponse::ConfirmMessage(confirmation.try_into()?),
             UserId(id) => OkResponse::UserId(id.try_into()?),
@@ -78,7 +75,7 @@ impl TryFrom<proto::responses::Ok> for OkResponse {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum ErrResponse {
     Internal,

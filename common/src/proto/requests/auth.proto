@@ -6,11 +6,10 @@ import "structures.proto";
 
 message AuthRequest {
     oneof message {
-        Login login = 1;
-        CreateToken create_token = 2;
-        RefreshToken refresh_token = 3;
-        RevokeToken revoke_token = 4;
-        RegisterUser register_user = 5;
+        CreateToken create_token = 1;
+        RefreshToken refresh_token = 2;
+        RevokeToken revoke_token = 3;
+        RegisterUser register_user = 4;
     }
 }
 
@@ -45,11 +44,6 @@ enum AuthError {
     InvalidDisplayName = 12;
     WrongEndpoint = 13;
     InvalidMessage = 14;
-}
-
-message Login {
-    types.DeviceId device = 1;
-    string token_string = 2;
 }
 
 message CreateToken {

@@ -42,8 +42,11 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
         CommunityEntry { client, widget, id, state }
     }
 
-    pub async fn create_invite(&self, expiration: Option<DateTime<Utc>>) -> Result<InviteCode> {
-        let request = ClientRequest::CreateInvite { community: self.id, expiration_date: expiration };
+    pub async fn create_invite(
+        &self,
+        expiration_datetime: Option<DateTime<Utc>>
+    ) -> Result<InviteCode> {
+        let request = ClientRequest::CreateInvite { community: self.id, expiration_datetime };
         let request = self.client.request.send(request).await;
 
         match request.response().await? {

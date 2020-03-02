@@ -1,11 +1,10 @@
-use bitflags::bitflags;
 use crate::proto::{self, DeserializeError};
 use crate::types::*;
-use chrono::{DateTime, Utc, NaiveDateTime, TimeZone};
-use serde::{Deserialize, Serialize};
+use bitflags::bitflags;
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use std::convert::{TryFrom, TryInto};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CommunityStructure {
     pub id: CommunityId,
     pub name: String,
@@ -40,7 +39,7 @@ impl TryFrom<proto::structures::CommunityStructure> for CommunityStructure {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RoomStructure {
     pub id: RoomId,
     pub name: String,
@@ -69,7 +68,7 @@ impl TryFrom<proto::structures::RoomStructure> for RoomStructure {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MessageConfirmation {
     pub id: MessageId,
     pub time_sent: DateTime<Utc>,
@@ -96,7 +95,7 @@ impl TryFrom<proto::structures::MessageConfirmation> for MessageConfirmation {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MessageHistory {
     pub buffer: Vec<Message>,
 }
@@ -132,7 +131,7 @@ impl TryFrom<proto::structures::MessageHistory> for MessageHistory {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RoomUpdate {
     pub last_read: Option<MessageId>,
     pub new_messages: MessageHistory,
@@ -170,7 +169,7 @@ impl TryFrom<proto::structures::RoomUpdate> for RoomUpdate {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Message {
     pub id: MessageId,
     pub author: UserId,
@@ -213,7 +212,7 @@ impl TryFrom<proto::structures::Message> for Message {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Edit {
     pub message: MessageId,
     pub community: CommunityId,
@@ -245,7 +244,7 @@ impl TryFrom<proto::structures::Edit> for Edit {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Delete {
     pub message: MessageId,
     pub community: CommunityId,
@@ -274,7 +273,7 @@ impl TryFrom<proto::structures::Delete> for Delete {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ClientReady {
     pub user: UserId,
     pub profile: Profile,
@@ -309,7 +308,7 @@ impl TryFrom<proto::structures::ClientReady> for ClientReady {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Profile {
     pub version: ProfileVersion,
     pub username: String,
@@ -338,7 +337,7 @@ impl TryFrom<proto::structures::Profile> for Profile {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Credentials {
     pub username: String,
     pub password: String,
@@ -368,7 +367,7 @@ impl From<proto::structures::Credentials> for Credentials {
     }
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone)]
 pub struct TokenCreationOptions {
     pub device_name: Option<String>,
     pub expiration_datetime: Option<DateTime<Utc>>,
@@ -386,7 +385,9 @@ impl From<TokenCreationOptions> for proto::structures::TokenCreationOptions {
                 None
             },
             expiration_datetime: if let Some(dt) = options.expiration_datetime {
-                Some(ExpirationDatetime::ExpirationDatetimePresent(dt.timestamp()))
+                Some(ExpirationDatetime::ExpirationDatetimePresent(
+                    dt.timestamp(),
+                ))
             } else {
                 None
             },
@@ -413,12 +414,15 @@ impl TryFrom<proto::structures::TokenCreationOptions> for TokenCreationOptions {
 
         let permission_flags = TokenPermissionFlags::from_bits_truncate(options.permission_flags);
 
-        Ok(TokenCreationOptions { device_name, expiration_datetime, permission_flags })
+        Ok(TokenCreationOptions {
+            device_name,
+            expiration_datetime,
+            permission_flags,
+        })
     }
 }
 
 bitflags! {
-    #[derive(Serialize, Deserialize)]
     pub struct TokenPermissionFlags: i64 {
         /// All permissions. Should be used for user devices but not for service logins.
         const ALL = 1;

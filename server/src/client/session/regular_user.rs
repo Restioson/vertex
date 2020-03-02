@@ -44,8 +44,8 @@ impl<'a> RequestHandler<'a> {
             }
             ClientRequest::CreateInvite {
                 community,
-                expiration_date,
-            } => self.create_invite(community, expiration_date).await,
+                expiration_datetime,
+            } => self.create_invite(community, expiration_datetime).await,
             ClientRequest::GetRoomUpdate { community, room, last_received, message_count } => {
                 self.get_room_update(community, room, last_received, message_count).await
             }
@@ -405,7 +405,7 @@ impl<'a> RequestHandler<'a> {
         community: CommunityId,
         room: RoomId,
         last_received: Option<MessageId>,
-        message_count: usize,
+        message_count: u64,
     ) -> ResponseResult {
         if !self.session.in_room(&community, &room) {
             return Err(ErrResponse::InvalidRoom);
@@ -432,7 +432,7 @@ impl<'a> RequestHandler<'a> {
 
         let new_messages = match selector {
             Some(selector) => {
-                let messages = db.get_messages(community, room, selector, message_count)
+                let messages = db.get_messages(community, room, selector, message_count as usize)
                     .await?
                     .map_err(|_| ErrResponse::InvalidMessageSelector)?;
                 messages.map_messages().try_collect().await?
@@ -440,7 +440,7 @@ impl<'a> RequestHandler<'a> {
             None => Vec::new(),
         };
 
-        let continuous = new_messages.len() < message_count;
+        let continuous = new_messages.len() < (message_count as usize);
 
         let new_messages = MessageHistory::from_newest_to_oldest(new_messages);
 
@@ -476,7 +476,7 @@ impl<'a> RequestHandler<'a> {
         community: CommunityId,
         room: RoomId,
         selector: MessageSelector,
-        count: usize,
+        count: u64,
     ) -> ResponseResult {
         if !self.session.in_room(&community, &room) {
             return Err(ErrResponse::InvalidRoom);
@@ -484,7 +484,7 @@ impl<'a> RequestHandler<'a> {
 
         let db = &self.session.global.database;
         let stream = db
-            .get_messages(community, room, selector, count)
+            .get_messages(community, room, selector, count as usize)
             .await?
             .map_err(|_| ErrResponse::InvalidMessageSelector)?;
 

@@ -52,7 +52,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
             community: self.community,
             room: self.id,
             last_received,
-            message_count: MESSAGE_PAGE_SIZE,
+            message_count: MESSAGE_PAGE_SIZE as u64,
         }).await;
 
         match request.response().await? {
@@ -175,7 +175,7 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
             community: self.community,
             room: self.id,
             selector,
-            count,
+            count: count as u64,
         };
         let request = self.client.request.send(request).await;
 

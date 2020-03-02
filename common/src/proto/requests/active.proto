@@ -1,0 +1,111 @@
+syntax = "proto3";
+package vertex.requests.active;
+
+import "types.proto";
+import "structures.proto";
+
+message ClientMessage {
+    types.RequestId id = 1;
+    ClientRequest request = 2;
+}
+
+message ClientRequest {
+    oneof request {
+        types.None log_out = 1;
+        ClientSentMessage send_message = 2;
+        structures.Edit edit = 3;
+        GetRoomUpdate get_room_update = 4;
+        GetMessages get_messages = 5;
+        SelectRoom select_room = 6;
+        types.None deselect_room = 7;
+        SetAsRead set_as_read = 8;
+        CreateCommunity create_community = 9;
+        CreateRoom create_room = 10;
+        CreateInvite create_invite = 11;
+        JoinCommunity join_community = 12;
+        structures.Delete delete = 13;
+        ChangeUsername change_username = 14;
+        ChangeDisplayName change_display_name = 15;
+        ChangePassword change_password = 16;
+        GetProfile get_profile = 17;
+    }
+}
+
+message ClientSentMessage {
+    types.CommunityId to_community = 1;
+    types.RoomId to_room = 2;
+    string content = 3;
+}
+
+message GetRoomUpdate {
+    types.CommunityId community = 1;
+    types.RoomId room = 2;
+    oneof last_received { // Option<T>
+        types.MessageId present = 3;
+    }
+    uint64 message_count = 4;
+}
+
+message GetMessages {
+    types.CommunityId community = 1;
+    types.RoomId room = 2;
+    MessageSelector selector = 3;
+    uint64 message_count = 4;
+}
+
+message MessageSelector {
+    bool before = 1;
+    Bound bound = 2;
+}
+
+message Bound {
+    bool exclusive = 1;
+    types.MessageId message = 2;
+}
+
+message SelectRoom {
+    types.CommunityId community = 1;
+    types.RoomId room = 2;
+}
+
+message SetAsRead {
+    types.CommunityId community = 1;
+    types.RoomId room = 2;
+}
+
+message CreateCommunity {
+    string name = 1;
+}
+
+message CreateRoom {
+    string name = 1;
+    types.CommunityId community = 2;
+}
+
+message CreateInvite {
+    types.CommunityId community = 1;
+    oneof expiration_datetime { // Option<T>
+        int64 present = 2; // Unix timestamp
+    }
+}
+
+message JoinCommunity {
+    string invite_code = 1;
+}
+
+message ChangeUsername {
+    string new_username = 1;
+}
+
+message ChangeDisplayName {
+    string new_display_name = 2;
+}
+
+message ChangePassword {
+    string old_password = 1;
+    string new_password = 2;
+}
+
+message GetProfile {
+    types.UserId user = 1;
+}

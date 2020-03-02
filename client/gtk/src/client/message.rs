@@ -12,7 +12,7 @@ mod rich;
 mod embed;
 
 pub const MESSAGE_PAGE_SIZE: usize = 50;
-pub const RECENT_HISTORY_SIZE: usize = MESSAGE_PAGE_SIZE;
+pub const RECENT_HISTORY_SIZE: u64 = MESSAGE_PAGE_SIZE as u64;
 
 pub trait MessageEntryWidget<Ui: ClientUi>: Clone {
     fn set_status(&self, status: MessageStatus);

@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use gio::prelude::*;
 use gtk::prelude::*;
-use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use url::Url;
+use serde::{Serialize, Deserialize};
 
 use vertex::prelude::*;
 use vertex::proto::DeserializeError;
@@ -109,7 +109,7 @@ impl<E: gtk::EntryExt> TryGetText for E {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AuthParameters {
     pub instance: Server,
     pub device: DeviceId,
@@ -117,7 +117,6 @@ pub struct AuthParameters {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct Server(Url);
 
 impl Server {
@@ -205,10 +204,6 @@ pub enum Error {
     AuthErrorResponse(AuthError),
     UnexpectedMessage,
     DeserializeError(DeserializeError),
-}
-
-impl From<serde_cbor::Error> for Error {
-    fn from(error: serde_cbor::Error) -> Self { Error::ProtocolError(Some(Box::new(error))) }
 }
 
 impl From<hyper::Error> for Error {

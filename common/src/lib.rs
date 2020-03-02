@@ -17,7 +17,7 @@ pub mod prelude {
     pub use crate::responses::*;
     pub use crate::structures::*;
     pub use crate::types::*;
-    pub use crate:: HEARTBEAT_TIMEOUT;
+    pub use crate::HEARTBEAT_TIMEOUT;
 }
 
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
