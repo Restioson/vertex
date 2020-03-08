@@ -123,7 +123,7 @@ async fn register(
 }
 
 fn describe_error(error: Error) -> &'static str {
-    use vertex::prelude::*;
+    use vertex::requests::AuthError;
 
     match error {
         Error::InvalidUrl => "Invalid instance ip",

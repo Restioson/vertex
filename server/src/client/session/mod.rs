@@ -361,6 +361,21 @@ impl ActiveSession {
                 }
             };
 
+            {
+                let ratelimiter = self.global.ratelimiter.load();
+
+                if let Err(not_until) = ratelimiter.check_key(&self.device) {
+                    let resp = ErrResponse::RateLimited {
+                        ready_in: not_until.wait_time_from(Instant::now())
+                    };
+
+                    self.send(ServerMessage::Response {
+                        id: msg.id,
+                        result: Err(resp),
+                    }).await?;
+                }
+            }
+
             let (user, device, perms) = (self.user, self.device, self.perms);
             let handler = RequestHandler {
                 session: self,
@@ -373,7 +388,7 @@ impl ActiveSession {
 
             self.send(ServerMessage::Response {
                 id: msg.id,
-                result: response,
+                result: response.map_err(ErrResponse::Error),
             })
             .await?;
         } else if message.is_close() {

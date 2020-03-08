@@ -21,7 +21,7 @@ pub struct RequestHandler<'a> {
 }
 
 impl<'a> RequestHandler<'a> {
-    pub async fn handle_request(self, request: ClientRequest) -> ResponseResult {
+    pub async fn handle_request(self, request: ClientRequest) -> Result<OkResponse, Error> {
         match request {
             ClientRequest::SendMessage(message) => self.send_message(message).await,
             ClientRequest::EditMessage(edit) => self.edit_message(edit).await,
@@ -64,7 +64,7 @@ impl<'a> RequestHandler<'a> {
         }
     }
 
-    async fn verify_password(&mut self, password: String) -> Result<(), ErrResponse> {
+    async fn verify_password(&mut self, password: String) -> Result<(), Error> {
         let user = match self
             .session
             .global
@@ -73,23 +73,23 @@ impl<'a> RequestHandler<'a> {
             .await?
         {
             Some(user) => user,
-            None => return Err(ErrResponse::InvalidUser),
+            None => return Err(Error::InvalidUser),
         };
 
         if auth::verify_user(user, password).await {
             Ok(())
         } else {
-            Err(ErrResponse::IncorrectUsernameOrPassword)
+            Err(Error::IncorrectUsernameOrPassword)
         }
     }
 
-    async fn send_message(self, message: ClientSentMessage) -> ResponseResult {
+    async fn send_message(self, message: ClientSentMessage) -> Result<OkResponse, Error> {
         if !self.perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
-            return Err(ErrResponse::AccessDenied);
+            return Err(Error::AccessDenied);
         }
 
         if !self.session.in_community(&message.to_community) {
-            return Err(ErrResponse::InvalidCommunity);
+            return Err(Error::InvalidCommunity);
         }
 
         match COMMUNITIES.get(&message.to_community) {
@@ -107,17 +107,17 @@ impl<'a> RequestHandler<'a> {
 
                 Ok(OkResponse::ConfirmMessage(confirmation))
             }
-            _ => Err(ErrResponse::InvalidCommunity),
+            _ => Err(Error::InvalidCommunity),
         }
     }
 
-    async fn edit_message(self, edit: Edit) -> ResponseResult {
+    async fn edit_message(self, edit: Edit) -> Result<OkResponse, Error> {
         if !self.perms.has_perms(TokenPermissionFlags::SEND_MESSAGES) {
-            return Err(ErrResponse::AccessDenied);
+            return Err(Error::AccessDenied);
         }
 
         if !self.session.in_community(&edit.community) {
-            return Err(ErrResponse::InvalidCommunity);
+            return Err(Error::InvalidCommunity);
         }
 
         if let Some(community) = COMMUNITIES.get(&edit.community) {
@@ -133,11 +133,11 @@ impl<'a> RequestHandler<'a> {
                 .map_err(handle_disconnected("Community"))??;
             Ok(OkResponse::NoData)
         } else {
-            Err(ErrResponse::InvalidCommunity)
+            Err(Error::InvalidCommunity)
         }
     }
 
-    async fn log_out(self) -> ResponseResult {
+    async fn log_out(self) -> Result<OkResponse, Error> {
         if let Err(NonexistentDevice) = self
             .session
             .global
@@ -145,7 +145,7 @@ impl<'a> RequestHandler<'a> {
             .revoke_token(self.device)
             .await?
         {
-            return Err(ErrResponse::DeviceDoesNotExist);
+            return Err(Error::DeviceDoesNotExist);
         }
 
         self.ctx.notify_immediately(LogoutThisSession);
@@ -153,45 +153,45 @@ impl<'a> RequestHandler<'a> {
         Ok(OkResponse::NoData)
     }
 
-    async fn get_user_profile(self, id: UserId) -> ResponseResult {
+    async fn get_user_profile(self, id: UserId) -> Result<OkResponse, Error> {
         match self.session.global.database.get_user_profile(id).await? {
             Some(profile) => Ok(OkResponse::Profile(profile)),
-            None => Err(ErrResponse::InvalidUser),
+            None => Err(Error::InvalidUser),
         }
     }
 
-    async fn change_username(self, new_username: String) -> ResponseResult {
+    async fn change_username(self, new_username: String) -> Result<OkResponse, Error> {
         if !self.perms.has_perms(TokenPermissionFlags::CHANGE_USERNAME) {
-            return Err(ErrResponse::AccessDenied);
+            return Err(Error::AccessDenied);
         }
 
         let new_username = match auth::prepare_username(&new_username, &self.session.global.config)
         {
             Ok(name) => name,
-            Err(auth::TooShort) => return Err(ErrResponse::InvalidUsername),
+            Err(auth::TooShort) => return Err(Error::InvalidUsername),
         };
 
         let database = &self.session.global.database;
         match database.change_username(self.user, new_username).await? {
             Ok(()) => Ok(OkResponse::NoData),
-            Err(ChangeUsernameError::UsernameConflict) => Err(ErrResponse::UsernameAlreadyExists),
+            Err(ChangeUsernameError::UsernameConflict) => Err(Error::UsernameAlreadyExists),
             Err(ChangeUsernameError::NonexistentUser) => {
                 self.ctx.stop(); // The user did not exist at the time of request
-                Err(ErrResponse::UserDeleted)
+                Err(Error::UserDeleted)
             }
         }
     }
 
-    async fn change_display_name(self, new_display_name: String) -> ResponseResult {
+    async fn change_display_name(self, new_display_name: String) -> Result<OkResponse, Error> {
         if !self
             .perms
             .has_perms(TokenPermissionFlags::CHANGE_DISPLAY_NAME)
         {
-            return Err(ErrResponse::AccessDenied);
+            return Err(Error::AccessDenied);
         }
 
         if !auth::valid_display_name(&new_display_name, &self.session.global.config) {
-            return Err(ErrResponse::InvalidDisplayName);
+            return Err(Error::InvalidDisplayName);
         }
 
         let database = &self.session.global.database;
@@ -202,7 +202,7 @@ impl<'a> RequestHandler<'a> {
             Ok(()) => Ok(OkResponse::NoData),
             Err(_) => {
                 self.ctx.stop(); // The user did not exist at the time of request
-                Err(ErrResponse::UserDeleted)
+                Err(Error::UserDeleted)
             }
         }
     }
@@ -211,9 +211,9 @@ impl<'a> RequestHandler<'a> {
         mut self,
         old_password: String,
         new_password: String,
-    ) -> ResponseResult {
+    ) -> Result<OkResponse, Error> {
         if !auth::valid_password(&new_password, &self.session.global.config) {
-            return Err(ErrResponse::InvalidPassword);
+            return Err(Error::InvalidPassword);
         }
 
         self.verify_password(old_password).await?;
@@ -229,17 +229,17 @@ impl<'a> RequestHandler<'a> {
             Ok(()) => Ok(OkResponse::NoData),
             Err(_) => {
                 self.ctx.stop(); // The user did not exist at the time of request
-                Err(ErrResponse::UserDeleted)
+                Err(Error::UserDeleted)
             }
         }
     }
 
-    async fn create_community(self, name: String) -> ResponseResult {
+    async fn create_community(self, name: String) -> Result<OkResponse, Error> {
         if !self
             .perms
             .has_perms(TokenPermissionFlags::CREATE_COMMUNITIES)
         {
-            return Err(ErrResponse::AccessDenied);
+            return Err(Error::AccessDenied);
         }
 
         let db = &self.session.global.database;
@@ -255,30 +255,30 @@ impl<'a> RequestHandler<'a> {
             }
             Err(_) => {
                 self.ctx.stop(); // The user did not exist at the time of request
-                Err(ErrResponse::UserDeleted)
+                Err(Error::UserDeleted)
             }
         }
     }
 
-    async fn join_community(self, code: InviteCode) -> ResponseResult {
+    async fn join_community(self, code: InviteCode) -> Result<OkResponse, Error> {
         if !self.perms.has_perms(TokenPermissionFlags::JOIN_COMMUNITIES) {
-            return Err(ErrResponse::AccessDenied);
+            return Err(Error::AccessDenied);
         }
 
         if code.0.len() > 11 {
-            return Err(ErrResponse::InvalidInviteCode);
+            return Err(Error::InvalidInviteCode);
         }
 
         let database = &self.session.global.database;
         let id = match database.get_community_from_invite_code(code).await? {
             Ok(Some(id)) => id,
-            Ok(None) | Err(_) => return Err(ErrResponse::InvalidInviteCode),
+            Ok(None) | Err(_) => return Err(Error::InvalidInviteCode),
         };
 
         self.join_community_by_id(id).await
     }
 
-    async fn join_community_by_id(self, id: CommunityId) -> ResponseResult {
+    async fn join_community_by_id(self, id: CommunityId) -> Result<OkResponse, Error> {
         if let Some(community) = COMMUNITIES.get(&id) {
             let join = Join {
                 user: self.user,
@@ -314,23 +314,23 @@ impl<'a> RequestHandler<'a> {
                     Ok(OkResponse::AddCommunity(community))
                 }
                 Err(AddToCommunityError::AlreadyInCommunity) => {
-                    Err(ErrResponse::AlreadyInCommunity)
+                    Err(Error::AlreadyInCommunity)
                 }
-                Err(AddToCommunityError::InvalidCommunity) => Err(ErrResponse::InvalidCommunity),
-                Err(AddToCommunityError::InvalidUser) => Err(ErrResponse::InvalidUser),
+                Err(AddToCommunityError::InvalidCommunity) => Err(Error::InvalidCommunity),
+                Err(AddToCommunityError::InvalidUser) => Err(Error::InvalidUser),
             }
         } else {
-            Err(ErrResponse::InvalidCommunity)
+            Err(Error::InvalidCommunity)
         }
     }
 
-    async fn create_room(self, name: String, community: CommunityId) -> ResponseResult {
+    async fn create_room(self, name: String, community: CommunityId) -> Result<OkResponse, Error> {
         if !self.perms.has_perms(TokenPermissionFlags::CREATE_ROOMS) {
-            return Err(ErrResponse::AccessDenied);
+            return Err(Error::AccessDenied);
         }
 
         if !self.session.in_community(&community) {
-            return Err(ErrResponse::InvalidCommunity);
+            return Err(Error::InvalidCommunity);
         }
 
         let community_id = community;
@@ -370,20 +370,20 @@ impl<'a> RequestHandler<'a> {
             }
         }
 
-        Err(ErrResponse::InvalidCommunity)
+        Err(Error::InvalidCommunity)
     }
 
     async fn create_invite(
         self,
         id: CommunityId,
         expiration_date: Option<DateTime<Utc>>,
-    ) -> ResponseResult {
+    ) -> Result<OkResponse, Error> {
         if !self.perms.has_perms(TokenPermissionFlags::CREATE_INVITES) {
-            return Err(ErrResponse::AccessDenied);
+            return Err(Error::AccessDenied);
         }
 
         if !self.session.in_community(&id) {
-            return Err(ErrResponse::InvalidCommunity);
+            return Err(Error::InvalidCommunity);
         }
 
         if COMMUNITIES.contains_key(&id) {
@@ -393,10 +393,10 @@ impl<'a> RequestHandler<'a> {
 
             match res {
                 Ok(code) => Ok(OkResponse::NewInvite(code)),
-                Err(_) => Err(ErrResponse::TooManyInviteCodes),
+                Err(_) => Err(Error::TooManyInviteCodes),
             }
         } else {
-            Err(ErrResponse::InvalidCommunity)
+            Err(Error::InvalidCommunity)
         }
     }
 
@@ -406,9 +406,9 @@ impl<'a> RequestHandler<'a> {
         room: RoomId,
         last_received: Option<MessageId>,
         message_count: u64,
-    ) -> ResponseResult {
+    ) -> Result<OkResponse, Error> {
         if !self.session.in_room(&community, &room) {
-            return Err(ErrResponse::InvalidRoom);
+            return Err(Error::InvalidRoom);
         }
 
         let db = &self.session.global.database;
@@ -434,7 +434,7 @@ impl<'a> RequestHandler<'a> {
             Some(selector) => {
                 let messages = db.get_messages(community, room, selector, message_count as usize)
                     .await?
-                    .map_err(|_| ErrResponse::InvalidMessageSelector)?;
+                    .map_err(|_| Error::InvalidMessageSelector)?;
                 messages.map_messages().try_collect().await?
             },
             None => Vec::new(),
@@ -451,16 +451,16 @@ impl<'a> RequestHandler<'a> {
         }))
     }
 
-    async fn select_room(self, community: CommunityId, room: RoomId) -> ResponseResult {
+    async fn select_room(self, community: CommunityId, room: RoomId) -> Result<OkResponse, Error> {
         if !self.session.in_room(&community, &room) {
-            return Err(ErrResponse::InvalidRoom);
+            return Err(Error::InvalidRoom);
         }
 
         self.set_looking_at(Some((community, room))).await;
         Ok(OkResponse::NoData)
     }
 
-    async fn deselect_room(self) -> ResponseResult {
+    async fn deselect_room(self) -> Result<OkResponse, Error> {
         self.set_looking_at(None).await;
         Ok(OkResponse::NoData)
     }
@@ -477,31 +477,31 @@ impl<'a> RequestHandler<'a> {
         room: RoomId,
         selector: MessageSelector,
         count: u64,
-    ) -> ResponseResult {
+    ) -> Result<OkResponse, Error> {
         if !self.session.in_room(&community, &room) {
-            return Err(ErrResponse::InvalidRoom);
+            return Err(Error::InvalidRoom);
         }
 
         let db = &self.session.global.database;
         let stream = db
             .get_messages(community, room, selector, count as usize)
             .await?
-            .map_err(|_| ErrResponse::InvalidMessageSelector)?;
+            .map_err(|_| Error::InvalidMessageSelector)?;
 
         let messages = stream.map_messages().try_collect().await?;
         Ok(OkResponse::MessageHistory(MessageHistory::from_newest_to_oldest(messages)))
     }
 
-    async fn set_as_read(self, community: CommunityId, room: RoomId) -> ResponseResult {
+    async fn set_as_read(self, community: CommunityId, room: RoomId) -> Result<OkResponse, Error> {
         let mut active_user = manager::get_active_user_mut(self.user).unwrap();
         if let Some(user_community) = active_user.communities.get_mut(&community) {
             if let Some(user_room) = user_community.rooms.get_mut(&room) {
                 user_room.unread = false;
             } else {
-                return Err(ErrResponse::InvalidRoom);
+                return Err(Error::InvalidRoom);
             }
         } else {
-            return Err(ErrResponse::InvalidCommunity);
+            return Err(Error::InvalidCommunity);
         }
 
         let db = &self.session.global.database;
@@ -509,10 +509,10 @@ impl<'a> RequestHandler<'a> {
 
         match res {
             Ok(_) => Ok(OkResponse::NoData),
-            Err(SetUserRoomStateError::InvalidRoom) => Err(ErrResponse::InvalidRoom),
+            Err(SetUserRoomStateError::InvalidRoom) => Err(Error::InvalidRoom),
             Err(SetUserRoomStateError::InvalidUser) => {
                 self.ctx.stop(); // The user did not exist at the time of request
-                Err(ErrResponse::UserDeleted)
+                Err(Error::UserDeleted)
             }
         }
     }

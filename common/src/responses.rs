@@ -3,6 +3,7 @@ use crate::proto::DeserializeError;
 use crate::structures::*;
 use crate::types::*;
 use std::convert::{TryFrom, TryInto};
+use std::time::Duration;
 
 pub type ResponseResult = Result<OkResponse, ErrResponse>;
 
@@ -78,6 +79,59 @@ impl TryFrom<proto::responses::Ok> for OkResponse {
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum ErrResponse {
+    Error(Error),
+    RateLimited { ready_in: Duration },
+}
+
+impl From<ErrResponse> for proto::responses::ErrResponse {
+    fn from(resp: ErrResponse) -> Self {
+        use proto::responses::err_response::Inner;
+        use proto::responses::RateLimited;
+
+        let inner = match resp {
+            ErrResponse::Error(err) => {
+                let proto_err: proto::responses::Error = err.into();
+                let discrim: i32 = proto_err.into();
+                Inner::Error(discrim)
+            },
+            ErrResponse::RateLimited { ready_in } => {
+                Inner::RateLimited(RateLimited {
+                    ready_in_ms: ready_in.as_millis().try_into().unwrap_or(u32::MAX)
+                })
+            }
+        };
+
+        proto::responses::ErrResponse { inner: Some(inner) }
+    }
+}
+
+impl TryFrom<proto::responses::ErrResponse> for ErrResponse {
+    type Error = DeserializeError;
+
+    fn try_from(resp: proto::responses::ErrResponse) -> Result<Self, DeserializeError> {
+        use proto::responses::err_response::Inner;
+        use proto::responses::RateLimited;
+
+        let resp = match resp.inner? {
+            Inner::Error(err) => {
+                let err = proto::responses::Error::from_i32(err)
+                    .ok_or(DeserializeError::InvalidEnumVariant)?;
+                ErrResponse::Error(err.try_into()?)
+            },
+            Inner::RateLimited(RateLimited { ready_in_ms }) => {
+                ErrResponse::RateLimited {
+                    ready_in: Duration::from_millis(ready_in_ms as u64)
+                }
+            }
+        };
+
+        Ok(resp)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum Error {
     Internal,
     UsernameAlreadyExists,
     InvalidUsername,
@@ -102,7 +156,7 @@ pub enum ErrResponse {
 macro_rules! convert_to_proto {
     ($err:ident: { $($variant:ident$(,)?)* }) => {
         match $err {
-            $(ErrResponse::$variant => proto::responses::ErrResponse::$variant,)*
+            $(Error::$variant => proto::responses::Error::$variant,)*
         }
     };
 }
@@ -110,13 +164,13 @@ macro_rules! convert_to_proto {
 macro_rules! convert_from_proto {
     ($err:ident: { $($variant:ident$(,)?)* }) => {
         match $err {
-            $(proto::responses::ErrResponse::$variant => Ok(ErrResponse::$variant),)*
+            $(proto::responses::Error::$variant => Ok(Error::$variant),)*
         }
     };
 }
 
-impl From<ErrResponse> for proto::responses::ErrResponse {
-    fn from(err: ErrResponse) -> Self {
+impl From<Error> for proto::responses::Error {
+    fn from(err: Error) -> Self {
         convert_to_proto! {
             err: {
                 Internal,
@@ -140,10 +194,10 @@ impl From<ErrResponse> for proto::responses::ErrResponse {
     }
 }
 
-impl TryFrom<proto::responses::ErrResponse> for ErrResponse {
+impl TryFrom<proto::responses::Error> for Error {
     type Error = DeserializeError;
 
-    fn try_from(err: proto::responses::ErrResponse) -> Result<Self, Self::Error> {
+    fn try_from(err: proto::responses::Error) -> Result<Self, Self::Error> {
         convert_from_proto! {
             err: {
                 Internal,

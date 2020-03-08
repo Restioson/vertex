@@ -36,8 +36,8 @@ impl From<ServerMessage> for proto::events::ServerMessage {
                 response: Some(match result {
                     Ok(ok) => proto::responses::response::Response::Ok(ok.into()),
                     Err(err) => {
-                        let err: ErrResponse = err.into();
-                        proto::responses::response::Response::Error(err as i32)
+                        let err: proto::responses::ErrResponse = err.into();
+                        proto::responses::response::Response::Error(err)
                     }
                 }),
             }),
@@ -65,11 +65,10 @@ impl TryFrom<proto::events::ServerMessage> for ServerMessage {
                     result: Ok(ok.try_into()?),
                 },
                 Response::Error(err) => {
-                    let result = proto::responses::ErrResponse::from_i32(err)
-                        .ok_or(DeserializeError::InvalidEnumVariant)?;
+                    let result = err.try_into()?;
                     ServerMessage::Response {
                         id: res.id?.into(),
-                        result: Err(result.try_into()?),
+                        result: Err(result),
                     }
                 }
             },

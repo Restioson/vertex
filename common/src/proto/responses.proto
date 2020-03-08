@@ -35,7 +35,18 @@ message NewInvite {
     string code = 1;
 }
 
-enum ErrResponse {
+message ErrResponse {
+    oneof inner {
+        Error error = 1;
+        RateLimited rate_limited = 2;
+    }
+}
+
+message RateLimited {
+    uint32 ready_in_ms = 1;
+}
+
+enum Error {
     Internal = 0;
     UsernameAlreadyExists = 1;
     InvalidUsername = 2;

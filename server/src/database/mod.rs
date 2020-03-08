@@ -47,8 +47,8 @@ impl From<tokio_postgres::Error> for DatabaseError {
     }
 }
 
-impl From<DatabaseError> for ErrResponse {
-    fn from(e: DatabaseError) -> ErrResponse {
+impl From<DatabaseError> for Error {
+    fn from(e: DatabaseError) -> Error {
         let backtrace = backtrace::Backtrace::new();
 
         match e.0 {
@@ -60,7 +60,7 @@ impl From<DatabaseError> for ErrResponse {
             }
         }
 
-        ErrResponse::Internal
+        Error::Internal
     }
 }
 

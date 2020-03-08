@@ -171,7 +171,7 @@ impl Handler<Connect> for CommunityActor {
 }
 
 impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
-    type Responder<'a> = impl Future<Output = Result<MessageConfirmation, ErrResponse>> + 'a;
+    type Responder<'a> = impl Future<Output = Result<MessageConfirmation, Error>> + 'a;
     fn handle(
         &mut self,
         identified: IdentifiedMessage<ClientSentMessage>,
@@ -216,7 +216,7 @@ impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
         &mut self,
         m: IdentifiedMessage<Edit>,
         _: &mut Context<Self>,
-    ) -> Result<(), ErrResponse> {
+    ) -> Result<(), Error> {
         let from_device = m.device;
         let send = SendMessage(ServerMessage::Event(ServerEvent::Edit(m.message))); // TODO watching
 

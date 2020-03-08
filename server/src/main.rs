@@ -6,6 +6,7 @@ use std::fs::OpenOptions;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use std::num::NonZeroU32;
 
 use directories::ProjectDirs;
 use futures::StreamExt;
@@ -13,6 +14,11 @@ use log::{info, LevelFilter};
 use warp::Filter;
 use xtra::prelude::*;
 use xtra::Disconnected;
+use arc_swap::ArcSwap;
+use warp::reply::Reply;
+use governor::{RateLimiter, Quota};
+use governor::state::keyed::DashMapStateStore;
+use governor::clock::DefaultClock;
 
 use client::ActiveSession;
 use database::Database;
@@ -22,7 +28,6 @@ use crate::client::{session::WebSocketMessage, Authenticator};
 use crate::community::CommunityActor;
 use crate::config::Config;
 use crate::database::{DbResult, MalformedInviteCode};
-use warp::reply::Reply;
 
 mod auth;
 mod client;
@@ -34,6 +39,7 @@ mod database;
 pub struct Global {
     pub database: Database,
     pub config: Arc<Config>,
+    pub ratelimiter: ArcSwap<RateLimiter<DeviceId, DashMapStateStore<DeviceId>, DefaultClock>>,
 }
 
 /// Marker trait for `vertex_common` structs that are actor messages too
@@ -60,16 +66,36 @@ where
     T: VertexActorMessage,
     T::Result: 'static,
 {
-    type Result = Result<T::Result, ErrResponse>;
+    type Result = Result<T::Result, Error>;
 }
 
-fn handle_disconnected(actor_name: &'static str) -> impl Fn(Disconnected) -> ErrResponse {
+fn new_ratelimiter() -> RateLimiter<DeviceId, DashMapStateStore<DeviceId>, DefaultClock> {
+    RateLimiter::dashmap(
+        Quota::per_minute(NonZeroU32::new(10u32).unwrap())
+    )
+}
+
+async fn refresh_ratelimiter(
+    rl: ArcSwap<RateLimiter<DeviceId, DashMapStateStore<DeviceId>, DefaultClock>>
+) {
+    use tokio::time::Instant;
+    let duration = Duration::from_secs(60 * 60); // 1/hr
+    let mut timer = tokio::time::interval_at(Instant::now() + duration, duration);
+
+    loop {
+        timer.tick().await;
+        println!("storing");
+        rl.store(Arc::new(new_ratelimiter()));
+    }
+}
+
+fn handle_disconnected(actor_name: &'static str) -> impl Fn(Disconnected) -> Error {
     move |_| {
         log::warn!(
             "{} actor disconnected. This may be a timing anomaly.",
             actor_name
         );
-        ErrResponse::Internal
+        Error::Internal
     }
 }
 
@@ -152,7 +178,11 @@ async fn main() {
     let global = Global {
         database,
         config: config.clone(),
+        ratelimiter: ArcSwap::from_pointee(new_ratelimiter()),
     };
+
+    tokio::spawn(refresh_ratelimiter(global.ratelimiter.clone()));
+
     let global = warp::any().map(move || global.clone());
 
     let authenticate = warp::path("authenticate")
