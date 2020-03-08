@@ -71,7 +71,7 @@ where
 
 fn new_ratelimiter() -> RateLimiter<DeviceId, DashMapStateStore<DeviceId>, DefaultClock> {
     RateLimiter::dashmap(
-        Quota::per_minute(NonZeroU32::new(10u32).unwrap())
+        Quota::per_minute(NonZeroU32::new(90u32).unwrap())
     )
 }
 
