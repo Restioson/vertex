@@ -84,7 +84,6 @@ async fn refresh_ratelimiter(
 
     loop {
         timer.tick().await;
-        println!("storing");
         rl.store(Arc::new(new_ratelimiter()));
     }
 }

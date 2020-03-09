@@ -90,4 +90,8 @@ impl client::ChatWidget<Ui> for ChatWidget {
     fn flush(&mut self) {
         self.message_list.show_all();
     }
+
+    fn get_vadjustment(&self) -> Option<gtk::Adjustment> {
+        self.message_scroll.get_vadjustment()
+    }
 }

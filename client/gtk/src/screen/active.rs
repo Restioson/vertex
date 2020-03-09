@@ -143,6 +143,10 @@ impl client::ClientUi for Ui {
                     if let Some(chat) = client.chat().await {
                         if chat.reading_new() {
                             adjustment.set_value(adjustment.get_upper() - adjustment.get_page_size());
+                        } else if let Some(old_top) = chat.state.write().await.adj_top.as_mut() {
+                            let adj = adjustment;
+                            adj.set_value(adj.get_upper() - (*old_top + adj.get_page_size()));
+                            *old_top = adj.get_upper();
                         }
                     }
                 })
