@@ -2,7 +2,6 @@ use std::collections::LinkedList;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use gtk::prelude::*;
 use vertex::prelude::*;
 
 use crate::{Client, scheduler, SharedMut, Result};
@@ -22,8 +21,6 @@ pub trait ChatWidget<Ui: ClientUi> {
     fn remove_message(&mut self, widget: &Ui::MessageEntryWidget);
 
     fn flush(&mut self);
-
-    fn get_vadjustment(&self) -> Option<gtk::Adjustment>;
 }
 
 pub struct PendingMessageHandle<'a, Ui: ClientUi> {
@@ -60,17 +57,14 @@ pub struct ChatState<Ui: ClientUi> {
     client: Client<Ui>,
     widget: Ui::ChatWidget,
     entries: LinkedList<ChatEntry<Ui>>,
-    pub adj_top: Option<f64>,
 }
 
 impl<Ui: ClientUi> ChatState<Ui> {
     fn new(client: Client<Ui>, widget: Ui::ChatWidget) -> Self {
-        let adj_top = widget.get_vadjustment().map(|a| a.get_upper());
         ChatState {
             client,
             widget,
             entries: LinkedList::new(),
-            adj_top,
         }
     }
 

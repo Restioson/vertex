@@ -1,3 +1,5 @@
+use std::collections::LinkedList;
+
 use gtk::prelude::*;
 
 use chat::*;
@@ -7,7 +9,7 @@ use lazy_static::lazy_static;
 use message::*;
 use room::*;
 
-use crate::{AuthParameters, Client, Error, Result, TryGetText, token_store};
+use crate::{AuthParameters, Client, Error, Result, SharedMut, token_store, TryGetText};
 use crate::auth;
 use crate::client;
 use crate::client::RoomEntry;
@@ -15,13 +17,26 @@ use crate::connect::AsConnector;
 use crate::Glade;
 use crate::screen;
 use crate::window;
-use std::collections::LinkedList;
 
 mod community;
 mod dialog;
 mod message;
 mod room;
 mod chat;
+
+struct MessageScrollState {
+    bottom: f64,
+    top: f64,
+}
+
+impl Default for MessageScrollState {
+    fn default() -> Self {
+        MessageScrollState {
+            bottom: 0.0,
+            top: 0.0,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Ui {
@@ -36,6 +51,8 @@ pub struct Ui {
     pub message_scroll: gtk::ScrolledWindow,
     pub message_list: gtk::ListBox,
     pub message_entry: gtk::Entry,
+
+    message_scroll_state: SharedMut<MessageScrollState>,
 }
 
 impl Ui {
@@ -63,6 +80,7 @@ impl Ui {
             message_scroll: builder.get_object("message_scroll").unwrap(),
             message_list: builder.get_object("message_list").unwrap(),
             message_entry: builder.get_object("message_entry").unwrap(),
+            message_scroll_state: SharedMut::new(MessageScrollState::default()),
         }
     }
 
@@ -110,11 +128,11 @@ impl client::ClientUi for Ui {
         );
 
         let adjustment = self.message_scroll.get_vadjustment().unwrap();
-
         adjustment.connect_value_changed(
             client.connector()
                 .do_async(|client, adjustment: gtk::Adjustment| async move {
                     if let Some(chat) = client.chat().await {
+                        println!(" * value change: {}", adjustment.get_value());
                         let upper = adjustment.get_upper() - adjustment.get_page_size();
                         let reading_new = adjustment.get_value() + 10.0 >= upper;
                         chat.set_reading_new(reading_new).await;
@@ -140,17 +158,33 @@ impl client::ClientUi for Ui {
         );
 
         self.message_list.connect_size_allocate(
-            (client.clone(), adjustment).connector()
-                .do_async(|(client, adjustment), (_, _)| async move {
-                    if let Some(chat) = client.chat().await {
-                        if chat.reading_new() {
-                            adjustment.set_value(adjustment.get_upper() - adjustment.get_page_size());
-                        } else if let Some(old_top) = chat.state.write().await.adj_top.as_mut() {
-                            let adj = adjustment;
-                            adj.set_value(adj.get_upper() - (*old_top + adj.get_page_size()));
-                            *old_top = adj.get_upper();
-                        }
+            (self.message_scroll_state.clone(), adjustment).connector()
+                .do_async(|(scroll_state, adjustment), (_, _)| async move {
+                    let mut old = scroll_state.write().await;
+
+                    let new_bottom = adjustment.get_upper() - adjustment.get_page_size();
+                    let new_top = adjustment.get_lower();
+
+                    if old.bottom == new_bottom {
+                        return;
                     }
+
+                    let old_value = adjustment.get_value();
+                    let on_edge = old_value + 10.0 >= old.bottom || old_value - 10.0 <= old.top;
+
+                    println!("==========");
+                    println!("{}", on_edge);
+                    println!("old {}, new {}", old.bottom, new_bottom);
+                    println!("old value {}", old_value);
+
+                    if on_edge {
+                        adjustment.set_value((new_bottom - old.bottom) + old_value);
+                    }
+
+                    println!("new value {}", adjustment.get_value());
+
+                    old.bottom = new_bottom;
+                    old.top = new_top;
                 })
                 .build_widget_listener()
         );
@@ -218,7 +252,7 @@ pub async fn start(parameters: AuthParameters) {
                     token_store::forget_token();
                     let screen = screen::login::build().await;
                     window::set_screen(&screen.main);
-                },
+                }
                 _ => {
                     let error = describe_error(error);
                     let screen = screen::loading::build_error(error, move || start(parameters.clone()));
