@@ -4,6 +4,7 @@ use crate::structures::{Credentials, TokenCreationOptions};
 use crate::types::*;
 use std::convert::{TryFrom, TryInto};
 use std::ops::Try;
+use std::fmt;
 use serde::{Serialize, Deserialize};
 
 /// Not protobuf, but encoded in the url of the endpoint
@@ -349,6 +350,30 @@ pub enum AuthError {
     InvalidPassword,
     InvalidDisplayName,
     InvalidMessage,
+}
+
+impl fmt::Display for AuthError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use AuthError::*;
+        match self {
+            Internal => write!(f, "Internal auth error"),
+            WrongEndpoint => write!(f, "Wrong endpoint"),
+            IncorrectCredentials => write!(f, "Invalid credentials"),
+            InvalidToken => write!(f, "Invalid token"),
+            StaleToken => write!(f, "Token has expired"),
+            TokenInUse => write!(f, "Token is in use"),
+            InvalidUser => write!(f, "User invalid"),
+            UserCompromised => write!(f, "User compromised"),
+            UserLocked => write!(f, "User locked"),
+            UserBanned => write!(f, "User banned"),
+            UsernameAlreadyExists => write!(f, "Username already exists"),
+            InvalidUsername => write!(f, "Invalid username"),
+            InvalidPassword => write!(f, "Invalid password"),
+            InvalidDisplayName => write!(f, "Invalid display name"),
+            InvalidMessage => write!(f, "Invalid message"),
+            _ => write!(f, "Unknown auth error"),
+        }
+    }
 }
 
 macro_rules! convert_to_proto {

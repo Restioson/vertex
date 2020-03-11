@@ -158,6 +158,15 @@ popover {
   box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.5);
 }
 
+.dialog #title {
+  font-size: 16px;
+}
+
+#dialog button, #dialog entry {
+  padding: 8px;
+  margin: 4px;
+}
+
 /* specific styling */
 
 /*
@@ -445,10 +454,6 @@ popover {
   min-height: 100px;
 }
 
-#add_community #title {
-  font-size: 16px;
-}
-
 #add_community button {
   min-width: 80px;
   min-height: 40px;
@@ -458,10 +463,6 @@ popover {
 #create_community, #join_community, #invite_community {
   min-width: 180px;
   min-height: 100px;
-}
-
-#create_community #title, #join_community #title, #invite_community #title {
-  font-size: 16px;
 }
 
 #create_community button, #create_community entry {
@@ -479,6 +480,10 @@ popover {
   padding: 8px;
   border-radius: 8px;
   margin: 4px;
+}
+
+#error_dialog #description {
+  color: @error_color;
 }
 
 /*

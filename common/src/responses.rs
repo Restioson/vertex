@@ -1,9 +1,11 @@
+use std::convert::{TryFrom, TryInto};
+use std::fmt;
+use std::time::Duration;
+
 use crate::proto;
 use crate::proto::DeserializeError;
 use crate::structures::*;
 use crate::types::*;
-use std::convert::{TryFrom, TryInto};
-use std::time::Duration;
 
 pub type ResponseResult = Result<OkResponse, ErrResponse>;
 
@@ -83,6 +85,17 @@ pub enum ErrResponse {
     RateLimited { ready_in: Duration },
 }
 
+impl fmt::Display for ErrResponse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ErrResponse::*;
+        match self {
+            Error(err) => write!(f, "{}", err),
+            RateLimited { ready_in } => write!(f, "Rate limited! Ready in: {}s", ready_in.as_secs()),
+            _ => write!(f, "Unknown error"),
+        }
+    }
+}
+
 impl From<ErrResponse> for proto::responses::ErrResponse {
     fn from(resp: ErrResponse) -> Self {
         use proto::responses::err_response::Inner;
@@ -151,6 +164,31 @@ pub enum Error {
     AlreadyInCommunity,
     TooManyInviteCodes,
     InvalidMessageSelector,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Error::*;
+        match self {
+            Internal => write!(f, "Internal server error"),
+            UsernameAlreadyExists => write!(f, "Username already exists"),
+            InvalidUsername => write!(f, "Invalid username"),
+            InvalidPassword => write!(f, "Invalid password"),
+            InvalidDisplayName => write!(f, "Invalid display name"),
+            UserDeleted => write!(f, "User deleted"),
+            DeviceDoesNotExist => write!(f, "Device does not exist"),
+            IncorrectUsernameOrPassword => write!(f, "Incorrect username or password"),
+            AccessDenied => write!(f, "Access denied"),
+            InvalidRoom => write!(f, "Invalid room"),
+            InvalidCommunity => write!(f, "Invalid community"),
+            InvalidInviteCode => write!(f, "Invalid invite code"),
+            InvalidUser => write!(f, "Invalid user"),
+            AlreadyInCommunity => write!(f, "Already in community"),
+            TooManyInviteCodes => write!(f, "Too many invite codes"),
+            InvalidMessageSelector => write!(f, "Invalid message selector"),
+            _ => write!(f, "Unknown error"),
+        }
+    }
 }
 
 macro_rules! convert_to_proto {

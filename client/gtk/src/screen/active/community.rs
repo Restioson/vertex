@@ -4,11 +4,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use gtk::prelude::*;
 
 use lazy_static::lazy_static;
+use vertex::types::InviteCode;
 
-use crate::client;
+use crate::{client, window};
 use crate::connect::AsConnector;
 use crate::Glade;
-use crate::window;
 
 use super::*;
 
@@ -113,35 +113,39 @@ fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
             .do_async(move |(menu, community_entry), (_widget, _event)| async move {
                 menu.hide();
 
-                // TODO: error handling
-                let invite = community_entry.create_invite(None).await.expect("failed to create invite");
-
-                lazy_static! {
-                    static ref GLADE: Glade = Glade::open("res/glade/active/dialog/invite_community.glade").unwrap();
+                match community_entry.create_invite(None).await {
+                    Ok(invite) => show_invite_dialog(invite),
+                    Err(err) => dialog::show_generic_error(&err),
                 }
-
-                let builder: gtk::Builder = GLADE.builder();
-                let main: gtk::Box = builder.get_object("main").unwrap();
-
-                let code_view: gtk::TextView = builder.get_object("code_view").unwrap();
-                if let Some(code_view) = code_view.get_buffer() {
-                    code_view.set_text(&invite.0);
-                }
-
-                code_view.connect_button_release_event(|code_view, _| {
-                    if let Some(buf) = code_view.get_buffer() {
-                        let (start, end) = (buf.get_start_iter(), buf.get_end_iter());
-                        buf.select_range(&start, &end);
-                    }
-                    gtk::Inhibit(false)
-                });
-
-                window::show_dialog(main);
             })
             .build_widget_event()
     );
 
     menu
+}
+
+fn show_invite_dialog(invite: InviteCode) {
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("res/glade/active/dialog/invite_community.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
+    let main: gtk::Box = builder.get_object("main").unwrap();
+
+    let code_view: gtk::TextView = builder.get_object("code_view").unwrap();
+    if let Some(code_view) = code_view.get_buffer() {
+        code_view.set_text(&invite.0);
+    }
+
+    code_view.connect_button_release_event(|code_view, _| {
+        if let Some(buf) = code_view.get_buffer() {
+            let (start, end) = (buf.get_start_iter(), buf.get_end_iter());
+            buf.select_range(&start, &end);
+        }
+        gtk::Inhibit(false)
+    });
+
+    window::show_dialog(main);
 }
 
 #[derive(Clone)]

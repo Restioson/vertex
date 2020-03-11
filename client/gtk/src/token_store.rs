@@ -7,7 +7,6 @@ fn keyring() -> Keyring<'static> {
     Keyring::new("vertex_client_gtk", "")
 }
 
-// TODO: pass errors down?
 pub fn store_token(parameters: &AuthParameters) {
     let serialized_token = serde_json::to_string(parameters).expect("unable to serialize token");
     keyring().set_password(&serialized_token)

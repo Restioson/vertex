@@ -3,7 +3,7 @@ use gtk::prelude::*;
 use lazy_static::lazy_static;
 use vertex::prelude::*;
 
-use crate::{Client, TryGetText};
+use crate::{Client, Result, TryGetText};
 use crate::connect::AsConnector;
 use crate::Glade;
 use crate::window;
@@ -69,11 +69,18 @@ pub fn show_create_community(client: Client<Ui>) {
                     if let Ok(name) = name_entry.try_get_text() {
                         dialog.close();
 
-                        // TODO: error handling
-                        let community = client.create_community(&name).await.unwrap();
+                        async fn create_community(client: Client<Ui>, name: &str) -> Result<()> {
+                            let community = client.create_community(name).await?;
 
-                        community.create_room("General").await.unwrap();
-                        community.create_room("Off Topic").await.unwrap();
+                            community.create_room("General").await?;
+                            community.create_room("Off Topic").await?;
+
+                            Ok(())
+                        }
+
+                        if let Err(err) = create_community(client, &name).await {
+                            show_generic_error(&err);
+                        }
                     }
                 }
             })
@@ -104,10 +111,35 @@ pub fn show_join_community(client: Client<Ui>) {
                         dialog.close();
 
                         let code = InviteCode(code);
-                        // TODO: error handling
-                        client.join_community(code).await.unwrap();
+                        if let Err(err) = client.join_community(code).await {
+                            show_generic_error(&err);
+                        }
                     }
                 }
+            })
+            .build_widget_event()
+    );
+}
+
+pub fn show_generic_error<E: std::fmt::Display>(error: &E) {
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("res/glade/active/dialog/error.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
+    let main: gtk::Box = builder.get_object("main").unwrap();
+
+    let description_label: gtk::Label = builder.get_object("description").unwrap();
+    description_label.set_text(&format!("{}", error));
+
+    let ok_button: gtk::Button = builder.get_object("ok_button").unwrap();
+
+    let dialog = window::show_dialog(main);
+
+    ok_button.connect_button_press_event(
+        dialog.connector()
+            .do_sync(|dialog, _| {
+                dialog.close();
             })
             .build_widget_event()
     );

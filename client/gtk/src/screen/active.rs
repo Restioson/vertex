@@ -127,11 +127,13 @@ impl client::ClientUi for Ui {
             client.connector()
                 .do_async(|client, (_scroll, position)| async move {
                     if let Some(chat) = client.chat().await {
-                        match position {
+                        let _ = match position {
                             gtk::PositionType::Top => chat.extend_older().await,
                             gtk::PositionType::Bottom => chat.extend_newer().await,
-                            _ => (),
-                        }
+                            _ => Ok(()),
+                        };
+
+                        // TODO: handle error
                     }
                 })
                 .build_widget_and_owned_listener()

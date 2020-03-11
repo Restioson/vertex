@@ -5,6 +5,7 @@ use std::io::{self, Read};
 use std::path::Path;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
+use std::fmt;
 
 use gio::prelude::*;
 use gtk::prelude::*;
@@ -190,6 +191,29 @@ pub enum Error {
     DeserializeError(DeserializeError),
 }
 
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::Error::*;
+        match self {
+            InvalidUrl => write!(f, "Invalid url"),
+            Http(http) => if http.is_connect() {
+                write!(f, "Couldn't connect to instance")
+            } else {
+                write!(f, "Network error")
+            },
+            Websocket(ws) => write!(f, "{}", ws),
+            Timeout => write!(f, "Connection timed out"),
+            ProtocolError(err) => match err {
+                Some(err) => write!(f, "Protocol error: {}", err),
+                None => write!(f, "Protocol error"),
+            },
+            ErrorResponse(err) => write!(f, "{}", err),
+            AuthErrorResponse(err) => write!(f, "{}", err),
+            UnexpectedMessage => write!(f, "Received unexpected message"),
+            DeserializeError(_) => write!(f, "Failed to deserialize message"),
+        }
+    }
+}
 impl From<hyper::Error> for Error {
     fn from(error: hyper::Error) -> Self { Error::Http(error) }
 }

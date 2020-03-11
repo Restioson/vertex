@@ -62,7 +62,7 @@ async fn bind_events(screen: &Screen) {
                     }
                     Err(err) => {
                         println!("Encountered error during login: {:?}", err);
-                        screen.error_label.set_text(describe_error(err));
+                        screen.error_label.set_text(&describe_error(err));
                     }
                 }
 
@@ -106,24 +106,10 @@ async fn login(
     Ok(parameters)
 }
 
-fn describe_error(error: Error) -> &'static str {
-    use vertex::requests::AuthError;
-
+fn describe_error(error: Error) -> String {
     match error {
-        Error::InvalidUrl => "Invalid instance ip",
-        Error::Http(http) => if http.is_connect() {
-            "Couldn't connect to instance"
-        } else {
-            "Network error"
-        },
-        Error::ProtocolError(_) => "Protocol error: check your server instance?",
-        Error::AuthErrorResponse(err) => match err {
-            AuthError::Internal => "Internal server error",
-            AuthError::IncorrectCredentials | AuthError::InvalidUser
-            => "Invalid username or password",
-            _ => "Unknown auth error",
-        },
-
-        _ => "Unknown error",
+        Error::InvalidUrl => "Invalid instance ip".to_owned(),
+        Error::ProtocolError(_) => "Protocol error: check your server instance?".to_owned(),
+        error => format!("{}", error),
     }
 }

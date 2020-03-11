@@ -282,9 +282,12 @@ impl<Ui: ClientUi> Client<Ui> {
             state.chat = Some(chat.clone());
         }
 
-        // TODO: error handling
-        let update = room.get_updates().await.unwrap();
-        chat.update(update).await;
+        match room.get_updates().await {
+            Ok(update) => chat.update(update).await,
+            Err(err) => {
+                println!("failed to get updates for room: {:?}", err);
+            }
+        }
 
         self.request.send(ClientRequest::SelectRoom {
             community: room.community,

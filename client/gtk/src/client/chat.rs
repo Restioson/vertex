@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use gtk::prelude::*;
 use vertex::prelude::*;
 
-use crate::{Client, scheduler, SharedMut};
+use crate::{Client, scheduler, SharedMut, Result};
 use crate::client::RoomEntry;
 
 use super::ClientUi;
@@ -241,30 +241,32 @@ impl<Ui: ClientUi> Chat<Ui> {
         state.flush();
     }
 
-    pub async fn extend_older(&self) {
+    pub async fn extend_older(&self) -> Result<()> {
         let oldest_message = self.state.read().await.oldest_message();
         if let Some(oldest_message) = oldest_message {
             let selector = MessageSelector::Before(Bound::Exclusive(oldest_message));
 
-            // TODO: error handling
-            let history = self.room.request_messages(selector, MESSAGE_PAGE_SIZE).await.unwrap();
+            let history = self.room.request_messages(selector, MESSAGE_PAGE_SIZE).await?;
             self.extend(history.buffer, ChatSide::Back).await;
         }
+
+        Ok(())
     }
 
-    pub async fn extend_newer(&self) {
+    pub async fn extend_newer(&self) -> Result<()> {
         let newest_message = self.state.read().await.newest_message();
         if newest_message == self.room.newest_message().await {
-            return;
+            return Ok(());
         }
 
         if let Some(newest_message) = newest_message {
             let selector = MessageSelector::After(Bound::Exclusive(newest_message));
 
-            // TODO: error handling
-            let history = self.room.request_messages(selector, MESSAGE_PAGE_SIZE).await.unwrap();
+            let history = self.room.request_messages(selector, MESSAGE_PAGE_SIZE).await?;
             self.extend(history.buffer, ChatSide::Front).await;
         }
+
+        Ok(())
     }
 
     // TODO: we can only be reading_new when we are at the bottom of the message history!
