@@ -4,6 +4,18 @@ version = "0.1.0"
 authors = ["Restioson <restiosondev@gmail.com>"]
 edition = "2018"
 
+[profile.dev]
+opt-level = 1
+debug = false
+lto = false
+incremental = true
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev.package."vertex_server"]
+opt-level = 1
+
 [dependencies]
 xtra = { version = "^0.2", features = ["with-tokio-0_2"] }
 warp = { version = "^0.2", features = ["tls"] }
@@ -34,6 +46,3 @@ backtrace = "^0.3"
 governor = { version = "^0.2", default-features = false, features = ["std", "dashmap"] }
 arc-swap = "^0.4"
 vertex = { path = "../common/" }
-
-[profile.dev.package.rust-argon2] # Otherwise, login is painfully slow on dev
-opt-level = 3

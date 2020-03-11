@@ -86,30 +86,24 @@ async fn login(
     username: String,
     password: String,
 ) -> Result<AuthParameters> {
-    use vertex::prelude::*;
-
     let instance = Server::parse(instance)?;
+    let auth = auth::Client::new(instance.clone());
 
-    match token_store::get_stored_token() {
-        Some(parameters) if parameters.instance == instance => Ok(parameters),
-        _ => {
-            let auth = auth::Client::new(instance.clone());
-            let token = auth.create_token(
-                Credentials::new(username, password),
-                TokenCreationOptions::default(),
-            ).await?;
+    use vertex::prelude::*;
+    let token = auth.create_token(
+        Credentials::new(username, password),
+        TokenCreationOptions::default(),
+    ).await?;
 
-            let parameters = AuthParameters {
-                instance,
-                device: token.device,
-                token: token.token,
-            };
+    let parameters = AuthParameters {
+        instance,
+        device: token.device,
+        token: token.token,
+    };
 
-            token_store::store_token(&parameters);
+    token_store::store_token(&parameters);
 
-            Ok(parameters)
-        }
-    }
+    Ok(parameters)
 }
 
 fn describe_error(error: Error) -> &'static str {

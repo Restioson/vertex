@@ -109,7 +109,7 @@ fn build_embed(url: String, metadata: LinkMetadata) -> Option<MessageEmbed> {
 async fn get_link_metadata(url: &str) -> Result<LinkMetadata> {
     type Connector = hyper_tls::HttpsConnector<hyper::client::HttpConnector>;
 
-    let https = crate::https_ignore_invalid_certs();
+    let https = hyper_tls::HttpsConnector::new();
     let client: hyper::Client<Connector, hyper::Body> = hyper::Client::builder()
         .build(https);
 

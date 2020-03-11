@@ -1,12 +1,12 @@
 // TODO: how to split this into backend?
 
 use tokio_tungstenite::WebSocketStream;
+use url::Url;
 
 use vertex::prelude::*;
 
 use crate::{Error, Result};
 use crate::Server;
-use url::Url;
 
 pub struct AuthenticatedWs {
     pub stream: AuthenticatedWsStream,
@@ -25,8 +25,7 @@ pub struct Client {
 
 impl Client {
     pub fn new(server: Server) -> Client {
-        let https = crate::https_ignore_invalid_certs();
-
+        let https = hyper_tls::HttpsConnector::new();
         let client = hyper::client::Client::builder()
             .build(https);
 
@@ -75,7 +74,8 @@ impl Client {
                 let bytes = hyper::body::to_bytes(body).await?;
 
                 match AuthResponse::from_protobuf_bytes(&bytes) {
-                    Ok(_) => Err(Error::ProtocolError(None)),
+                    Ok(AuthResponse::Ok(_)) => Err(Error::ProtocolError(None)),
+                    Ok(AuthResponse::Err(err)) => Err(Error::AuthErrorResponse(err)),
                     Err(e) => Err(e.into()),
                 }
             }

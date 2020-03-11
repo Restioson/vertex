@@ -28,21 +28,6 @@ pub mod token_store;
 pub mod window;
 pub mod scheduler;
 
-// TODO: remove
-pub fn https_ignore_invalid_certs() -> hyper_tls::HttpsConnector<hyper::client::HttpConnector> {
-    let tls = native_tls::TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .expect("failed to build tls connector");
-
-    let tls = tokio_tls::TlsConnector::from(tls);
-
-    let mut http = hyper::client::HttpConnector::new();
-    http.enforce_http(false);
-
-    (http, tls).into()
-}
-
 #[derive(Clone)]
 pub struct Glade(Arc<String>);
 
@@ -157,7 +142,6 @@ fn setup_gtk_style() {
     gtk::StyleContext::add_provider_for_screen(&screen, &css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
 }
 
-// TODO: it freezes if we use <2 threads: why? (something with tokio-tungstenite, maybe?)
 #[tokio::main(core_threads = 2)]
 async fn main() {
     let application = gtk::Application::new(None, Default::default())

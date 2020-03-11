@@ -65,11 +65,12 @@ pub struct ChatState<Ui: ClientUi> {
 
 impl<Ui: ClientUi> ChatState<Ui> {
     fn new(client: Client<Ui>, widget: Ui::ChatWidget) -> Self {
+        let adj_top = widget.get_vadjustment().map(|a| a.get_upper());
         ChatState {
             client,
             widget,
             entries: LinkedList::new(),
-            adj_top: widget.get_vadjustment().map(|a| a.get_upper()),
+            adj_top,
         }
     }
 

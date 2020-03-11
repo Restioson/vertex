@@ -188,6 +188,7 @@ impl TryFrom<proto::requests::auth::RegisterUser> for RegisterUser {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct NewToken {
     pub device: DeviceId,
     pub token: AuthToken,
@@ -213,6 +214,7 @@ impl TryFrom<proto::requests::auth::NewToken> for NewToken {
     }
 }
 
+#[derive(Debug)]
 pub enum AuthResponse {
     Ok(AuthOk),
     Err(AuthError),
@@ -293,6 +295,7 @@ impl TryFrom<proto::requests::auth::AuthResponse> for AuthResponse {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum AuthOk {
     User(UserId),
     Token(NewToken),

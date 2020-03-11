@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 use message::*;
 use room::*;
 
-use crate::{AuthParameters, Client, Error, Result, TryGetText};
+use crate::{AuthParameters, Client, Error, Result, TryGetText, token_store};
 use crate::auth;
 use crate::client;
 use crate::client::RoomEntry;
@@ -211,9 +211,18 @@ pub async fn start(parameters: AuthParameters) {
         Err(error) => {
             println!("encountered error connecting client: {:?}", error);
 
-            let error = describe_error(error);
-            let screen = screen::loading::build_error(error, move || start(parameters.clone()));
-            window::set_screen(&screen);
+            match error {
+                Error::AuthErrorResponse(_) => {
+                    token_store::forget_token();
+                    let screen = screen::login::build().await;
+                    window::set_screen(&screen.main);
+                },
+                _ => {
+                    let error = describe_error(error);
+                    let screen = screen::loading::build_error(error, move || start(parameters.clone()));
+                    window::set_screen(&screen);
+                }
+            }
         }
     }
 }
