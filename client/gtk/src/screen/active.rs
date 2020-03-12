@@ -162,7 +162,7 @@ impl client::ClientUi for Ui {
                 .do_async(|(scroll_state, adjustment), (_, _)| async move {
                     let mut old = scroll_state.write().await;
 
-                    let new_bottom = adjustment.get_upper() - adjustment.get_page_size();
+                    let new_bottom = adjustment.get_upper() + adjustment.get_page_size();
                     let new_top = adjustment.get_lower();
 
                     if old.bottom == new_bottom {
@@ -178,7 +178,11 @@ impl client::ClientUi for Ui {
                     println!("old value {}", old_value);
 
                     if on_edge {
-                        adjustment.set_value((new_bottom - old.bottom) + old_value);
+                        let mut val = (new_bottom - old.bottom) + old_value;
+                        if val > adjustment.get_step_increment() {
+                            val -= adjustment.get_step_increment();
+                        }
+                        adjustment.set_value(val);
                     }
 
                     println!("new value {}", adjustment.get_value());

@@ -371,7 +371,6 @@ impl fmt::Display for AuthError {
             InvalidPassword => write!(f, "Invalid password"),
             InvalidDisplayName => write!(f, "Invalid display name"),
             InvalidMessage => write!(f, "Invalid message"),
-            _ => write!(f, "Unknown auth error"),
         }
     }
 }

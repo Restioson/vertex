@@ -91,7 +91,6 @@ impl fmt::Display for ErrResponse {
         match self {
             Error(err) => write!(f, "{}", err),
             RateLimited { ready_in } => write!(f, "Rate limited! Ready in: {}s", ready_in.as_secs()),
-            _ => write!(f, "Unknown error"),
         }
     }
 }
@@ -186,7 +185,6 @@ impl fmt::Display for Error {
             AlreadyInCommunity => write!(f, "Already in community"),
             TooManyInviteCodes => write!(f, "Too many invite codes"),
             InvalidMessageSelector => write!(f, "Invalid message selector"),
-            _ => write!(f, "Unknown error"),
         }
     }
 }
