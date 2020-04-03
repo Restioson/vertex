@@ -108,7 +108,7 @@ impl From<ErrResponse> for proto::responses::ErrResponse {
             },
             ErrResponse::RateLimited { ready_in } => {
                 Inner::RateLimited(RateLimited {
-                    ready_in_ms: ready_in.as_millis().try_into().unwrap_or(u32::MAX)
+                    ready_in_ms: ready_in.as_millis().try_into().unwrap_or(std::u32::MAX)
                 })
             }
         };
