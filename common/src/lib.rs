@@ -1,6 +1,6 @@
 //! Some definitions common between server and client
 
-#![feature(try_trait, assoc_int_consts)]
+#![feature(try_trait)]
 
 use std::time::Duration;
 

@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use vertex::prelude::*;
 
-use crate::{Client, scheduler, SharedMut, Result};
+use crate::{Client, SharedMut, Result, scheduler};
 use crate::client::RoomEntry;
 
 use super::ClientUi;
