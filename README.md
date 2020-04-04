@@ -11,6 +11,11 @@ Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, feder
 3. Install the openssl development package (`sudo apt install libssl-dev` on Linux)
 4. Install OpenAL and libsndfile (guide [here](https://docs.rs/crate/ears/0.7.0))
 
+#### Deploying - Linux
+1. Grab the latest release of appimage-tool from [here](https://github.com/AppImage/AppImageKit/releases) and put it
+   in `client/gtk`, making it executable (`chmod +x appimagetool-x86_64.AppImage`).
+2. Run `build-appimage.sh` in `client/gtk`
+
 ### Server - Docker
 1. Install Docker and Docker Compose. On Linux, this is as simple as `sudo apt install docker.io docker-compose` 
    (sometimes `docker` instead of `docker.io`).

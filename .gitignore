@@ -13,5 +13,5 @@ wasm-pack.log
 .vscode/
 server/files/
 server/docker/*.pem
-
+*.AppImage
 **/generated/
