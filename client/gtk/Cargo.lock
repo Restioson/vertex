@@ -2145,6 +2145,7 @@ name = "vertex_client_gtk"
 version = "0.1.0"
 dependencies = [
  "base64 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cfg-if 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "ears 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -1,22 +1,23 @@
 #!/bin/bash
 
+# Build
+cargo +nightly build --release
+
+CRATE=$(pwd)
+cd target/release/
+
+# Clean old build files
 rm Vertex.AppImage
 rm -rf Vertex.AppDir
-cargo +nightly build --release
 mkdir -p Vertex.AppDir
-cp -r res Vertex.AppDir
 
-cp target/release/vertex_client_gtk Vertex.AppDir/AppRun
-
+# Copy files
+cp -r $CRATE/res Vertex.AppDir
+cp vertex_client_gtk Vertex.AppDir/AppRun
+cp $CRATE/vertex.desktop Vertex.AppDir
 cd Vertex.AppDir
-mv res/icon.svg vertex_client_gtk.png
+cp res/icon.svg vertex_client_gtk.svg
 
-echo '[Desktop Entry]' >> vertex.desktop
-echo 'Name=Vertex' >> vertex.desktop
-echo 'Exec=Vertex' >> vertex.desktop
-echo 'Icon=vertex_client_gtk' >> vertex.desktop
-echo 'Type=Application' >> vertex.desktop
-echo 'Categories=Chat;' >> vertex.desktop
-
-cd ..
-./appimagetool-x86_64.AppImage Vertex.AppDir Vertex.AppImage
+# Build the app image
+cd $CRATE
+./appimagetool-x86_64.AppImage target/release/Vertex.AppDir target/release/Vertex.AppImage

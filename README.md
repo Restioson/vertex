@@ -37,9 +37,9 @@ Vertex is a WIP end-to-end encrypted (not implemented yet), decentralised, feder
 of coffee ;).
 
 ## Running
-To run the server, do `cargo run` in the `server/` directory.
+To run the server, do `cargo +nightly run` in the `server/` directory.
 
-To run the client, do `cargo run -- --ip <ip of server>` in the `client/gtk` directory.
+To run the client, do `cargo +nightly run -- --ip <ip of server>` in the `client/gtk` directory.
 
 ## Server Configuration
 

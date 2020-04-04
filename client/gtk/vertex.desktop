@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Vertex
+Comment=GTK client for vertex
+Type=Application
+Exec=vertex_client_gtk
+Terminal=false
+Categories=Chat;InstantMessaging;GTK;
+Keywords=Rust;GTK;Chat;
+Icon=vertex_client_gtk
+StartupNotify=true

@@ -73,6 +73,9 @@ ears = "0.7"
 
 vertex = { path = "../../common" }
 
+[build-dependencies]
+cfg-if = "0.1"
+
 [target.'cfg(unix)'.dependencies]
 notify-rust = "4.0.0-beta.2"
 
