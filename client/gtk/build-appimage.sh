@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Build
-cargo +nightly build --release
+cargo +nightly build --release || exit 1
 
 CRATE=$(pwd)
 cd target/release/
@@ -16,7 +16,7 @@ cp -r $CRATE/res Vertex.AppDir
 cp vertex_client_gtk Vertex.AppDir/AppRun
 cp $CRATE/vertex.desktop Vertex.AppDir
 cd Vertex.AppDir
-cp res/icon.svg vertex_client_gtk.svg
+cp res/icon.png vertex_client_gtk.png
 
 # Build the app image
 cd $CRATE

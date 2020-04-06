@@ -2,7 +2,7 @@
 
 use std::fs::File;
 use std::io::{self, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::fmt;
@@ -33,11 +33,20 @@ pub mod scheduler;
 pub struct Glade(Arc<String>);
 
 impl Glade {
-    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Glade> {
+    pub fn open<P: AsRef<Path>>(glade_path: P) -> io::Result<Glade> {
+        let mut path = PathBuf::from(resource("glade"));
+        path.push(glade_path);
+
         let mut file = File::open(path)?;
         let mut source = String::new();
         file.read_to_string(&mut source)?;
-        Ok(Glade(Arc::new(source)))
+
+        // Replace res/* with relative link
+        let res_path = resources_path().into_os_string().into_string().unwrap();
+        let res_path = format!("{}/", res_path);
+        let glade_string = source.replace("res/", &res_path);
+
+        Ok(Glade(Arc::new(glade_string)))
     }
 
     #[inline]
@@ -135,10 +144,23 @@ pub async fn start() {
     }
 }
 
+fn resources_path() -> PathBuf {
+    let mut path = std::env::current_exe().unwrap();
+    path.pop();
+    path.push("res");
+    path
+}
+
+fn resource<P: AsRef<Path>>(rest: P) -> String {
+    let mut path = resources_path();
+    path.push(rest);
+    path.into_os_string().into_string().expect("tmp path is invalid utf-8!")
+}
+
 fn setup_gtk_style() {
     let screen = gdk::Screen::get_default().expect("unable to get screen");
     let css_provider = gtk::CssProvider::new();
-    css_provider.load_from_path("res/style.css").expect("unable to load css");
+    css_provider.load_from_path(&resource("style.css")).expect("unable to load css");
 
     gtk::StyleContext::add_provider_for_screen(&screen, &css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
 }
@@ -157,7 +179,7 @@ async fn main() {
             .default_width(1280)
             .default_height(720);
 
-        if let Ok(icon) = gdk_pixbuf::Pixbuf::new_from_file("res/icon.svg") {
+        if let Ok(icon) = gdk_pixbuf::Pixbuf::new_from_file(resource("icon.svg")) {
             window = window.icon(&icon);
         }
 

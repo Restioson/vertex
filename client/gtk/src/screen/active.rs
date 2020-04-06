@@ -65,7 +65,7 @@ pub struct Ui {
 impl Ui {
     fn build() -> Self {
         lazy_static! {
-            static ref GLADE: Glade = Glade::open("res/glade/active/main.glade").unwrap();
+            static ref GLADE: Glade = Glade::open("active/main.glade").unwrap();
         }
 
         let builder: gtk::Builder = GLADE.builder();

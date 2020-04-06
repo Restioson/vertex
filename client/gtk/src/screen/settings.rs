@@ -17,7 +17,7 @@ pub struct Screen {
 
 pub fn build(client: Client<screen::active::Ui>) -> Screen {
     lazy_static! {
-        static ref GLADE: Glade = Glade::open("res/glade/settings/settings.glade").unwrap();
+        static ref GLADE: Glade = Glade::open("/settings/settings.glade").unwrap();
     }
 
     let builder: gtk::Builder = GLADE.builder();

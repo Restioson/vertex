@@ -23,7 +23,7 @@ pub struct CommunityEntryWidget {
 impl CommunityEntryWidget {
     pub fn build(name: String) -> Self {
         lazy_static! {
-            static ref GLADE: Glade = Glade::open("res/glade/active/community_entry.glade").unwrap();
+            static ref GLADE: Glade = Glade::open("active/community_entry.glade").unwrap();
         }
 
         let builder: gtk::Builder = GLADE.builder();
@@ -99,7 +99,7 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
 
 fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
     lazy_static! {
-        static ref GLADE: Glade = Glade::open("res/glade/active/community_menu.glade").unwrap();
+        static ref GLADE: Glade = Glade::open("active/community_menu.glade").unwrap();
     }
 
     let builder: gtk::Builder = GLADE.builder();
@@ -126,7 +126,7 @@ fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
 
 fn show_invite_dialog(invite: InviteCode) {
     lazy_static! {
-        static ref GLADE: Glade = Glade::open("res/glade/active/dialog/invite_community.glade").unwrap();
+        static ref GLADE: Glade = Glade::open("active/dialog/invite_community.glade").unwrap();
     }
 
     let builder: gtk::Builder = GLADE.builder();
