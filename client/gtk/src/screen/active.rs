@@ -202,15 +202,22 @@ impl client::ClientUi for Ui {
                     }
 
                     let old_value = adjustment.get_value();
-                    let on_edge = old_value + 10.0 >= old.bottom || old_value - 10.0 <= old.top;
 
-                    if on_edge {
+                    let on_bottom = old_value + 10.0 >= old.bottom;
+                    let on_top = old_value - 10.0 <= old.top;
+
+                    if on_top || on_bottom {
                         let mut val = (new_bottom - old.bottom) + old_value;
-                        if old_value != new_top && val > adjustment.get_step_increment() {
-                            val -= adjustment.get_step_increment();
+
+                        if on_top {
+                            if old_value != new_top && val > adjustment.get_step_increment() {
+                                val -= adjustment.get_step_increment();
+                            }
+                            adjustment.set_value(val);
+                            old.just_scrolled_up = Some(val);
                         }
+
                         adjustment.set_value(val);
-                        old.just_scrolled_up = Some(val);
                     }
 
                     old.bottom = new_bottom;
