@@ -23,7 +23,7 @@
 
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
 
-    <Product Id='*' Name='Vertex Client' UpgradeCode='D917C3D1-0A6B-46EB-A4C4-61E8BABEA498' Manufacturer='Vertex contributors' Language='1033' Codepage='1252' Version='$(var.Version)'>
+    <Product Id='*' Name='Vertex' UpgradeCode='D917C3D1-0A6B-46EB-A4C4-61E8BABEA498' Manufacturer='Vertex contributors' Language='1033' Codepage='1252' Version='$(var.Version)'>
 
         <Package Id='*' Keywords='Installer' Manufacturer='Vertex contributors' InstallerVersion='450' Languages='1033' Compressed='yes' InstallScope='perMachine' SummaryCodepage='1252' Platform='$(var.Platform)'/>
 
@@ -37,7 +37,7 @@
                 <Directory Id='APPLICATIONFOLDER' Name='Vertex Client'>
                     <Directory Id='LibDirRef' Name='lib'></Directory>
                     <Component Id='Executable' Guid='*' Win64='yes'>
-                        <File Id='vertex_client.exe' Name='vertex_client.exe' DiskId='1' Source='target\release\vertex_client_gtk.exe' KeyPath='yes'/>
+                        <File Id='vertex.exe' Name='vertex.exe' DiskId='1' Source='target\release\vertex_client_gtk.exe' KeyPath='yes'/>
                     </Component>
                     <Directory Id='BinaryDirRef' Name='.'></Directory>
                     <Directory Id='ResourceDirRef' Name='res'></Directory>
@@ -47,7 +47,7 @@
             <Directory Id="ProgramMenuFolder">
                 <Directory Id="ApplicationProgramsFolder" Name="Vertex Client">
                     <Component Id='ApplicationShortcut' Guid='{7fba3e18-215c-44b4-a2fa-e7e0b0d19c98}' Win64='yes'>
-                        <Shortcut Id='ApplicationStartMenuShortcut' Name='Vertex Client' Description='Vertex Client' Target='[!vertex_client.exe]' WorkingDirectory='APPLICATIONFOLDER' />
+                        <Shortcut Id='ApplicationStartMenuShortcut' Name='Vertex' Description='Vertex Client' Target='[!vertex.exe]' WorkingDirectory='APPLICATIONFOLDER' />
                         <RemoveFolder Id='CleanUpShortCut' Directory='ApplicationProgramsFolder' On='uninstall'/>
                         <RegistryValue Root='HKCU' Key='Software\Vertex Client' Name='installed' Type='integer' Value='1' KeyPath='yes'/>
                         <RegistryValue Root='HKCU' Key='Software\Vertex Client' Name='InstallationPath' Type='string' Value='[APPLICATIONFOLDER]' />

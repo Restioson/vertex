@@ -1,4 +1,5 @@
 #![feature(type_alias_impl_trait, linked_list_cursors, type_ascription)]
+#![windows_subsystem = "windows"]
 
 use std::fs::File;
 use std::io::{self, Read};
