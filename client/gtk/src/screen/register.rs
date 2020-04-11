@@ -23,7 +23,7 @@ pub struct Screen {
 
 pub async fn build() -> Screen {
     lazy_static! {
-        static ref GLADE: Glade = Glade::open("/register/register.glade").unwrap();
+        static ref GLADE: Glade = Glade::open("register/register.glade").unwrap();
     }
 
     let builder: gtk::Builder = GLADE.builder();

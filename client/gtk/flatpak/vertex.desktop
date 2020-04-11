@@ -2,7 +2,9 @@
 Name=Vertex
 Comment=GTK client for vertex
 Type=Application
+Exec=Vertex
+Terminal=false
 Categories=Chat;InstantMessaging;GTK;
 Keywords=Rust;GTK;Chat;
-Icon=vertex_client_gtk
-
+Icon=cf.vertex.gtk
+StartupNotify=true
