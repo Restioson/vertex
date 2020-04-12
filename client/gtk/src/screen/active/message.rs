@@ -7,6 +7,7 @@ use crate::client::{self, ChatSide, InviteEmbed, MessageEmbed, MessageStatus, Op
 use crate::Glade;
 
 use super::*;
+use pango::WrapMode;
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct MessageGroupWidget {
@@ -83,6 +84,8 @@ impl MessageContentWidget {
             .halign(gtk::Align::Start)
             .selectable(true)
             .can_focus(false)
+            .wrap_mode(WrapMode::WordChar)
+            .wrap(true)
             .build();
 
         widget.add(&text);

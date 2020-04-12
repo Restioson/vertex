@@ -37,7 +37,9 @@ To run the server, do `cargo +nightly run` in the `server/` directory.
 To run the client, do `cargo +nightly run -- --ip <ip of server>` in the `client/gtk` directory.
 
 #### Deploying - Linux
-1. Run `./flatpak/flatpak.sh` in the `client/gtk` directory.
+Run `./flatpak/flatpak.sh` in the `client/gtk` directory. It will ask for `sudo` permissions in order to delete the
+`.flatpak-builder` directory (which currently breaks Cargo). Don't just believe us though, go read the shell script for
+yourself :)
 
 ## Server Configuration
 
