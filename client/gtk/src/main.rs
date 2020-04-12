@@ -41,10 +41,16 @@ impl Glade {
         let mut source = String::new();
         file.read_to_string(&mut source)?;
 
+        #[allow(unused_mut)]
+        let mut glade_string = source;
+
         // Replace res/* with relative link
-        let res_path = resources_path().into_os_string().into_string().unwrap();
-        let res_path = format!("{}/", res_path);
-        let glade_string = source.replace("res/", &res_path);
+        #[cfg(feature = "deploy")]
+        {
+            let res_path = resources_path().into_os_string().into_string().unwrap();
+            let res_path = format!("{}/", res_path);
+            glade_string = glade_string.replace("res/", &res_path);
+        }
 
         Ok(Glade(Arc::new(glade_string)))
     }
@@ -145,8 +151,19 @@ pub async fn start() {
 }
 
 fn resources_path() -> PathBuf {
-    let mut path = std::env::current_exe().unwrap();
-    path.pop();
+    let mut path;
+
+    #[cfg(not(feature = "deploy"))]
+    {
+        path = PathBuf::new();
+    }
+
+    #[cfg(feature = "deploy")]
+    {
+        path = std::env::current_exe().unwrap();
+        path.pop();
+    }
+
     path.push("res");
     path
 }

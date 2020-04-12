@@ -16,6 +16,9 @@ OriginalFilename = "vertex_client.exe"
 FileDescription = "Vertex Client (GTK)"
 LegalCopyright = "Copyright © 2020"
 
+[features]
+deploy = []
+
 [profile.dev]
 opt-level = 1
 debug = false
