@@ -349,6 +349,18 @@ impl ActiveSession {
     ) -> Result<(), warp::Error> {
         let message = message.0?;
 
+        {
+            let ratelimiter = self.global.ratelimiter.load();
+
+            if let Err(not_until) = ratelimiter.check_key(&self.device) {
+                self.send(ServerMessage::RateLimited {
+                    ready_in: not_until.wait_time_from(Instant::now())
+                }).await?;
+
+                return Ok(());
+            }
+        }
+
         if message.is_ping() {
             self.heartbeat = Instant::now();
             self.ws.send(ws::Message::ping(vec![])).await?;
@@ -361,21 +373,6 @@ impl ActiveSession {
                 }
             };
 
-            {
-                let ratelimiter = self.global.ratelimiter.load();
-
-                if let Err(not_until) = ratelimiter.check_key(&self.device) {
-                    let resp = ErrResponse::RateLimited {
-                        ready_in: not_until.wait_time_from(Instant::now())
-                    };
-
-                    self.send(ServerMessage::Response {
-                        id: msg.id,
-                        result: Err(resp),
-                    }).await?;
-                }
-            }
-
             let (user, device, perms) = (self.user, self.device, self.perms);
             let handler = RequestHandler {
                 session: self,
@@ -384,11 +381,11 @@ impl ActiveSession {
                 device,
                 perms,
             };
-            let response = handler.handle_request(msg.request).await;
+            let result = handler.handle_request(msg.request).await;
 
             self.send(ServerMessage::Response {
                 id: msg.id,
-                result: response.map_err(ErrResponse::Error),
+                result,
             })
             .await?;
         } else if message.is_close() {

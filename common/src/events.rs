@@ -4,6 +4,7 @@ use crate::responses::*;
 use crate::structures::*;
 use crate::types::*;
 use std::convert::{TryFrom, TryInto};
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -14,6 +15,7 @@ pub enum ServerMessage {
         result: ResponseResult,
     },
     MalformedMessage,
+    RateLimited { ready_in: Duration },
 }
 
 impl ServerMessage {
@@ -36,12 +38,17 @@ impl From<ServerMessage> for proto::events::ServerMessage {
                 response: Some(match result {
                     Ok(ok) => proto::responses::response::Response::Ok(ok.into()),
                     Err(err) => {
-                        let err: proto::responses::ErrResponse = err.into();
-                        proto::responses::response::Response::Error(err)
-                    }
+                        let err: proto::responses::Error = err.into();
+                        proto::responses::response::Response::Error(err as i32)
+                    },
                 }),
             }),
             MalformedMessage => Message::MalformedMessage(proto::types::None {}),
+            RateLimited { ready_in } => {
+                Message::RateLimited(proto::events::RateLimited {
+                    ready_in_ms: ready_in.as_millis().try_into().unwrap_or(std::u32::MAX)
+                })
+            }
         };
 
         proto::events::ServerMessage {
@@ -65,14 +72,18 @@ impl TryFrom<proto::events::ServerMessage> for ServerMessage {
                     result: Ok(ok.try_into()?),
                 },
                 Response::Error(err) => {
-                    let result = err.try_into()?;
+                    let err = proto::responses::Error::from_i32(err)?.try_into()?;
+
                     ServerMessage::Response {
                         id: res.id?.into(),
-                        result: Err(result),
+                        result: Err(err),
                     }
                 }
             },
             MalformedMessage(_) => ServerMessage::MalformedMessage,
+            RateLimited(proto::events::RateLimited { ready_in_ms }) => {
+                ServerMessage::RateLimited { ready_in: Duration::from_millis(ready_in_ms as u64) }
+            }
         })
     }
 }

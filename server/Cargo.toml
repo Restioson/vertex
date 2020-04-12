@@ -17,7 +17,7 @@ opt-level = 3
 opt-level = 1
 
 [dependencies]
-xtra = { version = "^0.2", features = ["with-tokio-0_2"] }
+xtra = { version = "^0.2.6", features = ["with-tokio-0_2"] }
 warp = { version = "^0.2", features = ["tls"] }
 http = "^0.2"
 serde = "^1"

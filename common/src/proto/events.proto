@@ -10,7 +10,12 @@ message ServerMessage {
         ServerEvent event = 1;
         responses.Response response = 2;
         types.None malformed_message = 3;
+        RateLimited rate_limited = 4;
     }
+}
+
+message RateLimited {
+    uint32 ready_in_ms = 1;
 }
 
 message ServerEvent {

@@ -8,7 +8,7 @@ message Response {
     types.RequestId id = 1;
     oneof response {
         Ok ok = 2;
-        ErrResponse error = 3;
+        Error error = 3;
     }
 }
 
@@ -33,17 +33,6 @@ message NewRoom {
 
 message NewInvite {
     string code = 1;
-}
-
-message ErrResponse {
-    oneof inner {
-        Error error = 1;
-        RateLimited rate_limited = 2;
-    }
-}
-
-message RateLimited {
-    uint32 ready_in_ms = 1;
 }
 
 enum Error {

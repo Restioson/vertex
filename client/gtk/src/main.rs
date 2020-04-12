@@ -225,7 +225,7 @@ pub enum Error {
     Websocket(tungstenite::Error),
     Timeout,
     ProtocolError(Option<StdError>),
-    ErrorResponse(ErrResponse),
+    ErrorResponse(vertex::responses::Error),
     AuthErrorResponse(AuthError),
     UnexpectedMessage,
     DeserializeError(DeserializeError),
@@ -264,10 +264,6 @@ impl From<tungstenite::Error> for Error {
 
 impl From<hyper::http::uri::InvalidUri> for Error {
     fn from(_: hyper::http::uri::InvalidUri) -> Self { Error::InvalidUrl }
-}
-
-impl From<ErrResponse> for Error {
-    fn from(error: ErrResponse) -> Self { Error::ErrorResponse(error) }
 }
 
 impl From<AuthError> for Error {

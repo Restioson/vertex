@@ -1,13 +1,12 @@
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
-use std::time::Duration;
 
 use crate::proto;
 use crate::proto::DeserializeError;
 use crate::structures::*;
 use crate::types::*;
 
-pub type ResponseResult = Result<OkResponse, ErrResponse>;
+pub type ResponseResult = Result<OkResponse, Error>;
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -75,69 +74,6 @@ impl TryFrom<proto::responses::Ok> for OkResponse {
             RoomUpdate(update) => OkResponse::RoomUpdate(update.try_into()?),
             MessageHistory(history) => OkResponse::MessageHistory(history.try_into()?),
         })
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-#[non_exhaustive]
-pub enum ErrResponse {
-    Error(Error),
-    RateLimited { ready_in: Duration },
-}
-
-impl fmt::Display for ErrResponse {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use ErrResponse::*;
-        match self {
-            Error(err) => write!(f, "{}", err),
-            RateLimited { ready_in } => write!(f, "Rate limited! Ready in: {}s", ready_in.as_secs()),
-        }
-    }
-}
-
-impl From<ErrResponse> for proto::responses::ErrResponse {
-    fn from(resp: ErrResponse) -> Self {
-        use proto::responses::err_response::Inner;
-        use proto::responses::RateLimited;
-
-        let inner = match resp {
-            ErrResponse::Error(err) => {
-                let proto_err: proto::responses::Error = err.into();
-                let discrim: i32 = proto_err.into();
-                Inner::Error(discrim)
-            },
-            ErrResponse::RateLimited { ready_in } => {
-                Inner::RateLimited(RateLimited {
-                    ready_in_ms: ready_in.as_millis().try_into().unwrap_or(std::u32::MAX)
-                })
-            }
-        };
-
-        proto::responses::ErrResponse { inner: Some(inner) }
-    }
-}
-
-impl TryFrom<proto::responses::ErrResponse> for ErrResponse {
-    type Error = DeserializeError;
-
-    fn try_from(resp: proto::responses::ErrResponse) -> Result<Self, DeserializeError> {
-        use proto::responses::err_response::Inner;
-        use proto::responses::RateLimited;
-
-        let resp = match resp.inner? {
-            Inner::Error(err) => {
-                let err = proto::responses::Error::from_i32(err)
-                    .ok_or(DeserializeError::InvalidEnumVariant)?;
-                ErrResponse::Error(err.try_into()?)
-            },
-            Inner::RateLimited(RateLimited { ready_in_ms }) => {
-                ErrResponse::RateLimited {
-                    ready_in: Duration::from_millis(ready_in_ms as u64)
-                }
-            }
-        };
-
-        Ok(resp)
     }
 }
 

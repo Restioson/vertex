@@ -1,4 +1,4 @@
-use keyring::Keyring;
+use keyring::{Keyring, KeyringError};
 use serde_json;
 
 use crate::AuthParameters;
@@ -19,5 +19,9 @@ pub fn get_stored_token() -> Option<AuthParameters> {
 }
 
 pub fn forget_token() {
-    keyring().delete_password().expect("unable to forget token");
+    match keyring().delete_password() {
+        Ok(_) => {},
+        Err(KeyringError::NoPasswordFound) => {},
+        Err(e) => Err(e).expect("unable to forget token"),
+    };
 }
