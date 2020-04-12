@@ -16,6 +16,9 @@ OriginalFilename = "vertex_client.exe"
 FileDescription = "Vertex Client (GTK)"
 LegalCopyright = "Copyright © 2020"
 
+[features]
+deploy = []
+
 [profile.dev]
 opt-level = 1
 debug = false
@@ -72,6 +75,9 @@ lazy_static = "1.4"
 ears = "0.7"
 
 vertex = { path = "../../common" }
+
+[build-dependencies]
+cfg-if = "0.1"
 
 [target.'cfg(unix)'.dependencies]
 notify-rust = "4.0.0-beta.2"

@@ -19,7 +19,7 @@ pub struct MessageGroupWidget {
 impl MessageGroupWidget {
     pub fn build(author: UserId, profile: Profile, origin_time: DateTime<Utc>) -> MessageGroupWidget {
         lazy_static! {
-            static ref GLADE: Glade = Glade::open("res/glade/active/message_entry.glade").unwrap();
+            static ref GLADE: Glade = Glade::open("active/message_entry.glade").unwrap();
         }
 
         let builder: gtk::Builder = GLADE.builder();
@@ -145,7 +145,7 @@ fn build_embed(client: &Client<Ui>, embed: MessageEmbed) -> gtk::Widget {
 
 fn build_opengraph_embed(embed: OpenGraphEmbed) -> gtk::Widget {
     lazy_static! {
-        static ref GLADE: Glade = Glade::open("res/glade/active/embed/opengraph.glade").unwrap();
+        static ref GLADE: Glade = Glade::open("active/embed/opengraph.glade").unwrap();
     }
 
     let builder: gtk::Builder = GLADE.builder();
@@ -162,7 +162,7 @@ fn build_opengraph_embed(embed: OpenGraphEmbed) -> gtk::Widget {
 
 fn build_invite_embed(client: &Client<Ui>, embed: InviteEmbed) -> gtk::Widget {
     lazy_static! {
-        static ref GLADE: Glade = Glade::open("res/glade/active/embed/invite.glade").unwrap();
+        static ref GLADE: Glade = Glade::open("active/embed/invite.glade").unwrap();
     }
 
     let builder: gtk::Builder = GLADE.builder();

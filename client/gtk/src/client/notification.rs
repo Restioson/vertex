@@ -5,6 +5,7 @@ use std::rc::Rc;
 use ears::{AudioController, Sound};
 
 use vertex::prelude::*;
+use crate::resource;
 
 #[derive(Clone)]
 pub struct Notifier {
@@ -19,7 +20,7 @@ impl Default for Notifier {
 
 impl Notifier {
     pub fn new() -> Self {
-        let sound = Sound::new("res/notification_sound_clearly.ogg").ok();
+        let sound = Sound::new(&resource("notification_sound_clearly.ogg")).ok();
         Notifier {
             sound: sound.map(|sound| Rc::new(RefCell::new(sound))),
         }

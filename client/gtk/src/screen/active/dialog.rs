@@ -12,7 +12,7 @@ use super::Ui;
 
 pub fn show_add_community(client: Client<Ui>) {
     lazy_static! {
-        static ref GLADE: Glade = Glade::open("res/glade/active/dialog/add_community.glade").unwrap();
+        static ref GLADE: Glade = Glade::open("active/dialog/add_community.glade").unwrap();
     }
 
     let builder: gtk::Builder = GLADE.builder();
@@ -49,7 +49,7 @@ pub fn show_add_community(client: Client<Ui>) {
 
 pub fn show_create_community(client: Client<Ui>) {
     lazy_static! {
-        static ref GLADE: Glade = Glade::open("res/glade/active/dialog/create_community.glade").unwrap();
+        static ref GLADE: Glade = Glade::open("active/dialog/create_community.glade").unwrap();
     }
 
     let builder: gtk::Builder = GLADE.builder();
@@ -90,7 +90,7 @@ pub fn show_create_community(client: Client<Ui>) {
 
 pub fn show_join_community(client: Client<Ui>) {
     lazy_static! {
-        static ref GLADE: Glade = Glade::open("res/glade/active/dialog/join_community.glade").unwrap();
+        static ref GLADE: Glade = Glade::open("active/dialog/join_community.glade").unwrap();
     }
 
     let builder: gtk::Builder = GLADE.builder();
@@ -123,7 +123,7 @@ pub fn show_join_community(client: Client<Ui>) {
 
 pub fn show_generic_error<E: std::fmt::Display>(error: &E) {
     lazy_static! {
-        static ref GLADE: Glade = Glade::open("res/glade/active/dialog/error.glade").unwrap();
+        static ref GLADE: Glade = Glade::open("active/dialog/error.glade").unwrap();
     }
 
     let builder: gtk::Builder = GLADE.builder();
