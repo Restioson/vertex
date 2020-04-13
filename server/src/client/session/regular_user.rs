@@ -1,5 +1,6 @@
 //! Methods that can be executed by regular users
 
+use log::warn;
 use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
 use xtra::Context;
@@ -196,6 +197,7 @@ impl<'a> RequestHandler<'a> {
             Ok(()) => Ok(OkResponse::NoData),
             Err(ChangeUsernameError::UsernameConflict) => Err(Error::UsernameAlreadyExists),
             Err(ChangeUsernameError::NonexistentUser) => {
+                warn!("Nonexistent user! Is this a timing anomaly? Client: {:#?}", self.session);
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(Error::UserDeleted)
             }

@@ -245,7 +245,7 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
 impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
     fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) -> Result<(), Error> {
         let from_device = m.device;
-        let send = SendMessage(ServerMessage::Event(ServerEvent::Edit(m.message))); // TODO watching
+        let send = SendMessage(ServerMessage::Event(ServerEvent::Edit(m.message)));
 
         self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(from_device));
 

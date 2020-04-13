@@ -29,6 +29,7 @@ message ServerEvent {
         AddRoom add_room = 7;
         structures.CommunityStructure add_community = 8;
         RemoveCommunity remove_community = 9;
+        types.None ClientReadyError = 10;
     }
 }
 
