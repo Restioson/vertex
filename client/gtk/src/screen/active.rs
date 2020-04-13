@@ -120,8 +120,6 @@ impl client::ClientUi for Ui {
                 .build_widget_event()
         );
 
-        // Add the hint text - on focus, remove it, and on defocus add it.
-        // TODO check if there was text & also borked
         let client_cloned = client.clone();
         self.message_entry.connect_focus_out_event(
             move |entry, _| {
