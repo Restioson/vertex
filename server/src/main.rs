@@ -237,6 +237,7 @@ async fn main() {
     let token = warp::path("token").and(create_token.or(revoke_token).or(refresh_token));
     let client = warp::path("client").and(authenticate.or(register.or(token)));
     let routes = invite.or(client);
+    let routes = warp::path("vertex").and(routes);
 
     info!("Vertex server starting on addr {}", config.ip);
 

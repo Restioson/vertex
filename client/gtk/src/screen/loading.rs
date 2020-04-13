@@ -21,7 +21,7 @@ pub fn build_error<F, Fut>(error: String, retry: F) -> gtk::Viewport
           Fut: Future<Output = ()> + 'static
 {
     lazy_static! {
-        static ref GLADE: Glade = Glade::open("/loading/error.glade").unwrap();
+        static ref GLADE: Glade = Glade::open("loading/error.glade").unwrap();
     }
 
     let builder: gtk::Builder = GLADE.builder();

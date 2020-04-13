@@ -40,7 +40,7 @@ impl Client {
         let request = serde_urlencoded::to_string(Login { device, token: token.clone() })
             .expect("failed to encode authenticate request");
 
-        let url = self.server.url().join(&format!("client/authenticate?{}", request))?;
+        let url = self.server.url().join(&format!("authenticate?{}", request))?;
 
         let key: [u8; 16] = rand::random();
         let key = base64::encode(&key);
@@ -89,7 +89,7 @@ impl Client {
     ) -> Result<UserId> {
         let response = self.post_auth(
             AuthRequest::RegisterUser(RegisterUser { credentials, display_name }),
-            self.server.url().join("client/register")?,
+            self.server.url().join("register")?,
         ).await?;
 
         match response? {
@@ -105,7 +105,7 @@ impl Client {
     ) -> Result<NewToken> {
         let response = self.post_auth(
             AuthRequest::CreateToken(CreateToken { credentials, options }),
-            self.server.url().join("client/token/create")?,
+            self.server.url().join("token/create")?,
         ).await?;
 
         match response? {
@@ -121,7 +121,7 @@ impl Client {
     ) -> Result<()> {
         let response = self.post_auth(
             AuthRequest::RefreshToken(RefreshToken { credentials, device }),
-            self.server.url().join("client/token/refresh")?,
+            self.server.url().join("token/refresh")?,
         ).await?;
 
         match response? {
@@ -137,7 +137,7 @@ impl Client {
     ) -> Result<()> {
         let response = self.post_auth(
             AuthRequest::RevokeToken(RevokeToken { credentials, device }),
-            self.server.url().join("client/token/revoke")?,
+            self.server.url().join("token/revoke")?,
         ).await?;
 
         match response? {

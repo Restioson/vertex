@@ -130,6 +130,9 @@ impl Server {
         if !url.ends_with('/') {
             url.push('/');
         }
+
+        url.push_str("vertex/client/");
+
         Ok(Server(Url::parse(&url)?))
     }
 }
