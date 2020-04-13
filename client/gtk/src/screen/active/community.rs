@@ -34,7 +34,8 @@ impl CommunityEntryWidget {
         community_name.set_text(&name);
 
         let community_motd: gtk::Label = builder.get_object("community_motd").unwrap();
-        community_motd.set_text("5 users online");
+        community_motd.set_text("A Vertex community");
+        // TODO do something with the motd
 
         let room_list: gtk::ListBox = builder.get_object("room_list").unwrap();
 
