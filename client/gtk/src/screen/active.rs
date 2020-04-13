@@ -174,8 +174,6 @@ impl client::ClientUi for Ui {
                     return Inhibit(false);
                 }
 
-                // Do this later idc
-
                 let entry = entry.clone();
                 scheduler::spawn(async move {
                     if let Some(selected_room) = client.selected_room().await {
