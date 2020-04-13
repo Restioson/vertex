@@ -180,8 +180,8 @@ fn build_invite_embed(client: &Client<Ui>, embed: InviteEmbed) -> gtk::Widget {
     let name_label: gtk::Label = builder.get_object("community_name").unwrap();
     name_label.set_text(&embed.name);
 
-    let motd_label: gtk::Label = builder.get_object("community_motd").unwrap();
-    motd_label.set_text("5 members");
+    let motd_label: gtk::Label = builder.get_object("community_description").unwrap();
+    motd_label.set_text(&embed.description);
 
     let join_button: gtk::Button = builder.get_object("join_button").unwrap();
     join_button.connect_button_release_event(

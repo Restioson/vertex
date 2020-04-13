@@ -8,6 +8,7 @@ use std::convert::{TryFrom, TryInto};
 pub struct CommunityStructure {
     pub id: CommunityId,
     pub name: String,
+    pub description: String,
     pub rooms: Vec<RoomStructure>,
 }
 
@@ -16,6 +17,7 @@ impl From<CommunityStructure> for proto::structures::CommunityStructure {
         proto::structures::CommunityStructure {
             id: Some(community.id.into()),
             name: community.name,
+            description: community.description,
             rooms: community.rooms.into_iter().map(Into::into).collect(),
         }
     }
@@ -34,6 +36,7 @@ impl TryFrom<proto::structures::CommunityStructure> for CommunityStructure {
         Ok(CommunityStructure {
             id: community.id?.try_into()?,
             name: community.name,
+            description: community.description,
             rooms,
         })
     }

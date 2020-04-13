@@ -17,9 +17,18 @@ lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Community> = DashMap::new();
 }
 
+/// Community info that is just read/updated very quickly (no logic like in the actor). Used to avoid
+/// calls back and forth to the actor for simple things like getting the community name.
 pub struct Community {
     pub actor: Address<CommunityActor>,
     pub name: String,
+    pub description: Option<String>,
+}
+
+impl Community {
+    pub fn description(&self) -> String {
+        self.description.clone().unwrap_or_else(|| "A Vertex community".to_string())
+    }
 }
 
 pub struct Connect {
@@ -94,7 +103,11 @@ impl CommunityActor {
 
     pub fn create_and_spawn(name: String, id: CommunityId, database: Database, creator: UserId) {
         let addr = CommunityActor::new(id, database, creator).spawn();
-        let community = Community { actor: addr, name };
+        let community = Community {
+            actor: addr,
+            name,
+            description: None
+        };
         COMMUNITIES.insert(id, community);
     }
 
@@ -116,6 +129,7 @@ impl CommunityActor {
         let community = Community {
             actor: addr,
             name: record.name,
+            description: record.description,
         };
 
         COMMUNITIES.insert(record.id, community);
@@ -238,9 +252,13 @@ impl Handler<Join> for CommunityActor {
 
             self.online_members.insert(join.user);
 
+            let info = COMMUNITIES.get(&self.id).unwrap();
+            let description = info.description();
+
             Ok(Ok(CommunityStructure {
                 id: self.id,
-                name: COMMUNITIES.get(&self.id).unwrap().name.clone(),
+                name: info.name.clone(),
+                description,
                 rooms: self
                     .rooms
                     .iter()

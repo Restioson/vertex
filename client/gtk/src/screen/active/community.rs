@@ -21,7 +21,7 @@ pub struct CommunityEntryWidget {
 }
 
 impl CommunityEntryWidget {
-    pub fn build(name: String) -> Self {
+    pub fn build(name: String, description: String) -> Self {
         lazy_static! {
             static ref GLADE: Glade = Glade::open("active/community_entry.glade").unwrap();
         }
@@ -33,8 +33,8 @@ impl CommunityEntryWidget {
         let community_name: gtk::Label = builder.get_object("community_name").unwrap();
         community_name.set_text(&name);
 
-        let community_motd: gtk::Label = builder.get_object("community_motd").unwrap();
-        community_motd.set_text("A Vertex community");
+        let community_description: gtk::Label = builder.get_object("community_description").unwrap();
+        community_description.set_text(&description);
         // TODO do something with the motd
 
         let room_list: gtk::ListBox = builder.get_object("room_list").unwrap();

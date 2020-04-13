@@ -99,6 +99,7 @@ pub enum Error {
     AlreadyInCommunity,
     TooManyInviteCodes,
     InvalidMessageSelector,
+    TextTooLong,
 }
 
 impl fmt::Display for Error {
@@ -121,6 +122,7 @@ impl fmt::Display for Error {
             AlreadyInCommunity => write!(f, "Already in community"),
             TooManyInviteCodes => write!(f, "Too many invite codes"),
             InvalidMessageSelector => write!(f, "Invalid message selector"),
+            TextTooLong => write!(f, "Text too long"),
         }
     }
 }
@@ -161,6 +163,7 @@ impl From<Error> for proto::responses::Error {
                 AlreadyInCommunity,
                 TooManyInviteCodes,
                 InvalidMessageSelector,
+                TextTooLong,
             }
         }
     }
@@ -188,6 +191,7 @@ impl TryFrom<proto::responses::Error> for Error {
                 AlreadyInCommunity,
                 TooManyInviteCodes,
                 InvalidMessageSelector,
+                TextTooLong,
             }
         }
     }

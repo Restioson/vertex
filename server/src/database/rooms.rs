@@ -33,7 +33,6 @@ impl TryFrom<Row> for RoomRecord {
 }
 
 impl Database {
-    // TODO(room_persistence): load at boot
     pub async fn get_room(&self, id: RoomId) -> DbResult<Option<RoomRecord>> {
         let row = self
             .query_opt("SELECT * FROM rooms WHERE id=$1", &[&id.0])

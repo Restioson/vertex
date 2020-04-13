@@ -76,6 +76,7 @@ pub struct OpenGraphEmbed {
 pub struct InviteEmbed {
     pub code: InviteCode,
     pub name: String,
+    pub description: String,
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +92,7 @@ fn build_embed(url: String, metadata: LinkMetadata) -> Option<MessageEmbed> {
             let embed = InviteEmbed {
                 code: invite.code,
                 name: invite.name,
+                description: invite.description,
             };
             Some(MessageEmbed::Invite(embed))
         }
@@ -137,10 +139,14 @@ fn parse_link_metadata(mut props: HashMap<String, String>) -> LinkMetadata {
         invite: None,
     };
 
-    let invite_details = (props.remove("vertex:invite_code"), props.remove("vertex:invite_name"));
-    if let (Some(code), Some(name)) = invite_details {
+    let invite_details = (
+        props.remove("vertex:invite_code"),
+        props.remove("vertex:invite_name"),
+        props.remove("vertex:invite_description"),
+    );
+    if let (Some(code), Some(name), Some(description)) = invite_details {
         let code = InviteCode(code);
-        metadata.invite = Some(InviteMeta { code, name })
+        metadata.invite = Some(InviteMeta { code, name, description })
     }
 
     if let Some(title) = props.remove("og:title") {
@@ -183,4 +189,5 @@ struct OpenGraphMeta {
 struct InviteMeta {
     code: InviteCode,
     name: String,
+    description: String,
 }

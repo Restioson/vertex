@@ -52,5 +52,6 @@ enum Error {
     AlreadyInCommunity = 13;
     TooManyInviteCodes = 14;
     InvalidMessageSelector = 15;
+    TextTooLong = 16;
 }
 

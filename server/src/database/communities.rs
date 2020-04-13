@@ -8,13 +8,15 @@ use vertex::prelude::*;
 pub(super) const CREATE_COMMUNITIES_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS communities (
         id   UUID PRIMARY KEY,
-        name VARCHAR NOT NULL
+        name VARCHAR NOT NULL,
+        description VARCHAR
     )";
 
 #[derive(Debug, Clone)]
 pub struct CommunityRecord {
     pub id: CommunityId,
     pub name: String,
+    pub description: Option<String>,
 }
 
 impl TryFrom<Row> for CommunityRecord {
@@ -24,12 +26,12 @@ impl TryFrom<Row> for CommunityRecord {
         Ok(CommunityRecord {
             id: CommunityId(row.try_get("id")?),
             name: row.try_get("name")?,
+            description: row.try_get("description")?,
         })
     }
 }
 
 impl Database {
-    // TODO(room_persistence): load at boot
     pub async fn get_community_metadata(
         &self,
         id: CommunityId,
@@ -45,7 +47,7 @@ impl Database {
     }
 
     pub async fn create_community(&self, name: String) -> DbResult<CommunityId> {
-        const STMT: &str = "INSERT INTO communities (id, name) VALUES ($1, $2)";
+        const STMT: &str = "INSERT INTO communities (id, name, description) VALUES ($1, $2, NULL)";
         let id = Uuid::new_v4();
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(STMT).await?;

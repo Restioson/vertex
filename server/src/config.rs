@@ -11,6 +11,8 @@ use std::str::FromStr;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
+    #[serde(default = "max_message_len")]
+    pub max_message_len: u32,
     #[serde(default = "max_password_len")]
     pub max_password_len: u16,
     #[serde(default = "min_password_len")]
@@ -39,6 +41,10 @@ pub struct Config {
     pub https: bool,
     #[serde(default = "ip")]
     pub ip: SocketAddr,
+}
+
+fn max_message_len() -> u32 {
+    2500
 }
 
 fn max_password_len() -> u16 {

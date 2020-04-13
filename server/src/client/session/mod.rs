@@ -318,9 +318,11 @@ impl ActiveSession {
             })
             .unwrap();
 
+            let info = COMMUNITIES.get(id).unwrap();
             let structure = CommunityStructure {
                 id: *id,
-                name: COMMUNITIES.get(id).unwrap().name.clone(),
+                name: info.name.clone(),
+                description: info.description(),
                 rooms,
             };
 

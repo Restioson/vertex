@@ -281,7 +281,7 @@ popover {
   font-weight: 600;
 }
 
-#active #message #invite #community_motd {
+#active #message #invite #community_description {
   color: #a0a0a0;
   font-size: 12px;
   font-style: italic;
@@ -353,7 +353,7 @@ popover {
   font-weight: 600;
 }
 
-#active #sidebar #community_header #community_motd {
+#active #sidebar #community_header #community_description_box {
   color: #a0a0a0;
   font-size: 12px;
   font-style: italic;

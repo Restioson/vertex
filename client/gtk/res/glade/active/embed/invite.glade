@@ -65,8 +65,8 @@
               </packing>
             </child>
             <child>
-              <object class="GtkLabel" id="community_motd">
-                <property name="name">community_motd</property>
+              <object class="GtkLabel" id="community_description">
+                <property name="name">community_description</property>
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>

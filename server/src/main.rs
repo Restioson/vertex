@@ -388,6 +388,7 @@ async fn invite(
             <head>
                 <meta property="vertex:invite_code" content="{invite_code}"/>
                 <meta property="vertex:invite_name" content="{community}"/>
+                <meta property="vertex:invite_description" content="{description}"/>
                 <meta property="og:title" content="Vertex Community Invite"/>
                 <meta property="og:description" content="You are invited to join {community} on Vertex!"/>
             </head>
@@ -403,6 +404,7 @@ async fn invite(
         // We just use JS as a workaround
         invite_code = invite_code,
         community = community_record.name,
+        description = community_record.description,
     );
 
     Ok(Ok(html))

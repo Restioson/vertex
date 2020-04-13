@@ -92,6 +92,10 @@ impl<'a> RequestHandler<'a> {
             return Err(Error::InvalidCommunity);
         }
 
+        if message.content.len() > self.session.global.config.max_message_len as usize {
+            return Err(Error::TextTooLong)
+        }
+
         match COMMUNITIES.get(&message.to_community) {
             Some(community) => {
                 let message = IdentifiedMessage {
@@ -118,6 +122,10 @@ impl<'a> RequestHandler<'a> {
 
         if !self.session.in_community(&edit.community) {
             return Err(Error::InvalidCommunity);
+        }
+
+        if edit.new_content.len() > self.session.global.config.max_message_len as usize {
+            return Err(Error::TextTooLong)
         }
 
         if let Some(community) = COMMUNITIES.get(&edit.community) {

@@ -46,7 +46,7 @@ pub trait ClientUi: Sized + Clone + 'static {
 
     fn deselect_room(&self);
 
-    fn add_community(&self, name: String) -> Self::CommunityEntryWidget;
+    fn add_community(&self, name: String, description: String) -> Self::CommunityEntryWidget;
 
     fn window_focused(&self) -> bool;
 }
@@ -233,7 +233,7 @@ impl<Ui: ClientUi> Client<Ui> {
     }
 
     async fn add_community(&self, community: CommunityStructure) -> CommunityEntry<Ui> {
-        let widget = self.ui.add_community(community.name.clone());
+        let widget = self.ui.add_community(community.name.clone(), community.description.clone());
 
         let entry: CommunityEntry<Ui> = CommunityEntry::new(
             self.clone(),

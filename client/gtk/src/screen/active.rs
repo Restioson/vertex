@@ -260,8 +260,8 @@ impl client::ClientUi for Ui {
         self.room_name.set_text("");
     }
 
-    fn add_community(&self, name: String) -> CommunityEntryWidget {
-        let entry = CommunityEntryWidget::build(name);
+    fn add_community(&self, name: String, description: String) -> CommunityEntryWidget {
+        let entry = CommunityEntryWidget::build(name, description);
         self.communities.add(&entry.expander.widget);
         entry.expander.widget.show_all();
 
