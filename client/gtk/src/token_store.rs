@@ -1,5 +1,4 @@
 use keyring::{Keyring, KeyringError};
-use serde_json;
 
 use crate::AuthParameters;
 

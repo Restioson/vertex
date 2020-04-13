@@ -356,8 +356,9 @@ impl ActiveSession {
 
             if let Err(not_until) = ratelimiter.check_key(&self.device) {
                 self.send(ServerMessage::RateLimited {
-                    ready_in: not_until.wait_time_from(Instant::now())
-                }).await?;
+                    ready_in: not_until.wait_time_from(Instant::now()),
+                })
+                .await?;
 
                 return Ok(());
             }
@@ -385,11 +386,8 @@ impl ActiveSession {
             };
             let result = handler.handle_request(msg.request).await;
 
-            self.send(ServerMessage::Response {
-                id: msg.id,
-                result,
-            })
-            .await?;
+            self.send(ServerMessage::Response { id: msg.id, result })
+                .await?;
         } else if message.is_close() {
             ctx.stop();
         } else {

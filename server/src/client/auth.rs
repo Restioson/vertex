@@ -99,7 +99,7 @@ impl Authenticator {
     ) -> AuthResponse {
         let user = match self.verify_credentials(credentials).await? {
             AuthOk::User(user) => user,
-            _ => return AuthResponse::Err(AuthError::InvalidMessage)
+            _ => return AuthResponse::Err(AuthError::InvalidMessage),
         };
 
         let mut token_bytes: [u8; 32] = [0; 32]; // 256 bits
@@ -129,7 +129,10 @@ impl Authenticator {
             panic!("Newly generated UUID conflicts with another!");
         }
 
-        AuthResponse::Ok(AuthOk::Token(NewToken { device, token: auth_token }))
+        AuthResponse::Ok(AuthOk::Token(NewToken {
+            device,
+            token: auth_token,
+        }))
     }
 
     pub async fn refresh_token(

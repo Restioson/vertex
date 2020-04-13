@@ -42,7 +42,7 @@ impl MessageGroupWidget {
     }
 
     pub fn can_combine(&self, user: UserId, time: DateTime<Utc>) -> bool {
-        self.author == user && (time - self.origin_time.clone()).num_minutes().abs() < 10
+        self.author == user && (time - self.origin_time).num_minutes().abs() < 10
     }
 
     pub fn add_message(&self, content: Option<String>, side: ChatSide) -> MessageEntryWidget {

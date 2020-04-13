@@ -15,7 +15,9 @@ pub enum ServerMessage {
         result: ResponseResult,
     },
     MalformedMessage,
-    RateLimited { ready_in: Duration },
+    RateLimited {
+        ready_in: Duration,
+    },
 }
 
 impl ServerMessage {
@@ -40,15 +42,13 @@ impl From<ServerMessage> for proto::events::ServerMessage {
                     Err(err) => {
                         let err: proto::responses::Error = err.into();
                         proto::responses::response::Response::Error(err as i32)
-                    },
+                    }
                 }),
             }),
             MalformedMessage => Message::MalformedMessage(proto::types::None {}),
-            RateLimited { ready_in } => {
-                Message::RateLimited(proto::events::RateLimited {
-                    ready_in_ms: ready_in.as_millis().try_into().unwrap_or(std::u32::MAX)
-                })
-            }
+            RateLimited { ready_in } => Message::RateLimited(proto::events::RateLimited {
+                ready_in_ms: ready_in.as_millis().try_into().unwrap_or(std::u32::MAX),
+            }),
         };
 
         proto::events::ServerMessage {
@@ -81,9 +81,9 @@ impl TryFrom<proto::events::ServerMessage> for ServerMessage {
                 }
             },
             MalformedMessage(_) => ServerMessage::MalformedMessage,
-            RateLimited(proto::events::RateLimited { ready_in_ms }) => {
-                ServerMessage::RateLimited { ready_in: Duration::from_millis(ready_in_ms as u64) }
-            }
+            RateLimited(proto::events::RateLimited { ready_in_ms }) => ServerMessage::RateLimited {
+                ready_in: Duration::from_millis(ready_in_ms as u64),
+            },
         })
     }
 }

@@ -16,6 +16,12 @@ pub struct EmbedCache {
     cache: SharedMut<HashMap<EmbedKey, Option<MessageEmbed>>>,
 }
 
+impl Default for EmbedCache {
+    fn default() -> EmbedCache {
+        EmbedCache::new()
+    }
+}
+
 impl EmbedCache {
     pub fn new() -> EmbedCache {
         EmbedCache {

@@ -84,11 +84,8 @@ impl Database {
 
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(STMT).await?;
-        let args: &[&(dyn ToSql + Sync)] = &[
-            &user.0,
-            &(WatchLevel::default() as u8 as i8),
-            &community.0,
-        ];
+        let args: &[&(dyn ToSql + Sync)] =
+            &[&user.0, &(WatchLevel::default() as u8 as i8), &community.0];
         let res = conn.client.execute(&stmt, args).await;
 
         handle_sql_error(res).map(|res| {
@@ -117,11 +114,8 @@ impl Database {
 
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(STMT).await?;
-        let args: &[&(dyn ToSql + Sync)] = &[
-            &room.0,
-            &(WatchLevel::default() as u8 as i8),
-            &community.0,
-        ];
+        let args: &[&(dyn ToSql + Sync)] =
+            &[&room.0, &(WatchLevel::default() as u8 as i8), &community.0];
         let res = conn.client.execute(&stmt, args).await;
 
         handle_sql_error(res)
@@ -152,10 +146,12 @@ impl Database {
     }
 
     pub async fn get_last_read(&self, user: UserId, room: RoomId) -> DbResult<Option<MessageId>> {
-        const QUERY: &str = "SELECT last_read FROM user_room_states WHERE user_id = $1 AND room = $2";
+        const QUERY: &str =
+            "SELECT last_read FROM user_room_states WHERE user_id = $1 AND room = $2";
 
         let ord = match self.query_opt(QUERY, &[&user.0, &room.0]).await? {
-            Some(row) => row.try_get::<&str, Option<i64>>("last_read")?
+            Some(row) => row
+                .try_get::<&str, Option<i64>>("last_read")?
                 .map(|last_read| MessageOrdinal(last_read as u64)),
             None => None,
         };

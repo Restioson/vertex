@@ -28,6 +28,8 @@ message ClientRequest {
         ChangeDisplayName change_display_name = 15;
         ChangePassword change_password = 16;
         GetProfile get_profile = 17;
+        ChangeCommunityName change_community_name = 18;
+        ChangeCommunityDescription change_community_description = 19;
     }
 }
 
@@ -108,4 +110,12 @@ message ChangePassword {
 
 message GetProfile {
     types.UserId user = 1;
+}
+
+message ChangeCommunityName {
+    string new = 1;
+}
+
+message ChangeCommunityDescription {
+    string new = 1;
 }

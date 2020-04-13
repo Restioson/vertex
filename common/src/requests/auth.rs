@@ -2,10 +2,10 @@ use crate::proto;
 use crate::proto::DeserializeError;
 use crate::structures::{Credentials, TokenCreationOptions};
 use crate::types::*;
+use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
-use std::ops::Try;
 use std::fmt;
-use serde::{Serialize, Deserialize};
+use std::ops::Try;
 
 /// Not protobuf, but encoded in the url of the endpoint
 #[derive(Debug, Clone, Serialize, Deserialize)]

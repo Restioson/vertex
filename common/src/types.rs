@@ -1,8 +1,8 @@
 use crate::proto;
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 
 macro_rules! impl_protobuf_conversions {
     ($($name:ident $(,)?)*) => {

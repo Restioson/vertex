@@ -27,7 +27,11 @@ pub struct Community {
 
 impl Community {
     pub fn description(&self) -> String {
-        self.description.clone().unwrap_or_else(|| "A Vertex community".to_string())
+        Community::desc_or_default(&self.description)
+    }
+
+    pub fn desc_or_default(desc: &Option<String>) -> String {
+        desc.clone().unwrap_or_else(|| "A Vertex community".to_string())
     }
 }
 
@@ -106,7 +110,7 @@ impl CommunityActor {
         let community = Community {
             actor: addr,
             name,
-            description: None
+            description: None,
         };
         COMMUNITIES.insert(id, community);
     }
@@ -198,8 +202,16 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
             let author = identified.user;
             let time_sent = Utc::now();
 
-            let (_ord, profile_version) = self.database
-                .create_message(id, author, message.to_community, message.to_room, time_sent, message.content.clone())
+            let (_ord, profile_version) = self
+                .database
+                .create_message(
+                    id,
+                    author,
+                    message.to_community,
+                    message.to_room,
+                    time_sent,
+                    message.content.clone(),
+                )
                 .await?;
 
             let from_device = identified.device;
@@ -220,17 +232,13 @@ impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
                 Some(from_device),
             );
 
-            Ok(MessageConfirmation { id, time_sent, })
+            Ok(MessageConfirmation { id, time_sent })
         }
     }
 }
 
 impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
-    fn handle(
-        &mut self,
-        m: IdentifiedMessage<Edit>,
-        _: &mut Context<Self>,
-    ) -> Result<(), Error> {
+    fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) -> Result<(), Error> {
         let from_device = m.device;
         let send = SendMessage(ServerMessage::Event(ServerEvent::Edit(m.message))); // TODO watching
 

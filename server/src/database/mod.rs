@@ -53,7 +53,10 @@ impl From<DatabaseError> for Error {
 
         match e.0 {
             l337::Error::Internal(err) => {
-                error!("Database connection pooling error: {:?}\n {:#?}", err, backtrace);
+                error!(
+                    "Database connection pooling error: {:?}\n {:#?}",
+                    err, backtrace
+                );
             }
             l337::Error::External(err) => {
                 error!("Database error: {:?}\n {:#?}", err, backtrace);

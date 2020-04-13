@@ -3,29 +3,29 @@
 use std::convert::Infallible;
 use std::fs;
 use std::fs::OpenOptions;
+use std::num::NonZeroU32;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::num::NonZeroU32;
 
+use arc_swap::ArcSwap;
 use directories::ProjectDirs;
 use futures::StreamExt;
+use governor::clock::DefaultClock;
+use governor::state::keyed::DashMapStateStore;
+use governor::{Quota, RateLimiter};
 use log::{info, LevelFilter};
+use warp::reply::Reply;
 use warp::Filter;
 use xtra::prelude::*;
 use xtra::Disconnected;
-use arc_swap::ArcSwap;
-use warp::reply::Reply;
-use governor::{RateLimiter, Quota};
-use governor::state::keyed::DashMapStateStore;
-use governor::clock::DefaultClock;
 
 use client::ActiveSession;
 use database::Database;
 use vertex::prelude::*;
 
 use crate::client::{session::WebSocketMessage, Authenticator};
-use crate::community::CommunityActor;
+use crate::community::{CommunityActor, Community};
 use crate::config::Config;
 use crate::database::{DbResult, MalformedInviteCode};
 
@@ -70,13 +70,11 @@ where
 }
 
 fn new_ratelimiter() -> RateLimiter<DeviceId, DashMapStateStore<DeviceId>, DefaultClock> {
-    RateLimiter::dashmap(
-        Quota::per_minute(NonZeroU32::new(90u32).unwrap())
-    )
+    RateLimiter::dashmap(Quota::per_minute(NonZeroU32::new(90u32).unwrap()))
 }
 
 async fn refresh_ratelimiter(
-    rl: ArcSwap<RateLimiter<DeviceId, DashMapStateStore<DeviceId>, DefaultClock>>
+    rl: ArcSwap<RateLimiter<DeviceId, DashMapStateStore<DeviceId>, DefaultClock>>,
 ) {
     use tokio::time::Instant;
     let duration = Duration::from_secs(60 * 60); // 1/hr
@@ -203,31 +201,33 @@ async fn main() {
         .and(global.clone())
         .and(warp::post())
         .and(warp::body::bytes())
-        .and_then(|global, bytes| async move { reply_protobuf(self::register(global, bytes).await) });
+        .and_then(
+            |global, bytes| async move { reply_protobuf(self::register(global, bytes).await) },
+        );
 
     let create_token = warp::path("create")
         .and(global.clone())
         .and(warp::post())
         .and(warp::body::bytes())
-        .and_then(
-            |global, bytes| async move { reply_protobuf(self::create_token(global, bytes).await) },
-        );
+        .and_then(|global, bytes| async move {
+            reply_protobuf(self::create_token(global, bytes).await)
+        });
 
     let revoke_token = warp::path("revoke")
         .and(global.clone())
         .and(warp::post())
         .and(warp::body::bytes())
-        .and_then(
-            |global, bytes| async move { reply_protobuf(self::revoke_token(global, bytes).await) },
-        );
+        .and_then(|global, bytes| async move {
+            reply_protobuf(self::revoke_token(global, bytes).await)
+        });
 
     let refresh_token = warp::path("refresh")
         .and(global.clone())
         .and(warp::post())
         .and(warp::body::bytes())
-        .and_then(
-            |global, bytes| async move { reply_protobuf(self::refresh_token(global, bytes).await) },
-        );
+        .and_then(|global, bytes| async move {
+            reply_protobuf(self::refresh_token(global, bytes).await)
+        });
 
     let invite = warp::path!("invite" / String)
         //  .and(warp::header::<String>("host")) // https://github.com/seanmonstar/warp/issues/432
@@ -272,9 +272,7 @@ async fn login(
         global: global.clone(),
     };
 
-    let (user, device, perms) = authenticator
-        .login(login.device, login.token)
-        .await?;
+    let (user, device, perms) = authenticator.login(login.device, login.token).await?;
 
     match client::session::insert(global.database.clone(), user, device).await? {
         Ok(_) => {
@@ -404,7 +402,7 @@ async fn invite(
         // We just use JS as a workaround
         invite_code = invite_code,
         community = community_record.name,
-        description = community_record.description,
+        description = Community::desc_or_default(&community_record.description),
     );
 
     Ok(Ok(html))

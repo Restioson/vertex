@@ -197,7 +197,7 @@ impl client::ClientUi for Ui {
                     let new_bottom = adjustment.get_upper() - adjustment.get_page_size();
                     let new_top = adjustment.get_lower();
 
-                    if old.bottom == new_bottom {
+                    if (old.bottom - new_bottom).abs() < std::f64::EPSILON {
                         return;
                     }
 
@@ -210,7 +210,8 @@ impl client::ClientUi for Ui {
                         let mut val = (new_bottom - old.bottom) + old_value;
 
                         if on_top {
-                            if old_value != new_top && val > adjustment.get_step_increment() {
+                            let not_equal = (old_value - new_top).abs() > std::f64::EPSILON;
+                            if not_equal && val > adjustment.get_step_increment() {
                                 val -= adjustment.get_step_increment();
                             }
                             adjustment.set_value(val);

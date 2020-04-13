@@ -119,6 +119,12 @@ pub enum ClientRequest {
         new_password: String,
     },
     GetProfile(UserId),
+    ChangeCommunityName {
+        new: String,
+    },
+    ChangeCommunityDescription {
+        new: String,
+    },
 }
 
 impl From<ClientRequest> for proto::requests::active::ClientRequest {
@@ -199,6 +205,12 @@ impl From<ClientRequest> for proto::requests::active::ClientRequest {
             GetProfile(id) => Request::GetProfile(request::GetProfile {
                 user: Some(id.into()),
             }),
+            ChangeCommunityName { new } => {
+                Request::ChangeCommunityName(request::ChangeCommunityName { new })
+            }
+            ChangeCommunityDescription { new } => {
+                Request::ChangeCommunityDescription(request::ChangeCommunityDescription { new })
+            }
         };
 
         request::ClientRequest {
@@ -274,6 +286,10 @@ impl TryFrom<proto::requests::active::ClientRequest> for ClientRequest {
                 new_password: change.new_password,
             },
             GetProfile(get) => ClientRequest::GetProfile(get.user?.try_into()?),
+            ChangeCommunityName(change) => ClientRequest::ChangeCommunityName { new: change.new },
+            ChangeCommunityDescription(change) => {
+                ClientRequest::ChangeCommunityDescription { new: change.new }
+            }
         };
 
         Ok(val)

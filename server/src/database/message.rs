@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use futures::{Stream, TryStream, TryStreamExt};
 use tokio_postgres::Row;
 
-use vertex::prelude::*;
 use crate::database::{Database, DatabaseError, DbResult};
+use vertex::prelude::*;
 
 /// Max messages the server will return at one time
 const SERVER_MAX: usize = 50;
@@ -119,9 +119,7 @@ impl Database {
     pub async fn get_message_id(&self, ord: MessageOrdinal) -> DbResult<Option<MessageId>> {
         const QUERY: &str = "SELECT id FROM messages WHERE ord = $1";
         match self.query_opt(QUERY, &[&(ord.0 as i64)]).await? {
-            Some(row) => Ok(Some(
-                MessageId(row.try_get("id")?),
-            )),
+            Some(row) => Ok(Some(MessageId(row.try_get("id")?))),
             None => Ok(None),
         }
     }
@@ -175,15 +173,17 @@ impl Database {
             comparator
         );
 
-        let stream = self.query_stream(
-            &query,
-            &[
-                &community.0,
-                &room.0,
-                &(count.min(SERVER_MAX) as i64),
-                &(bound_message.0 as i64),
-            ],
-        ).await?;
+        let stream = self
+            .query_stream(
+                &query,
+                &[
+                    &community.0,
+                    &room.0,
+                    &(count.min(SERVER_MAX) as i64),
+                    &(bound_message.0 as i64),
+                ],
+            )
+            .await?;
 
         let stream = stream
             .and_then(|row| async move {

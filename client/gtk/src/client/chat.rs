@@ -171,7 +171,7 @@ impl<Ui: ClientUi> Chat<Ui> {
             author: message.author,
             profile: self.client.profiles.get_or_default(message.author, message.author_profile_version).await,
             text: message.content.clone(),
-            time: message.time_sent.clone(),
+            time: message.time_sent,
         }
     }
 
@@ -186,7 +186,7 @@ impl<Ui: ClientUi> Chat<Ui> {
         widget
     }
 
-    pub async fn push_pending<'a>(&'a self, content: MessageContent) -> PendingMessageHandle<'a, Ui> {
+    pub async fn push_pending(&self, content: MessageContent) -> PendingMessageHandle<'_, Ui> {
         let mut state = self.state.write().await;
 
         let widget = state.push_widget(content, ChatSide::Front);

@@ -4,11 +4,11 @@ use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
 use xtra::Context;
 
-use crate::{auth, handle_disconnected, IdentifiedMessage};
-use crate::client::ActiveSession;
 use crate::client::session::{manager, UserCommunity, UserRoom};
-use crate::community::COMMUNITIES;
+use crate::client::ActiveSession;
 use crate::community::CommunityActor;
+use crate::community::COMMUNITIES;
+use crate::{auth, handle_disconnected, IdentifiedMessage};
 
 use super::*;
 
@@ -46,8 +46,14 @@ impl<'a> RequestHandler<'a> {
                 community,
                 expiration_datetime,
             } => self.create_invite(community, expiration_datetime).await,
-            ClientRequest::GetRoomUpdate { community, room, last_received, message_count } => {
-                self.get_room_update(community, room, last_received, message_count).await
+            ClientRequest::GetRoomUpdate {
+                community,
+                room,
+                last_received,
+                message_count,
+            } => {
+                self.get_room_update(community, room, last_received, message_count)
+                    .await
             }
             ClientRequest::SelectRoom { community, room } => {
                 self.select_room(community, room).await
@@ -93,7 +99,7 @@ impl<'a> RequestHandler<'a> {
         }
 
         if message.content.len() > self.session.global.config.max_message_len as usize {
-            return Err(Error::TextTooLong)
+            return Err(Error::TextTooLong);
         }
 
         match COMMUNITIES.get(&message.to_community) {
@@ -125,7 +131,7 @@ impl<'a> RequestHandler<'a> {
         }
 
         if edit.new_content.len() > self.session.global.config.max_message_len as usize {
-            return Err(Error::TextTooLong)
+            return Err(Error::TextTooLong);
         }
 
         if let Some(community) = COMMUNITIES.get(&edit.community) {
@@ -321,9 +327,7 @@ impl<'a> RequestHandler<'a> {
 
                     Ok(OkResponse::AddCommunity(community))
                 }
-                Err(AddToCommunityError::AlreadyInCommunity) => {
-                    Err(Error::AlreadyInCommunity)
-                }
+                Err(AddToCommunityError::AlreadyInCommunity) => Err(Error::AlreadyInCommunity),
                 Err(AddToCommunityError::InvalidCommunity) => Err(Error::InvalidCommunity),
                 Err(AddToCommunityError::InvalidUser) => Err(Error::InvalidUser),
             }
@@ -425,26 +429,23 @@ impl<'a> RequestHandler<'a> {
         let last_read = db.get_last_read(self.user, room).await?;
 
         let selector = match (last_received, newest_message) {
-            (Some(last_received), _) => Some(
-                MessageSelector::After(
-                    Bound::Exclusive(last_received)
-                )
-            ),
-            (_, Some(newest_message)) => Some(
-                MessageSelector::Before(
-                    Bound::Inclusive(newest_message)
-                )
-            ),
+            (Some(last_received), _) => {
+                Some(MessageSelector::After(Bound::Exclusive(last_received)))
+            }
+            (_, Some(newest_message)) => {
+                Some(MessageSelector::Before(Bound::Inclusive(newest_message)))
+            }
             _ => None,
         };
 
         let new_messages = match selector {
             Some(selector) => {
-                let messages = db.get_messages(community, room, selector, message_count as usize)
+                let messages = db
+                    .get_messages(community, room, selector, message_count as usize)
                     .await?
                     .map_err(|_| Error::InvalidMessageSelector)?;
                 messages.map_messages().try_collect().await?
-            },
+            }
             None => Vec::new(),
         };
 
@@ -497,7 +498,9 @@ impl<'a> RequestHandler<'a> {
             .map_err(|_| Error::InvalidMessageSelector)?;
 
         let messages = stream.map_messages().try_collect().await?;
-        Ok(OkResponse::MessageHistory(MessageHistory::from_newest_to_oldest(messages)))
+        Ok(OkResponse::MessageHistory(
+            MessageHistory::from_newest_to_oldest(messages),
+        ))
     }
 
     async fn set_as_read(self, community: CommunityId, room: RoomId) -> Result<OkResponse, Error> {
