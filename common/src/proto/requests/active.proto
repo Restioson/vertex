@@ -114,8 +114,10 @@ message GetProfile {
 
 message ChangeCommunityName {
     string new = 1;
+    types.CommunityId community = 2;
 }
 
 message ChangeCommunityDescription {
     string new = 1;
+    types.CommunityId community = 2;
 }

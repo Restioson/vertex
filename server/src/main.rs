@@ -25,7 +25,7 @@ use database::Database;
 use vertex::prelude::*;
 
 use crate::client::{session::WebSocketMessage, Authenticator};
-use crate::community::{CommunityActor, Community};
+use crate::community::{Community, CommunityActor};
 use crate::config::Config;
 use crate::database::{DbResult, MalformedInviteCode};
 

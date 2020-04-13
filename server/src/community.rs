@@ -17,6 +17,10 @@ lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Community> = DashMap::new();
 }
 
+pub fn address_of(id: CommunityId) -> Option<Address<CommunityActor>> {
+    COMMUNITIES.get(&id).map(|c| c.actor.clone())
+}
+
 /// Community info that is just read/updated very quickly (no logic like in the actor). Used to avoid
 /// calls back and forth to the actor for simple things like getting the community name.
 pub struct Community {
@@ -31,7 +35,8 @@ impl Community {
     }
 
     pub fn desc_or_default(desc: &Option<String>) -> String {
-        desc.clone().unwrap_or_else(|| "A Vertex community".to_string())
+        desc.clone()
+            .unwrap_or_else(|| "A Vertex community".to_string())
     }
 }
 

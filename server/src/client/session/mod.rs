@@ -10,7 +10,7 @@ use xtra::prelude::*;
 pub use manager::*;
 use vertex::prelude::*;
 
-use crate::community::{Connect, CreateRoom, GetRoomInfo, Join, COMMUNITIES};
+use crate::community::{self, Connect, CreateRoom, GetRoomInfo, Join, COMMUNITIES};
 use crate::database::*;
 use regular_user::*;
 
@@ -188,6 +188,7 @@ impl Handler<ForwardMessage> for ActiveSession {
                     };
 
                     if let Some(msg) = msg {
+                        drop(active_user); // Drop lock
                         if self.send(msg).await.is_err() {
                             ctx.stop()
                         }
@@ -221,6 +222,7 @@ impl Handler<AddRoom> for ActiveSession {
                     structure: add.structure,
                 });
 
+                drop(user); // Drop lock
                 if self.send(msg).await.is_err() {
                     ctx.stop()
                 }
@@ -301,7 +303,7 @@ impl ActiveSession {
         let mut communities = Vec::with_capacity(active.communities.len());
 
         for (id, user_community) in active.communities.iter() {
-            let addr = COMMUNITIES.get(id).unwrap().actor.clone();
+            let addr = community::address_of(*id).unwrap();
             let rooms = addr.send(GetRoomInfo).await.unwrap(); // TODO errors thing
             let rooms = rooms
                 .into_iter()

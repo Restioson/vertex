@@ -103,6 +103,19 @@ fn max_invite_codes_per_community() -> u32 {
     100
 }
 
+pub fn db_config() -> tokio_postgres::Config {
+    const DEFAULT: &str = "host=localhost user=postgres password=postgres dbname=vertex";
+    let path = ProjectDirs::from("", "vertex_chat", "vertex_server")
+        .expect("Error getting project directories")
+        .config_dir()
+        .join("db.conf");
+
+    fs::read_to_string(path)
+        .unwrap_or_else(|_| DEFAULT.to_string())
+        .parse()
+        .expect("db.conf invalid!")
+}
+
 pub fn load_config() -> Config {
     let dirs = ProjectDirs::from("", "vertex_chat", "vertex_server")
         .expect("Error getting project directories");

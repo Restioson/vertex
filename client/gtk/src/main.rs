@@ -240,7 +240,7 @@ impl fmt::Display for Error {
         match self {
             InvalidUrl => write!(f, "Invalid url"),
             Http(http) => if http.is_connect() {
-                write!(f, "Couldn't connect to instance")
+                write!(f, "Couldn't connect to server")
             } else {
                 write!(f, "Network error")
             },

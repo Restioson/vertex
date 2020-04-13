@@ -65,7 +65,7 @@ impl Database {
         Ok(stream)
     }
 
-    pub async fn change_description(
+    pub async fn change_community_description(
         &self,
         id: CommunityId,
         new_description: String,
@@ -73,11 +73,13 @@ impl Database {
         const STMT: &str = "UPDATE communities SET description = $1 WHERE id = $2";
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(STMT).await?;
-        conn.client.execute(&stmt, &[&new_description, &id.0]).await?;
+        conn.client
+            .execute(&stmt, &[&new_description, &id.0])
+            .await?;
         Ok(())
     }
 
-    pub async fn change_name(&self, id: CommunityId, new_name: String) -> DbResult<()> {
+    pub async fn change_community_name(&self, id: CommunityId, new_name: String) -> DbResult<()> {
         const STMT: &str = "UPDATE communities SET name = $1 WHERE id = $2";
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(STMT).await?;

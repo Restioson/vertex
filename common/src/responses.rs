@@ -100,6 +100,7 @@ pub enum Error {
     TooManyInviteCodes,
     InvalidMessageSelector,
     TextTooLong,
+    Unimplemented,
 }
 
 impl fmt::Display for Error {
@@ -123,6 +124,7 @@ impl fmt::Display for Error {
             TooManyInviteCodes => write!(f, "Too many invite codes"),
             InvalidMessageSelector => write!(f, "Invalid message selector"),
             TextTooLong => write!(f, "Text too long"),
+            Unimplemented => write!(f, "Unimplemented API"),
         }
     }
 }
@@ -164,6 +166,7 @@ impl From<Error> for proto::responses::Error {
                 TooManyInviteCodes,
                 InvalidMessageSelector,
                 TextTooLong,
+                Unimplemented,
             }
         }
     }
@@ -192,6 +195,7 @@ impl TryFrom<proto::responses::Error> for Error {
                 TooManyInviteCodes,
                 InvalidMessageSelector,
                 TextTooLong,
+                Unimplemented,
             }
         }
     }

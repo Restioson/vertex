@@ -8,7 +8,7 @@ use crate::client::session::{manager, UserCommunity, UserRoom};
 use crate::client::ActiveSession;
 use crate::community::CommunityActor;
 use crate::community::COMMUNITIES;
-use crate::{auth, handle_disconnected, IdentifiedMessage};
+use crate::{auth, community, handle_disconnected, IdentifiedMessage};
 
 use super::*;
 
@@ -66,7 +66,13 @@ impl<'a> RequestHandler<'a> {
                 count,
             } => self.get_messages(community, room, selector, count).await,
             ClientRequest::SetAsRead { community, room } => self.set_as_read(community, room).await,
-            _ => unimplemented!(),
+            ClientRequest::ChangeCommunityName { new, community } => {
+                self.change_community_name(new, community).await
+            }
+            ClientRequest::ChangeCommunityDescription { new, community } => {
+                self.change_community_description(new, community).await
+            }
+            _ => Err(Error::Unimplemented),
         }
     }
 
@@ -102,15 +108,15 @@ impl<'a> RequestHandler<'a> {
             return Err(Error::TextTooLong);
         }
 
-        match COMMUNITIES.get(&message.to_community) {
+        match community::address_of(message.to_community) {
             Some(community) => {
                 let message = IdentifiedMessage {
                     user: self.user,
                     device: self.device,
                     message,
                 };
+
                 let confirmation = community
-                    .actor
                     .send(message)
                     .await
                     .map_err(handle_disconnected("Community"))??;
@@ -134,14 +140,14 @@ impl<'a> RequestHandler<'a> {
             return Err(Error::TextTooLong);
         }
 
-        if let Some(community) = COMMUNITIES.get(&edit.community) {
+        if let Some(community) = community::address_of(edit.community) {
             let message = IdentifiedMessage {
                 user: self.user,
                 device: self.device,
                 message: edit,
             };
+
             community
-                .actor
                 .send(message)
                 .await
                 .map_err(handle_disconnected("Community"))??;
@@ -293,7 +299,7 @@ impl<'a> RequestHandler<'a> {
     }
 
     async fn join_community_by_id(self, id: CommunityId) -> Result<OkResponse, Error> {
-        if let Some(community) = COMMUNITIES.get(&id) {
+        if let Some(community) = community::address_of(id) {
             let join = Join {
                 user: self.user,
                 device_id: self.device,
@@ -301,16 +307,16 @@ impl<'a> RequestHandler<'a> {
             };
 
             let res = community
-                .actor
                 .send(join)
                 .await
                 .map_err(handle_disconnected("Community"))??;
 
             match res {
                 Ok(community) => {
+                    let db = &self.session.global.database;
+                    let user_community = UserCommunity::load(db, self.user, id).await?;
+
                     if let Some(mut user) = manager::get_active_user_mut(self.user) {
-                        let db = &self.session.global.database;
-                        let user_community = UserCommunity::load(db, self.user, id).await?;
                         user.communities.insert(community.id, user_community);
 
                         let community = community.clone();
@@ -347,13 +353,12 @@ impl<'a> RequestHandler<'a> {
 
         let community_id = community;
 
-        if let Some(community) = COMMUNITIES.get(&community) {
+        if let Some(community) = community::address_of(community) {
             let create = CreateRoom {
                 creator: self.device,
                 name: name.clone(),
             };
             let id = community
-                .actor
                 .send(create)
                 .await
                 .map_err(handle_disconnected("Community"))??;
@@ -514,6 +519,7 @@ impl<'a> RequestHandler<'a> {
         } else {
             return Err(Error::InvalidCommunity);
         }
+        drop(active_user); // Drop lock
 
         let db = &self.session.global.database;
         let res = db.set_room_read(room, self.user).await?;
@@ -525,6 +531,46 @@ impl<'a> RequestHandler<'a> {
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(Error::UserDeleted)
             }
+        }
+    }
+
+    async fn change_community_name(
+        self,
+        new: String,
+        id: CommunityId,
+    ) -> Result<OkResponse, Error> {
+        if !self.session.in_community(&id) {
+            return Err(Error::InvalidCommunity);
+        }
+
+        if let Some(mut community) = COMMUNITIES.get_mut(&id) {
+            community.name = new.clone();
+            drop(community); // Drop lock
+            let db = &self.session.global.database;
+            db.change_community_name(id, new).await?;
+            Ok(OkResponse::NoData)
+        } else {
+            Err(Error::InvalidCommunity)
+        }
+    }
+
+    async fn change_community_description(
+        self,
+        new: String,
+        id: CommunityId,
+    ) -> Result<OkResponse, Error> {
+        if !self.session.in_community(&id) {
+            return Err(Error::InvalidCommunity);
+        }
+
+        if let Some(mut community) = COMMUNITIES.get_mut(&id) {
+            community.description = Some(new.clone());
+            drop(community); // Drop lock
+            let db = &self.session.global.database;
+            db.change_community_description(id, new).await?;
+            Ok(OkResponse::NoData)
+        } else {
+            Err(Error::InvalidCommunity)
         }
     }
 }

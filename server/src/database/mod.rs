@@ -1,7 +1,7 @@
-use std::fs;
+use std::convert::TryFrom;
 use std::time::{Duration, Instant};
 
-use crate::client;
+use crate::{client, config};
 use futures::{Stream, TryStreamExt};
 use l337_postgres::PostgresConnectionManager;
 use log::{error, warn};
@@ -25,7 +25,6 @@ pub use community_membership::*;
 pub use invite_code::*;
 pub use message::*;
 pub use rooms::*;
-use std::convert::TryFrom;
 pub use token::*;
 pub use user::*;
 pub use user_room_states::*;
@@ -83,13 +82,7 @@ pub struct Database {
 
 impl Database {
     pub async fn new() -> DbResult<Self> {
-        let mgr = PostgresConnectionManager::new(
-            fs::read_to_string("db.conf") // TODO use config dirs
-                .expect("db.conf not found")
-                .parse()
-                .unwrap(),
-            NoTls,
-        );
+        let mgr = PostgresConnectionManager::new(config::db_config(), NoTls);
 
         let pool = l337::Pool::new(mgr, Default::default())
             .await

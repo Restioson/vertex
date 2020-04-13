@@ -120,9 +120,11 @@ pub enum ClientRequest {
     },
     GetProfile(UserId),
     ChangeCommunityName {
+        community: CommunityId,
         new: String,
     },
     ChangeCommunityDescription {
+        community: CommunityId,
         new: String,
     },
 }
@@ -205,11 +207,17 @@ impl From<ClientRequest> for proto::requests::active::ClientRequest {
             GetProfile(id) => Request::GetProfile(request::GetProfile {
                 user: Some(id.into()),
             }),
-            ChangeCommunityName { new } => {
-                Request::ChangeCommunityName(request::ChangeCommunityName { new })
+            ChangeCommunityName { new, community } => {
+                Request::ChangeCommunityName(request::ChangeCommunityName {
+                    new,
+                    community: Some(community.into()),
+                })
             }
-            ChangeCommunityDescription { new } => {
-                Request::ChangeCommunityDescription(request::ChangeCommunityDescription { new })
+            ChangeCommunityDescription { new, community } => {
+                Request::ChangeCommunityDescription(request::ChangeCommunityDescription {
+                    new,
+                    community: Some(community.into()),
+                })
             }
         };
 
@@ -286,10 +294,14 @@ impl TryFrom<proto::requests::active::ClientRequest> for ClientRequest {
                 new_password: change.new_password,
             },
             GetProfile(get) => ClientRequest::GetProfile(get.user?.try_into()?),
-            ChangeCommunityName(change) => ClientRequest::ChangeCommunityName { new: change.new },
-            ChangeCommunityDescription(change) => {
-                ClientRequest::ChangeCommunityDescription { new: change.new }
-            }
+            ChangeCommunityName(change) => ClientRequest::ChangeCommunityName {
+                new: change.new,
+                community: change.community?.try_into()?,
+            },
+            ChangeCommunityDescription(change) => ClientRequest::ChangeCommunityDescription {
+                new: change.new,
+                community: change.community?.try_into()?,
+            },
         };
 
         Ok(val)

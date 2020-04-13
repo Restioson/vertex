@@ -72,6 +72,13 @@ rebuild the docker image with `docker-compose up --build`.
 
 It is written in TOML. 
 
+There must also be a `db.conf` file present in the same configuration directory, using the postgres syntax. For example:
+```
+host=localhost user=postgres password=postgres dbname=vertex
+```
+
+If it is not present, the above config will be used. For docker, this should be placed in `server/docker/`.
+
 The server must also be provided with a certificate and private key pair if `https` is set to true. They should be named `cert.pem` and `key.pem`
 respectively, and be contained in the standard configuration directories, as is the config file. The private key must be
 encrypted, and it must not have a passphrase.
