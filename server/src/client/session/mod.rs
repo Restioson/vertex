@@ -113,7 +113,7 @@ impl ActiveSession {
     /// Returns whether the client should be notified and whether the room had unread messages. It
     /// also sets the room to unread.
     fn should_notify_client(&self, community: CommunityId, room: RoomId) -> Result<(bool, bool), Error> {
-        let mut active_user = manager::get_active_user_mut(self.user).unwrap();
+        let mut active_user = manager::get_active_user_mut(self.user).ok_or(Error::InvalidUser)?;
         let session = &active_user.sessions[&self.device];
         let looking_at = session.as_active_looking_at().unwrap();
 
@@ -183,7 +183,7 @@ impl Handler<NotifyClientReady> for ActiveSession {
     ) -> Self::Responder<'a> {
         async move {
             if let Err(e) = self.ready(ctx).await { // Probably non-recoverable
-                let _ = self.send(ServerMessage::Event(ServerEvent::ClientReadyError)).await;
+                let _ = self.send(ServerMessage::Event(ServerEvent::InternalError)).await;
                 error!("Error in client ready. Error: {:?}\nClient: {:#?}", e, self);
                 ctx.stop();
             }
@@ -203,22 +203,27 @@ impl Handler<ForwardMessage> for ActiveSession {
             // Ok path is (notify, unread messages)
             let msg = match self.should_notify_client(fwd.community, fwd.room) {
                 // If the user is watching the room, always forward the message
-                Ok((true, _)) => ServerMessage::Event(ServerEvent::AddMessage {
+                Ok((true, _)) => ServerEvent::AddMessage {
                     community: fwd.community,
                     room: fwd.room,
                     message: fwd.message,
-                }),
+                },
                 // If the user is not watching but it wasn't unread, tell the client that there are new msgs
-                Ok((false, false)) => ServerMessage::Event(ServerEvent::NotifyMessageReady {
+                Ok((false, false)) => ServerEvent::NotifyMessageReady {
                     room: fwd.room,
                     community: fwd.community,
-                }),
+                },
                 // It was unread, so we don't need to tell the client about the new messages.
                 Ok((false, true)) => return,
+                Err(Error::InvalidUser) => {
+                    warn!("Nonexistent user! Is this a timing anomaly? Client: {:#?}", self.session);
+                    self.ctx.stop(); // The user did not exist at the time of request
+                    ServerEvent::InternalError
+                }
                 Err(_) => return, // It's *probably* a timing anomaly.
             };
 
-            if let Err(e) = self.send(msg).await {
+            if let Err(e) = self.send(ServerMessage::Event(msg)).await {
                 error!("Error forwarding message. Error: {:?}\nClient: {:#?}", e, self);
                 ctx.stop()
             }

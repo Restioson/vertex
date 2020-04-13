@@ -104,7 +104,7 @@ impl Into<Vec<u8>> for ServerMessage {
 #[non_exhaustive]
 pub enum ServerEvent {
     ClientReady(ClientReady),
-    ClientReadyError,
+    InternalError,
     AddMessage {
         community: CommunityId,
         room: RoomId,
@@ -167,7 +167,7 @@ impl From<ServerEvent> for proto::events::ServerEvent {
                     reason: proto::events::RemoveCommunityReason::from(reason) as i32,
                 })
             },
-            ClientReadyError => Event::ClientReadyError(proto::types::None {}),
+            InternalError => Event::InternalError(proto::types::None {}),
         };
 
         proto::events::ServerEvent { event: Some(inner) }
@@ -182,7 +182,7 @@ impl TryFrom<proto::events::ServerEvent> for ServerEvent {
 
         Ok(match event.event? {
             ClientReady(ready) => ServerEvent::ClientReady(ready.try_into()?),
-            ClientReadyError(_) => ServerEvent::ClientReadyError,
+            InternalError(_) => ServerEvent::InternalError,
             AddMessage(add) => ServerEvent::AddMessage {
                 community: add.community?.try_into()?,
                 room: add.room?.try_into()?,
