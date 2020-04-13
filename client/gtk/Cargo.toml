@@ -45,6 +45,7 @@ uuid = { version = "^0.8", features = ["serde", "v4"] }
 keyring = "0.8"
 
 chrono = "0.4"
+ordinal = "0.2"
 
 rand = "0.7"
 base64 = "0.11"

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Duration, Datelike, Local};
 use gtk::prelude::*;
 
 use vertex::prelude::*;
@@ -8,6 +8,7 @@ use crate::Glade;
 
 use super::*;
 use pango::WrapMode;
+use ordinal::Ordinal;
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct MessageGroupWidget {
@@ -31,6 +32,11 @@ impl MessageGroupWidget {
         let author_name: gtk::Label = builder.get_object("author_name").unwrap();
         author_name.set_text(&profile.display_name);
         author_name.set_can_focus(false);
+
+        let timestamp: gtk::Label = builder.get_object("timestamp").unwrap();
+
+        let time_text = pretty_date(origin_time);
+        timestamp.set_text(&time_text);
 
         MessageGroupWidget { author, origin_time, widget, entry_list }
     }
@@ -191,4 +197,33 @@ fn build_invite_embed(client: &Client<Ui>, embed: InviteEmbed) -> gtk::Widget {
     );
 
     invite.upcast()
+}
+
+fn pretty_date(msg: DateTime<Utc>) -> String {
+    let now = Local::now();
+    let msg: DateTime<Local> = msg.into();
+
+    if msg.date() == now.date() {
+        msg.format("%H:%M").to_string() // e.g 13:34
+    } else if msg.date() + Duration::days(1) == now.date() {
+        msg.format("Yesterday, %H:%M").to_string() // e.g Yesterday, 13:34
+    } else if msg.year() == now.year() {
+        if msg.month() == now.month() {
+            let msg_week = msg.iso_week().week() as i32;
+            let week = now.iso_week().week() as i32;
+
+            if msg_week == week {
+                msg.format("%A, %H:%M").to_string() // e.g Sunday, 13:34
+            } else if msg_week - week == 1 {
+                msg.format("Last week %A, %H:%M").to_string() // e.g Last week Sunday, 13:34
+            } else {
+                let day = Ordinal(msg.day());
+                msg.format(&format!("%A the {}, %H:%M", day)).to_string() // Sunday the 7th, 13:34
+            }
+        } else {
+            msg.format("%b %d, %H:%M").to_string() // e.g Jul 8, 13:34
+        }
+    } else {
+        msg.format("%d %b %Y, %H:%M").to_string() // e.g 8 Jul 2018, 13:34
+    }
 }

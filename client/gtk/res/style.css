@@ -407,6 +407,13 @@ popover {
   padding-left: 2px;
 }
 
+#active #message_group #timestamp {
+  font-size: 11px;
+  font-style: italic;
+  color: grey;
+  padding-left: 5px;
+}
+
 #active #message_group #author_icon {
   min-width: 40px;
   min-height: 40px;
