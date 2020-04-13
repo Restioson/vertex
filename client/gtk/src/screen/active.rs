@@ -21,6 +21,7 @@ use std::time::{Instant, Duration};
 use std::sync::RwLock;
 use std::rc::Rc;
 use gdk::enums::key;
+use vertex::requests::AuthError;
 
 mod community;
 mod dialog;
@@ -119,24 +120,51 @@ impl client::ClientUi for Ui {
                 .build_widget_event()
         );
 
-        let client_cloned = client.clone();
-
         // Add the hint text - on focus, remove it, and on defocus add it.
-        // TODO check if there was text & also borked 
-        self.message_entry.connect_focus_out_event(|entry, _| {
-            entry.get_buffer().unwrap().set_text("Send a message...");
-            entry.set_opacity(0.5);
-            Inhibit(false)
+        // TODO check if there was text & also borked
+        let client_cloned = client.clone();
+        self.message_entry.connect_focus_out_event(
+            move |entry, _| {
+                let client = client_cloned.clone();
+                let buf = entry.get_buffer().unwrap();
+                let (begin, end) = buf.get_bounds();
+
+                let entry = entry.clone();
+                scheduler::spawn(async move {
+                    let state = client.state.upgrade().unwrap();
+                    let mut state = state.write().await;
+
+                    state.message_entry_is_empty = begin == end;
+
+                    if state.message_entry_is_empty {
+                        entry.get_buffer().unwrap().set_text("Send a message...");
+                        entry.set_opacity(0.5);
+                    }
+                });
+
+                Inhibit(false)
         });
 
-        self.message_entry.connect_focus_in_event(|entry, _| {
-            if entry.has_focus() {
-                entry.get_buffer().unwrap().set_text("");
-                entry.set_opacity(1.0);
+        let client_cloned = client.clone();
+        self.message_entry.connect_focus_in_event(
+            move |entry, _| {
+                let entry = entry.clone();
+                let client = client_cloned.clone();
+                scheduler::spawn(async move {
+                    let state = client.state.upgrade().unwrap();
+                    let state = state.read().await;
+
+                    if entry.has_focus() && state.message_entry_is_empty {
+                        entry.get_buffer().unwrap().set_text("");
+                        entry.set_opacity(1.0);
+                    }
+                });
+
                 Inhibit(false)
             }
-        });
+        );
 
+        let client_cloned = client.clone();
         self.message_entry.connect_key_press_event(
             move |entry, key_event| {
                 let client = client_cloned.clone();
@@ -322,8 +350,12 @@ pub async fn start(parameters: AuthParameters) {
             println!("encountered error connecting client: {:?}", error);
 
             match error {
-                Error::AuthErrorResponse(_) => {
-                    token_store::forget_token();
+                Error::AuthErrorResponse(e) => {
+                    if e != AuthError::TokenInUse {
+                        token_store::forget_token();
+                        println!("Forgetting token, e = {:?}", e);
+                    }
+
                     let screen = screen::login::build().await;
                     window::set_screen(&screen.main);
                 }
@@ -345,7 +377,6 @@ async fn try_start(parameters: AuthParameters) -> Result<Client<Ui>> {
 }
 
 fn describe_error(error: Error) -> String {
-    use vertex::requests::AuthError;
     match error {
         Error::InvalidUrl => "Invalid instance ip".to_string(),
         Error::Http(http) => format!("{}", http),

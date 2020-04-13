@@ -96,20 +96,7 @@
               </packing>
             </child>
             <child>
-              <object class="GtkBox" id="sidebar_lower_bar">
-                <property name="name">sidebar_lower_bar</property>
-                <property name="height_request">46</property>
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <child>
-                  <placeholder/>
-                </child>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">2</property>
-              </packing>
+              <placeholder/>
             </child>
           </object>
           <packing>
@@ -176,21 +163,36 @@
             <child>
               <object class="GtkFrame" id="lower_bar">
                 <property name="name">lower_bar</property>
-                <property name="height_request">46</property>
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
+                <property name="margin_left">5</property>
+                <property name="margin_right">5</property>
+                <property name="margin_top">10</property>
+                <property name="margin_bottom">10</property>
                 <property name="label_xalign">0</property>
                 <property name="shadow_type">none</property>
                 <child>
-                  <object class="GtkTextView" id="message_entry">
+                  <object class="GtkScrolledWindow">
+                    <property name="max-content-height">100</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="wrap_mode">word-char</property>
-                    <property name="left_margin">5</property>
-                    <property name="right_margin">5</property>
-                    <property name="top_margin">5</property>
-                    <property name="bottom_margin">5</property>
-                    <property name="input_hints">GTK_INPUT_HINT_SPELLCHECK | GTK_INPUT_HINT_NONE</property>
+                    <property name="hscrollbar_policy">never</property>
+                    <property name="shadow_type">in</property>
+                    <property name="propagate_natural_height">True</property>
+                    <child>
+                      <object class="GtkTextView" id="message_entry">
+                        <property name="name">message_entry</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">True</property>
+                        <property name="wrap_mode">word-char</property>
+                        <property name="left_margin">5</property>
+                        <property name="right_margin">5</property>
+                        <property name="top_margin">10</property>
+                        <property name="bottom_margin">10</property>
+                        <property name="input_hints">GTK_INPUT_HINT_SPELLCHECK | GTK_INPUT_HINT_NONE</property>
+                        <property name="populate_all">True</property>
+                      </object>
+                    </child>
                   </object>
                 </child>
               </object>

@@ -205,6 +205,11 @@ popover {
   background: @lower_bar_bg_color;
 }
 
+#active #chat {
+  background: @sidebar_bg_color;
+  min-height: 26px;
+}
+
 #active #chat #chat_header {
   background: @sidebar_bg_color;
   min-height: 26px;

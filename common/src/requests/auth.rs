@@ -332,7 +332,7 @@ impl TryFrom<proto::requests::auth::AuthOk> for AuthOk {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum AuthError {
     Internal,
