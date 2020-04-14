@@ -97,10 +97,12 @@ pub enum Error {
     InvalidCommunity,
     InvalidInviteCode,
     InvalidUser,
+    /// The given string field value was too long.
+    TooLong,
     AlreadyInCommunity,
     TooManyInviteCodes,
     InvalidMessageSelector,
-    TextTooLong,
+    MessageTooLong,
     Unimplemented,
 }
 
@@ -124,7 +126,8 @@ impl fmt::Display for Error {
             AlreadyInCommunity => write!(f, "Already in community"),
             TooManyInviteCodes => write!(f, "Too many invite codes"),
             InvalidMessageSelector => write!(f, "Invalid message selector"),
-            TextTooLong => write!(f, "Text too long"),
+            MessageTooLong => write!(f, "Message too long"),
+            TooLong => write!(f, "Text field too long"),
             Unimplemented => write!(f, "Unimplemented API"),
         }
     }
@@ -166,8 +169,9 @@ impl From<Error> for proto::responses::Error {
                 AlreadyInCommunity,
                 TooManyInviteCodes,
                 InvalidMessageSelector,
-                TextTooLong,
+                MessageTooLong,
                 Unimplemented,
+                TooLong,
             }
         }
     }
@@ -195,8 +199,9 @@ impl TryFrom<proto::responses::Error> for Error {
                 AlreadyInCommunity,
                 TooManyInviteCodes,
                 InvalidMessageSelector,
-                TextTooLong,
+                MessageTooLong,
                 Unimplemented,
+                TooLong,
             }
         }
     }

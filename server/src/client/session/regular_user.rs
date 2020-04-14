@@ -105,7 +105,7 @@ impl<'a> RequestHandler<'a> {
         }
 
         if message.content.len() > self.session.global.config.max_message_len as usize {
-            return Err(Error::TextTooLong);
+            return Err(Error::MessageTooLong);
         }
 
         let community = community::address_of(message.to_community)?;
@@ -132,7 +132,7 @@ impl<'a> RequestHandler<'a> {
         }
 
         if edit.new_content.len() > self.session.global.config.max_message_len as usize {
-            return Err(Error::TextTooLong);
+            return Err(Error::MessageTooLong);
         }
 
         let community = community::address_of(edit.community)?;
@@ -253,6 +253,11 @@ impl<'a> RequestHandler<'a> {
             return Err(Error::AccessDenied);
         }
 
+        let max = self.session.global.config.max_community_name_len as usize;
+        if name.len() < 1 || name.len() > max {
+            return Err(Error::TooLong)
+        }
+
         let db = &self.session.global.database;
         let id = db.create_community(name.clone()).await?;
         let res = db
@@ -338,6 +343,11 @@ impl<'a> RequestHandler<'a> {
 
         if !self.session.in_community(&community)? {
             return Err(Error::InvalidCommunity);
+        }
+
+        let max = self.session.global.config.max_channel_name_len as usize;
+        if name.len() < 1 || name.len() > max {
+            return Err(Error::TooLong)
         }
 
         let community_id = community;

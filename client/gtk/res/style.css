@@ -18,6 +18,8 @@
 
 @define-color accent_color #8fa876;
 
+@define-color subtitle_color #a0a0a0;
+
 /* general styling */
 
 * {
@@ -257,7 +259,7 @@ popover {
 }
 
 #active #message #invite #label {
-  color: #a0a0a0;
+  color: @subtitle_color;
   font-size: 12px;
 }
 
@@ -282,7 +284,7 @@ popover {
 }
 
 #active #message #invite #community_description {
-  color: #a0a0a0;
+  color: @subtitle_color;
   font-size: 12px;
   font-style: italic;
 }
@@ -309,7 +311,7 @@ popover {
 }
 
 #active #message #opengraph #description {
-  color: #a0a0a0;
+  color: @subtitle_color;
   font-size: 12px;
   font-style: italic;
 }
@@ -354,7 +356,7 @@ popover {
 }
 
 #active #sidebar #community_header #community_description_box {
-  color: #a0a0a0;
+  color: @subtitle_color;
   font-size: 12px;
   font-style: italic;
 }
@@ -438,7 +440,7 @@ popover {
 }
 
 #active #message #message_text.pending {
-  color: #a0a0a0;
+  color: @subtitle_color;
 }
 
 #active #message #message_text.error {
@@ -578,11 +580,12 @@ popover {
 */
 
 #loading_error #title {
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 500;
 }
 
 #loading_error #error_label {
-  font-size: 12px;
+  font-size: 16px;
   color: @error_color;
   padding-bottom: 20px;
 }
@@ -591,4 +594,31 @@ popover {
   min-height: 20px;
   padding: 8px;
   margin: 4px;
+}
+
+/*
+  generic error screen
+*/
+
+#error_dialog #title {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+#error_dialog #error_label {
+  font-size: 16px;
+  color: @error_color;
+  padding-bottom: 20px;
+}
+
+#error_dialog #ok_button {
+  min-height: 20px;
+  padding: 8px;
+  margin: 4px;
+}
+
+#error_dialog #flavour_text {
+  font-size: 14px;
+  font-style: italic;
+  color: @subtitle_color;
 }
