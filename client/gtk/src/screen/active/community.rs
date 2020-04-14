@@ -107,10 +107,11 @@ fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
 
     let menu: gtk::Popover = builder.get_object("community_menu").unwrap();
     let invite_button: gtk::Button = builder.get_object("invite_button").unwrap();
+    let create_channel_button: gtk::Button = builder.get_object("create_channel_button").unwrap();
     let _settings_button: gtk::Button = builder.get_object("settings_button").unwrap();
 
     invite_button.connect_button_release_event(
-        (menu.clone(), community_entry).connector()
+        (menu.clone(), community_entry.clone()).connector()
             .do_async(move |(menu, community_entry), (_widget, _event)| async move {
                 menu.hide();
 
@@ -118,6 +119,15 @@ fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
                     Ok(invite) => show_invite_dialog(invite),
                     Err(err) => dialog::show_generic_error(&err),
                 }
+            })
+            .build_widget_event()
+    );
+
+    create_channel_button.connect_button_release_event(
+        (menu.clone(), community_entry).connector()
+            .do_sync(move |(menu, community_entry), (_widget, _event)| {
+                menu.hide();
+                show_create_room(community_entry);
             })
             .build_widget_event()
     );
@@ -147,6 +157,38 @@ fn show_invite_dialog(invite: InviteCode) {
     });
 
     window::show_dialog(main);
+}
+
+fn show_create_room(community: client::CommunityEntry<Ui>) {
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("active/dialog/create_room.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
+    let main: gtk::Box = builder.get_object("main").unwrap();
+
+    let name_entry: gtk::Entry = builder.get_object("name_entry").unwrap();
+    let create_button: gtk::Button = builder.get_object("create_button").unwrap();
+
+    let dialog = window::show_dialog(main);
+
+    create_button.connect_button_release_event(
+        community.connector()
+            .do_async(move |community, _| {
+                let name_entry = name_entry.clone();
+                let dialog = dialog.clone();
+                async move {
+                    if let Ok(name) = name_entry.try_get_text() {
+                        dialog.close();
+
+                        if let Err(err) = community.create_room(&name).await {
+                            show_generic_error(&err);
+                        }
+                    }
+                }
+            })
+            .build_widget_event()
+    );
 }
 
 #[derive(Clone)]

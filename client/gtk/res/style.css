@@ -467,12 +467,12 @@ popover {
   margin: 10px;
 }
 
-#create_community, #join_community, #invite_community {
+#create_community, #join_community, #invite_community, #create_room {
   min-width: 180px;
   min-height: 100px;
 }
 
-#create_community button, #create_community entry {
+#create_community button, #create_community entry, #create_room button, #create_room entry {
   padding: 8px;
   margin: 4px;
 }
