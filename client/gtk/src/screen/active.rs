@@ -72,7 +72,7 @@ impl Ui {
 
         let builder: gtk::Builder = GLADE.builder();
         let message_entry: gtk::TextView = builder.get_object("message_entry").unwrap();
-        message_entry.get_buffer().unwrap().set_text("Send a message...");
+
         message_entry.set_opacity(0.5);
 
         Ui {
@@ -291,10 +291,8 @@ impl client::ClientUi for Ui {
 
         self.message_entry.set_can_focus(true);
         self.message_entry.set_editable(true);
-
-        // TODO
-        //self.message_entry.set_placeholder_text(Some("Send message..."));
         self.message_entry.get_style_context().remove_class("disabled");
+        self.message_entry.get_buffer().unwrap().set_text("Send a message...");
 
         self.room_name.set_text(&room.name);
 
@@ -313,10 +311,8 @@ impl client::ClientUi for Ui {
 
         self.message_entry.set_can_focus(false);
         self.message_entry.set_editable(false);
-
-        // TODO v
-        //self.message_entry.set_placeholder_text(Some("Select a room to send messages..."));
         self.message_entry.get_style_context().add_class("disabled");
+        self.message_entry.get_buffer().unwrap().set_text("Select a room to send a message...");
 
         self.room_name.set_text("");
     }

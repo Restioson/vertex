@@ -241,7 +241,6 @@ popover {
 
 #active #message_entry.disabled {
   background: shade(@message_entry_color, 0.95);
-  color: transparent;
 }
 
 #active #message_entry.disabled selection {
