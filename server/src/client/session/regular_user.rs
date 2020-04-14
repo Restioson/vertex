@@ -1,6 +1,5 @@
 //! Methods that can be executed by regular users
 
-use log::warn;
 use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
 use xtra::Context;
@@ -101,7 +100,7 @@ impl<'a> RequestHandler<'a> {
             return Err(Error::AccessDenied);
         }
 
-        if !self.session.in_community(&message.to_community) {
+        if !self.session.in_community(&message.to_community)? {
             return Err(Error::InvalidCommunity);
         }
 
@@ -109,23 +108,18 @@ impl<'a> RequestHandler<'a> {
             return Err(Error::TextTooLong);
         }
 
-        match community::address_of(message.to_community) {
-            Some(community) => {
-                let message = IdentifiedMessage {
-                    user: self.user,
-                    device: self.device,
-                    message,
-                };
+        let community = community::address_of(message.to_community)?;
+        let message = IdentifiedMessage {
+            user: self.user,
+            device: self.device,
+            message,
+        };
+        let confirmation = community
+            .send(message)
+            .await
+            .map_err(handle_disconnected("Community"))??;
 
-                let confirmation = community
-                    .send(message)
-                    .await
-                    .map_err(handle_disconnected("Community"))??;
-
-                Ok(OkResponse::ConfirmMessage(confirmation))
-            }
-            _ => Err(Error::InvalidCommunity),
-        }
+        Ok(OkResponse::ConfirmMessage(confirmation))
     }
 
     async fn edit_message(self, edit: Edit) -> Result<OkResponse, Error> {
@@ -133,7 +127,7 @@ impl<'a> RequestHandler<'a> {
             return Err(Error::AccessDenied);
         }
 
-        if !self.session.in_community(&edit.community) {
+        if !self.session.in_community(&edit.community)? {
             return Err(Error::InvalidCommunity);
         }
 
@@ -141,21 +135,17 @@ impl<'a> RequestHandler<'a> {
             return Err(Error::TextTooLong);
         }
 
-        if let Some(community) = community::address_of(edit.community) {
-            let message = IdentifiedMessage {
-                user: self.user,
-                device: self.device,
-                message: edit,
-            };
-
-            community
-                .send(message)
-                .await
-                .map_err(handle_disconnected("Community"))??;
-            Ok(OkResponse::NoData)
-        } else {
-            Err(Error::InvalidCommunity)
-        }
+        let community = community::address_of(edit.community)?;
+        let message = IdentifiedMessage {
+            user: self.user,
+            device: self.device,
+            message: edit,
+        };
+        community
+            .send(message)
+            .await
+            .map_err(handle_disconnected("Community"))??;
+        Ok(OkResponse::NoData)
     }
 
     async fn log_out(self) -> Result<OkResponse, Error> {
@@ -197,9 +187,8 @@ impl<'a> RequestHandler<'a> {
             Ok(()) => Ok(OkResponse::NoData),
             Err(ChangeUsernameError::UsernameConflict) => Err(Error::UsernameAlreadyExists),
             Err(ChangeUsernameError::NonexistentUser) => {
-                warn!("Nonexistent user! Is this a timing anomaly? Client: {:#?}", self.session);
                 self.ctx.stop(); // The user did not exist at the time of request
-                Err(Error::UserDeleted)
+                Err(Error::LoggedOut)
             }
         }
     }
@@ -224,7 +213,7 @@ impl<'a> RequestHandler<'a> {
             Ok(()) => Ok(OkResponse::NoData),
             Err(_) => {
                 self.ctx.stop(); // The user did not exist at the time of request
-                Err(Error::UserDeleted)
+                Err(Error::LoggedOut)
             }
         }
     }
@@ -251,7 +240,7 @@ impl<'a> RequestHandler<'a> {
             Ok(()) => Ok(OkResponse::NoData),
             Err(_) => {
                 self.ctx.stop(); // The user did not exist at the time of request
-                Err(Error::UserDeleted)
+                Err(Error::LoggedOut)
             }
         }
     }
@@ -277,7 +266,7 @@ impl<'a> RequestHandler<'a> {
             }
             Err(_) => {
                 self.ctx.stop(); // The user did not exist at the time of request
-                Err(Error::UserDeleted)
+                Err(Error::LoggedOut)
             }
         }
     }
@@ -301,46 +290,44 @@ impl<'a> RequestHandler<'a> {
     }
 
     async fn join_community_by_id(self, id: CommunityId) -> Result<OkResponse, Error> {
-        if let Some(community) = community::address_of(id) {
-            let join = Join {
-                user: self.user,
-                device_id: self.device,
-                session: self.ctx.address().unwrap(),
-            };
+        let community = community::address_of(id)?;
 
-            let res = community
-                .send(join)
-                .await
-                .map_err(handle_disconnected("Community"))??;
+        let join = Join {
+            user: self.user,
+            device_id: self.device,
+            session: self.ctx.address().unwrap(),
+        };
 
-            match res {
-                Ok(community) => {
-                    let db = &self.session.global.database;
-                    let user_community = UserCommunity::load(db, self.user, id).await?;
+        let res = community
+            .send(join)
+            .await
+            .map_err(handle_disconnected("Community"))??;
 
-                    if let Some(mut user) = manager::get_active_user_mut(self.user) {
-                        user.communities.insert(community.id, user_community);
+        match res {
+            Ok(community) => {
+                let db = &self.session.global.database;
+                let user_community = UserCommunity::load(db, self.user, id).await?;
 
-                        let community = community.clone();
-                        let send = ServerMessage::Event(ServerEvent::AddCommunity(community));
-                        let sessions = user.sessions.iter();
+                if let Ok(mut user) = manager::get_active_user_mut(self.user) {
+                    user.communities.insert(community.id, user_community);
 
-                        sessions
-                            .filter(|(id, _)| **id != self.device)
-                            .filter_map(|(_, session)| session.as_active_actor())
-                            .for_each(|addr| {
-                                let _ = addr.do_send(SendMessage(send.clone()));
-                            });
-                    }
+                    let community = community.clone();
+                    let send = ServerMessage::Event(ServerEvent::AddCommunity(community));
+                    let sessions = user.sessions.iter();
 
-                    Ok(OkResponse::AddCommunity(community))
+                    sessions
+                        .filter(|(id, _)| **id != self.device)
+                        .filter_map(|(_, session)| session.as_active_actor())
+                        .for_each(|addr| {
+                            let _ = addr.do_send(SendMessage(send.clone()));
+                        });
                 }
-                Err(AddToCommunityError::AlreadyInCommunity) => Err(Error::AlreadyInCommunity),
-                Err(AddToCommunityError::InvalidCommunity) => Err(Error::InvalidCommunity),
-                Err(AddToCommunityError::InvalidUser) => Err(Error::InvalidUser),
+
+                Ok(OkResponse::AddCommunity(community))
             }
-        } else {
-            Err(Error::InvalidCommunity)
+            Err(AddToCommunityError::AlreadyInCommunity) => Err(Error::AlreadyInCommunity),
+            Err(AddToCommunityError::InvalidCommunity) => Err(Error::InvalidCommunity),
+            Err(AddToCommunityError::InvalidUser) => Err(Error::InvalidUser),
         }
     }
 
@@ -349,47 +336,45 @@ impl<'a> RequestHandler<'a> {
             return Err(Error::AccessDenied);
         }
 
-        if !self.session.in_community(&community) {
+        if !self.session.in_community(&community)? {
             return Err(Error::InvalidCommunity);
         }
 
         let community_id = community;
+        let community = community::address_of(community)?;
 
-        if let Some(community) = community::address_of(community) {
-            let create = CreateRoom {
-                creator: self.device,
-                name: name.clone(),
-            };
-            let id = community
-                .send(create)
-                .await
-                .map_err(handle_disconnected("Community"))??;
+        let create = CreateRoom {
+            creator: self.device,
+            name: name.clone(),
+        };
+        let id = community
+            .send(create)
+            .await
+            .map_err(handle_disconnected("Community"))??;
 
-            let mut user = manager::get_active_user_mut(self.user).unwrap();
+        let mut user = manager::get_active_user_mut(self.user).unwrap();
+        let community = user
+            .communities
+            .get_mut(&community_id)
+            .ok_or(Error::InvalidCommunity)?;
 
-            if let Some(community) = user.communities.get_mut(&community_id) {
-                let room = RoomStructure {
-                    id,
-                    name,
-                    unread: true,
-                };
+        let room = RoomStructure {
+            id,
+            name,
+            unread: true,
+        };
+        community.rooms.insert(
+            room.id,
+            UserRoom {
+                watch_level: WatchLevel::default(),
+                unread: true,
+            },
+        );
 
-                community.rooms.insert(
-                    room.id,
-                    UserRoom {
-                        watch_level: WatchLevel::default(),
-                        unread: true,
-                    },
-                );
-
-                return Ok(OkResponse::AddRoom {
-                    community: community_id,
-                    room,
-                });
-            }
-        }
-
-        Err(Error::InvalidCommunity)
+        Ok(OkResponse::AddRoom {
+            community: community_id,
+            room,
+        })
     }
 
     async fn create_invite(
@@ -401,7 +386,7 @@ impl<'a> RequestHandler<'a> {
             return Err(Error::AccessDenied);
         }
 
-        if !self.session.in_community(&id) {
+        if !self.session.in_community(&id)? {
             return Err(Error::InvalidCommunity);
         }
 
@@ -426,7 +411,7 @@ impl<'a> RequestHandler<'a> {
         last_received: Option<MessageId>,
         message_count: u64,
     ) -> Result<OkResponse, Error> {
-        if !self.session.in_room(&community, &room) {
+        if !self.session.in_room(&community, &room)? {
             return Err(Error::InvalidRoom);
         }
 
@@ -468,7 +453,7 @@ impl<'a> RequestHandler<'a> {
     }
 
     async fn select_room(self, community: CommunityId, room: RoomId) -> Result<OkResponse, Error> {
-        if !self.session.in_room(&community, &room) {
+        if !self.session.in_room(&community, &room)? {
             return Err(Error::InvalidRoom);
         }
 
@@ -494,7 +479,7 @@ impl<'a> RequestHandler<'a> {
         selector: MessageSelector,
         count: u64,
     ) -> Result<OkResponse, Error> {
-        if !self.session.in_room(&community, &room) {
+        if !self.session.in_room(&community, &room)? {
             return Err(Error::InvalidRoom);
         }
 
@@ -512,15 +497,13 @@ impl<'a> RequestHandler<'a> {
 
     async fn set_as_read(self, community: CommunityId, room: RoomId) -> Result<OkResponse, Error> {
         let mut active_user = manager::get_active_user_mut(self.user).unwrap();
-        if let Some(user_community) = active_user.communities.get_mut(&community) {
-            if let Some(user_room) = user_community.rooms.get_mut(&room) {
-                user_room.unread = false;
-            } else {
-                return Err(Error::InvalidRoom);
-            }
-        } else {
-            return Err(Error::InvalidCommunity);
-        }
+        let community = active_user
+            .communities
+            .get_mut(&community)
+            .ok_or(Error::InvalidCommunity)?;
+        let user_room = community.rooms.get_mut(&room).ok_or(Error::InvalidRoom)?;
+        user_room.unread = false;
+
         drop(active_user); // Drop lock
 
         let db = &self.session.global.database;
@@ -531,7 +514,7 @@ impl<'a> RequestHandler<'a> {
             Err(SetUserRoomStateError::InvalidRoom) => Err(Error::InvalidRoom),
             Err(SetUserRoomStateError::InvalidUser) => {
                 self.ctx.stop(); // The user did not exist at the time of request
-                Err(Error::UserDeleted)
+                Err(Error::LoggedOut)
             }
         }
     }
@@ -541,7 +524,7 @@ impl<'a> RequestHandler<'a> {
         new: String,
         id: CommunityId,
     ) -> Result<OkResponse, Error> {
-        if !self.session.in_community(&id) {
+        if !self.session.in_community(&id)? {
             return Err(Error::InvalidCommunity);
         }
 
@@ -561,7 +544,7 @@ impl<'a> RequestHandler<'a> {
         new: String,
         id: CommunityId,
     ) -> Result<OkResponse, Error> {
-        if !self.session.in_community(&id) {
+        if !self.session.in_community(&id)? {
             return Err(Error::InvalidCommunity);
         }
 

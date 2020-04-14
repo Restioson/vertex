@@ -66,7 +66,7 @@ pub fn hash(pass: String) -> impl Future<Output = (String, HashSchemeVersion)> {
 
         (hash, HashSchemeVersion::Argon2V1)
     })
-    .map(|r| r.expect("auth error"))
+    .map(|r| r.expect("Error in tokio password hashing task"))
 }
 
 pub fn verify(
@@ -82,7 +82,7 @@ pub fn verify(
                 .expect("Error verifying password hash"),
         }
     })
-    .map(|r| r.expect("auth error"))
+    .map(|r| r.expect("Error in tokio password verifying task"))
 }
 
 pub async fn verify_user(user: UserRecord, password: String) -> bool {

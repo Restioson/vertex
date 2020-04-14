@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 use std::time::Instant;
 
-use log::error;
 use futures::stream::SplitSink;
 use futures::{Future, SinkExt};
+use log::{error, warn};
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
@@ -13,6 +13,7 @@ use vertex::prelude::*;
 
 use crate::community::{self, Connect, CreateRoom, GetRoomInfo, Join, COMMUNITIES};
 use crate::database::*;
+use crate::handle_disconnected;
 use regular_user::*;
 use std::fmt;
 
@@ -112,8 +113,12 @@ impl ActiveSession {
 
     /// Returns whether the client should be notified and whether the room had unread messages. It
     /// also sets the room to unread.
-    fn should_notify_client(&self, community: CommunityId, room: RoomId) -> Result<(bool, bool), Error> {
-        let mut active_user = manager::get_active_user_mut(self.user).ok_or(Error::InvalidUser)?;
+    fn should_notify_client(
+        &self,
+        community: CommunityId,
+        room: RoomId,
+    ) -> Result<(bool, bool), Error> {
+        let mut active_user = manager::get_active_user_mut(self.user)?;
         let session = &active_user.sessions[&self.device];
         let looking_at = session.as_active_looking_at().unwrap();
 
@@ -166,7 +171,10 @@ impl Handler<WebSocketMessage> for ActiveSession {
     ) -> Self::Responder<'a> {
         async move {
             if let Err(e) = self.handle_ws_message(message, ctx).await {
-                error!("Error handling websocket message. Error: {:?}\nClient: {:#?}", e, self);
+                error!(
+                    "Error handling websocket message. Error: {:?}\nClient: {:#?}",
+                    e, self
+                );
                 ctx.stop();
             }
         }
@@ -182,8 +190,11 @@ impl Handler<NotifyClientReady> for ActiveSession {
         ctx: &'a mut Context<Self>,
     ) -> Self::Responder<'a> {
         async move {
-            if let Err(e) = self.ready(ctx).await { // Probably non-recoverable
-                let _ = self.send(ServerMessage::Event(ServerEvent::InternalError)).await;
+            if let Err(e) = self.ready(ctx).await {
+                // Probably non-recoverable
+                let _ = self
+                    .send(ServerMessage::Event(ServerEvent::InternalError))
+                    .await;
                 error!("Error in client ready. Error: {:?}\nClient: {:#?}", e, self);
                 ctx.stop();
             }
@@ -216,15 +227,21 @@ impl Handler<ForwardMessage> for ActiveSession {
                 // It was unread, so we don't need to tell the client about the new messages.
                 Ok((false, true)) => return,
                 Err(Error::InvalidUser) => {
-                    warn!("Nonexistent user! Is this a timing anomaly? Client: {:#?}", self.session);
-                    self.ctx.stop(); // The user did not exist at the time of request
+                    warn!(
+                        "Nonexistent user! Is this a timing anomaly? Client: {:#?}",
+                        self
+                    );
+                    ctx.stop(); // The user did not exist at the time of request
                     ServerEvent::InternalError
                 }
                 Err(_) => return, // It's *probably* a timing anomaly.
             };
 
             if let Err(e) = self.send(ServerMessage::Event(msg)).await {
-                error!("Error forwarding message. Error: {:?}\nClient: {:#?}", e, self);
+                error!(
+                    "Error forwarding message. Error: {:?}\nClient: {:#?}",
+                    e, self
+                );
                 ctx.stop()
             }
         }
@@ -236,7 +253,7 @@ impl Handler<AddRoom> for ActiveSession {
 
     fn handle<'a>(&'a mut self, add: AddRoom, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
         async move {
-            let mut user = manager::get_active_user_mut(self.user).unwrap();
+            let mut user = manager::get_active_user_mut(self.user).unwrap(); // TODO error
 
             if let Some(community) = user.communities.get_mut(&add.community) {
                 community.rooms.insert(
@@ -254,7 +271,10 @@ impl Handler<AddRoom> for ActiveSession {
 
                 drop(user); // Drop lock
                 if let Err(e) = self.send(msg).await {
-                    error!("Error adding room in client actor. Error: {:?}\nClient: {:#?}", e, self);
+                    error!(
+                        "Error adding room in client actor. Error: {:?}\nClient: {:#?}",
+                        e, self
+                    );
                     ctx.stop()
                 }
             }
@@ -272,7 +292,10 @@ impl Handler<SendMessage<ServerMessage>> for ActiveSession {
     ) -> Self::Responder<'a> {
         async move {
             if let Err(e) = self.send(msg.0).await {
-                error!("Error sending server message. Error: {:?}\nClient: {:#?}", e, self);
+                error!(
+                    "Error sending server message. Error: {:?}\nClient: {:#?}",
+                    e, self
+                );
                 ctx.stop()
             }
         }
@@ -292,7 +315,6 @@ impl Handler<LogoutThisSession> for ActiveSession {
     }
 }
 
-// TODO: Error Handling: should not .unwrap() on `xtra::Disconnected` and `warp::Error`
 impl ActiveSession {
     #[inline]
     async fn send<M: Into<Vec<u8>>>(&mut self, msg: M) -> Result<(), warp::Error> {
@@ -304,20 +326,19 @@ impl ActiveSession {
         manager::remove(self.user, self.device);
     }
 
-    fn in_community(&self, id: &CommunityId) -> bool {
-        manager::get_active_user(self.user)
-            .unwrap()
+    fn in_community(&self, id: &CommunityId) -> Result<bool, Error> {
+        Ok(manager::get_active_user(self.user)?
             .communities
-            .contains_key(&id)
+            .contains_key(&id))
     }
 
-    fn in_room(&self, community: &CommunityId, room: &RoomId) -> bool {
-        let user = manager::get_active_user(self.user).unwrap();
-        if let Some(community) = user.communities.get(community) {
+    fn in_room(&self, community: &CommunityId, room: &RoomId) -> Result<bool, Error> {
+        let user = manager::get_active_user(self.user)?;
+        Ok(if let Some(community) = user.communities.get(community) {
             community.rooms.contains_key(room)
         } else {
             false
-        }
+        })
     }
 
     async fn ready(&mut self, ctx: &mut Context<Self>) -> Result<(), Error> {
@@ -328,16 +349,19 @@ impl ActiveSession {
             .await?
             .ok_or(Error::InvalidUser)?;
 
-        let active = manager::get_active_user(self.user).unwrap();
+        let active = manager::get_active_user(self.user)?;
         let mut communities = Vec::with_capacity(active.communities.len());
 
         for (id, user_community) in active.communities.iter() {
-            let addr = community::address_of(*id).unwrap();
+            let addr = community::address_of(*id)?;
             let rooms = addr.send(GetRoomInfo).await.map_err(|_| Error::Internal)?;
             let rooms = rooms
                 .into_iter()
                 .map(|info| {
-                    let room = user_community.rooms.get(&info.id).ok_or(Error::InvalidRoom)?;
+                    let room = user_community
+                        .rooms
+                        .get(&info.id)
+                        .ok_or(Error::InvalidRoom)?;
                     Ok(RoomStructure {
                         id: info.id,
                         name: info.name,
@@ -350,7 +374,7 @@ impl ActiveSession {
                 device: self.device,
                 session: ctx.address().unwrap(),
             })
-            .unwrap();
+            .map_err(handle_disconnected("Community"))?;
 
             let info = COMMUNITIES.get(id).ok_or(Error::InvalidCommunity)?;
             let structure = CommunityStructure {
@@ -375,7 +399,10 @@ impl ActiveSession {
 
         let msg = ServerMessage::Event(ServerEvent::ClientReady(ready));
         if let Err(e) = self.send(msg).await {
-            error!("Error sending websocket message. Error: {:?}\nClient: {:#?}", e, self);
+            error!(
+                "Error sending websocket message. Error: {:?}\nClient: {:#?}",
+                e, self
+            );
             ctx.stop()
         }
 
@@ -423,6 +450,14 @@ impl ActiveSession {
                 perms,
             };
             let result = handler.handle_request(msg.request).await;
+
+            if let Err(Error::LoggedOut) = result {
+                warn!(
+                    "Nonexistent user! Is this a timing anomaly? Client: {:#?}",
+                    self
+                );
+                ctx.stop();
+            }
 
             self.send(ServerMessage::Response { id: msg.id, result })
                 .await?;

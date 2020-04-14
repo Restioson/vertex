@@ -86,7 +86,7 @@ impl Database {
 
         let pool = l337::Pool::new(mgr, Default::default())
             .await
-            .expect("db error");
+            .expect("Error creating database connection pool");
 
         let db = Database { pool };
         db.create_tables().await?;
@@ -151,7 +151,7 @@ impl Database {
                 .await
                 .expect("Database error while sweeping tokens")
                 .try_for_each(|(user, device)| async move {
-                    client::session::remove_and_notify(user, device);
+                    let _ = client::session::remove_and_notify(user, device); // Don't care
                     Ok(())
                 })
                 .await

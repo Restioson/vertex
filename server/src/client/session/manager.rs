@@ -132,10 +132,11 @@ pub async fn insert(db: Database, user: UserId, device: DeviceId) -> DbResult<Re
     Ok(Ok(()))
 }
 
+// TODO handle errors better
 pub fn upgrade(user: UserId, device: DeviceId, addr: Address<ActiveSession>) -> Result<(), ()> {
     let mut user = match get_active_user_mut(user) {
-        Some(user) => user,
-        None => return Err(()),
+        Ok(user) => user,
+        Err(_) => return Err(()),
     };
 
     match user.sessions.get_mut(&device) {
@@ -150,13 +151,13 @@ pub fn upgrade(user: UserId, device: DeviceId, addr: Address<ActiveSession>) -> 
     }
 }
 
-pub fn remove_and_notify(user: UserId, device: DeviceId) -> Option<Session> {
-    let result = remove(user, device);
-    if let Some(Session::Active { actor, .. }) = &result {
-        actor.do_send(LogoutThisSession).unwrap();
+pub fn remove_and_notify(user: UserId, device: DeviceId) -> Result<(), Error> {
+    match remove(user, device) {
+        Some(Session::Active { actor, .. }) => actor
+            .do_send(LogoutThisSession)
+            .map_err(handle_disconnected("ClientSession")),
+        _ => Ok(()),
     }
-
-    result
 }
 
 pub fn remove(user: UserId, device: DeviceId) -> Option<Session> {
@@ -177,12 +178,12 @@ pub fn remove(user: UserId, device: DeviceId) -> Option<Session> {
     None
 }
 
-pub fn get_active_user<'a>(user: UserId) -> Option<ActiveUserRef<'a>> {
-    USERS.get(&user)
+pub fn get_active_user<'a>(user: UserId) -> Result<ActiveUserRef<'a>, Error> {
+    USERS.get(&user).ok_or(Error::LoggedOut)
 }
 
-pub fn get_active_user_mut<'a>(user: UserId) -> Option<ActiveUserRefMut<'a>> {
-    USERS.get_mut(&user)
+pub fn get_active_user_mut<'a>(user: UserId) -> Result<ActiveUserRefMut<'a>, Error> {
+    USERS.get_mut(&user).ok_or(Error::LoggedOut)
 }
 
 type ActiveUserRef<'a> = dashmap::mapref::one::Ref<'a, UserId, ActiveUser>;

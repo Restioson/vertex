@@ -41,7 +41,7 @@ enum Error {
     InvalidUsername = 2;
     InvalidPassword = 3;
     InvalidDisplayName = 4;
-    UserDeleted = 5;
+    LoggedOut = 5;
     DeviceDoesNotExist = 6;
     IncorrectUsernameOrPassword = 7;
     AccessDenied = 8;

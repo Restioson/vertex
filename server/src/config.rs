@@ -113,7 +113,7 @@ pub fn db_config() -> tokio_postgres::Config {
     fs::read_to_string(path)
         .unwrap_or_else(|_| DEFAULT.to_string())
         .parse()
-        .expect("db.conf invalid!")
+        .expect("Invalid db.conf!")
 }
 
 pub fn load_config() -> Config {

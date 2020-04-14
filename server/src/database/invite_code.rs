@@ -97,7 +97,7 @@ impl Database {
                     .client
                     .query_opt(COUNT, &[&community.0])
                     .await?
-                    .unwrap();
+                    .unwrap(); // Will always return a value if the query is correct
                 let count: i64 = row.try_get(0)?;
 
                 if count >= max_per_community {

@@ -3,6 +3,7 @@ use crate::client::{self, ActiveSession, Session};
 use crate::database::{AddToCommunityError, CommunityRecord, Database, DbResult};
 use crate::{handle_disconnected, IdentifiedMessage};
 use chrono::Utc;
+use dashmap::mapref::one::{Ref, RefMut};
 use dashmap::DashMap;
 use futures::Future;
 use futures::TryStreamExt;
@@ -17,8 +18,16 @@ lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Community> = DashMap::new();
 }
 
-pub fn address_of(id: CommunityId) -> Option<Address<CommunityActor>> {
-    COMMUNITIES.get(&id).map(|c| c.actor.clone())
+pub fn get<'a>(id: CommunityId) -> Result<Ref<'a, CommunityId, Community>, Error> {
+    COMMUNITIES.get(&id).ok_or(Error::InvalidCommunity)
+}
+
+pub fn get_mut<'a>(id: CommunityId) -> Result<RefMut<'a, CommunityId, Community>, Error> {
+    COMMUNITIES.get_mut(&id).ok_or(Error::InvalidCommunity)
+}
+
+pub fn address_of(id: CommunityId) -> Result<Address<CommunityActor>, Error> {
+    get(id).map(|c| c.actor.clone())
 }
 
 /// Community info that is just read/updated very quickly (no logic like in the actor). Used to avoid
@@ -152,8 +161,8 @@ impl CommunityActor {
     {
         for member in self.online_members.iter() {
             let user = match client::session::get_active_user(*member) {
-                Some(user) => user,
-                None => continue, // Assume that this is a timing anomaly which will be corrected soon
+                Ok(user) => user,
+                Err(_) => continue, // Assume that this is a timing anomaly which will be corrected soon
             };
 
             for (device, session) in user.sessions.iter() {
@@ -265,7 +274,10 @@ impl Handler<Join> for CommunityActor {
 
             self.online_members.insert(join.user);
 
-            let info = COMMUNITIES.get(&self.id).unwrap();
+            let info = match get_mut(self.id) {
+                Ok(i) => i,
+                Err(_) => return Ok(Err(AddToCommunityError::InvalidCommunity)),
+            };
             let description = info.description();
 
             Ok(Ok(CommunityStructure {

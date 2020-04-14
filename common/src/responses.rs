@@ -85,8 +85,9 @@ pub enum Error {
     InvalidUsername,
     InvalidPassword,
     InvalidDisplayName,
-    /// Returned when the user that is sending a message is deleted while processing the message
-    UserDeleted,
+    /// Returned when the user that is sending a message is deleted or logged out while processing
+    /// the message
+    LoggedOut,
     DeviceDoesNotExist,
     IncorrectUsernameOrPassword,
     /// User is not able to perform said action with current authentication token, or request to
@@ -112,7 +113,7 @@ impl fmt::Display for Error {
             InvalidUsername => write!(f, "Invalid username"),
             InvalidPassword => write!(f, "Invalid password"),
             InvalidDisplayName => write!(f, "Invalid display name"),
-            UserDeleted => write!(f, "User deleted"),
+            LoggedOut => write!(f, "User deleted"),
             DeviceDoesNotExist => write!(f, "Device does not exist"),
             IncorrectUsernameOrPassword => write!(f, "Incorrect username or password"),
             AccessDenied => write!(f, "Access denied"),
@@ -154,7 +155,7 @@ impl From<Error> for proto::responses::Error {
                 InvalidUsername,
                 InvalidPassword,
                 InvalidDisplayName,
-                UserDeleted,
+                LoggedOut,
                 DeviceDoesNotExist,
                 IncorrectUsernameOrPassword,
                 AccessDenied,
@@ -183,7 +184,7 @@ impl TryFrom<proto::responses::Error> for Error {
                 InvalidUsername,
                 InvalidPassword,
                 InvalidDisplayName,
-                UserDeleted,
+                LoggedOut,
                 DeviceDoesNotExist,
                 IncorrectUsernameOrPassword,
                 AccessDenied,
