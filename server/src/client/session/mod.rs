@@ -253,7 +253,18 @@ impl Handler<AddRoom> for ActiveSession {
 
     fn handle<'a>(&'a mut self, add: AddRoom, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
         async move {
-            let mut user = manager::get_active_user_mut(self.user).unwrap(); // TODO error
+            let mut user = match manager::get_active_user_mut(self.user) {
+                Ok(user) => user,
+                Err(_) => {
+                    let _ = self.send(ServerMessage::Event(ServerEvent::SessionLoggedOut));
+                    warn!(
+                        "Nonexistent user! Is this a timing anomaly? Client: {:#?}",
+                        self
+                    );
+                    ctx.stop(); // The user did not exist at the time of request
+                    return;
+                }
+            };
 
             if let Some(community) = user.communities.get_mut(&add.community) {
                 community.rooms.insert(
@@ -277,7 +288,7 @@ impl Handler<AddRoom> for ActiveSession {
                     );
                     ctx.stop()
                 }
-            }
+            } // Else case is *probably* a timing anomaly
         }
     }
 }
