@@ -95,15 +95,26 @@ The server's log files can be found in the log folder, under the standard data d
 
 ## Objectives
 
-- [ ] Basic Messaging:
+- [x] Basic Messaging:
   - [x] Message routing to locally-connected clients
   - [x] Message editing
   - [x] Message deletion
-  - [ ] Message history
+  - [x] Message history
 - [ ] Client:
   - [x] Basic GUI client
   - [x] Make it nicer to use -- gui, not commands
+  - [ ] Settings
+    - [ ] Community settings
+    - [ ] User settings
+    - [ ] Room settings
+    - [ ] Styling
 - [x] Login & persistent identity
+- [ ] Permissions
+  - [ ] Administration (instance level)
+    - [ ] Bans
+  - [ ] Moderation (community level)
+    - [ ] Bans
+    - [ ] Permissions system
 - [ ] Federation
 - [ ] Encryption
   - [ ] MLS
