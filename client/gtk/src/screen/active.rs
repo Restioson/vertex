@@ -20,6 +20,7 @@ use crate::window;
 use std::time::{Instant, Duration};
 use std::sync::RwLock;
 use std::rc::Rc;
+use vertex::prelude::AuthError;
 
 mod community;
 mod dialog;
@@ -286,8 +287,10 @@ pub async fn start(parameters: AuthParameters) {
             println!("encountered error connecting client: {:?}", error);
 
             match error {
-                Error::AuthErrorResponse(_) => {
-                    token_store::forget_token();
+                Error::AuthErrorResponse(err) => {
+                    if err != AuthError::TokenInUse {
+                        token_store::forget_token();
+                    }
                     let screen = screen::login::build().await;
                     window::set_screen(&screen.main);
                 }
@@ -309,7 +312,6 @@ async fn try_start(parameters: AuthParameters) -> Result<Client<Ui>> {
 }
 
 fn describe_error(error: Error) -> String {
-    use vertex::requests::AuthError;
     match error {
         Error::InvalidUrl => "Invalid instance ip".to_string(),
         Error::Http(http) => format!("{}", http),

@@ -32,6 +32,7 @@ entry {
   background: @widget_bg_color;
   color: @widget_color;
   caret-color: currentColor;
+  font-size: 15px;
 
   padding: 5px 8px;
   border-radius: 10px;
@@ -159,7 +160,7 @@ popover {
 }
 
 .dialog #title {
-  font-size: 16px;
+  font-size: 20px;
 }
 
 #dialog button, #dialog entry {
@@ -211,7 +212,8 @@ popover {
 }
 
 #active #chat #room_name {
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
   padding-left: 8px;
 }
 
@@ -258,7 +260,7 @@ popover {
 
 #active #message #invite #label {
   color: #a0a0a0;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 #active #message #invite #community_icon {
@@ -283,7 +285,7 @@ popover {
 
 #active #message #invite #community_description {
   color: #a0a0a0;
-  font-size: 12px;
+  font-size: 15px;
   font-style: italic;
 }
 
@@ -304,13 +306,13 @@ popover {
 
 #active #message #opengraph #title {
   color: #d0d0d0;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 #active #message #opengraph #description {
   color: #a0a0a0;
-  font-size: 12px;
+  font-size: 15px;
   font-style: italic;
 }
 
@@ -349,13 +351,13 @@ popover {
 
 #active #sidebar #community_header #community_name {
   color: #d0d0d0;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 600;
 }
 
 #active #sidebar #community_header #community_description_box {
   color: #a0a0a0;
-  font-size: 12px;
+  font-size: 14px;
   font-style: italic;
 }
 
@@ -383,9 +385,12 @@ popover {
 
 #active #room_label {
   color: #d0d0d0;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
   padding-left: 4px;
+}
+
+#active #room_icon {
+  opacity: 0.5;
 }
 
 #community_menu button {
@@ -398,30 +403,30 @@ popover {
 }
 
 #active #message_group {
-  padding: 4px;
+  padding: 7px;
 }
 
 #active #message_group #author_name {
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 600;
   padding-left: 2px;
 }
 
 #active #message_group #timestamp {
-  font-size: 11px;
+  font-size: 13px;
   font-style: italic;
   color: grey;
-  padding-left: 5px;
+  padding-left: 7px;
 }
 
 #active #message_group #author_icon {
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 45px;
+  min-height: 45px;
 
   background-image: url('icon.png');
-  background-size: 40px;
+  background-size: 45px;
 
-  border-radius: 20px;
+  border-radius: 25px;
 }
 
 #active #entry_list row {
@@ -435,6 +440,7 @@ popover {
 
 #active #message #message_text {
   color: #e0e0e0;
+  font-size: 15px;
 }
 
 #active #message #message_text.pending {
@@ -510,7 +516,7 @@ popover {
 }
 
 #login #title, #register #title {
-  font-size: 16px;
+  font-size: 20px;
 }
 
 #login #error_label, #register #error_label {
@@ -548,7 +554,7 @@ popover {
 
 #settings #category_list row label {
   padding-left: 4px;
-  font-size: 14px;
+  font-size: 18px;
 }
 
 #settings #log_out label {
@@ -565,7 +571,7 @@ popover {
 */
 
 #loading label {
-  font-size: 16px;
+  font-size: 18px;
 }
 
 #loading spinner {
@@ -578,11 +584,11 @@ popover {
 */
 
 #loading_error #title {
-  font-size: 16px;
+  font-size: 20px;
 }
 
 #loading_error #error_label {
-  font-size: 12px;
+  font-size: 15px;
   color: @error_color;
   padding-bottom: 20px;
 }
