@@ -2,6 +2,7 @@ use crate::proto;
 use crate::proto::DeserializeError;
 use crate::structures::*;
 use crate::types::*;
+use super::administration::AdminRequest;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use std::convert::{TryFrom, TryInto};
 
@@ -127,6 +128,7 @@ pub enum ClientRequest {
         community: CommunityId,
         new: String,
     },
+    AdminAction(AdminRequest),
 }
 
 impl From<ClientRequest> for proto::requests::active::ClientRequest {
@@ -219,6 +221,7 @@ impl From<ClientRequest> for proto::requests::active::ClientRequest {
                     community: Some(community.into()),
                 })
             }
+            AdminAction(req) => Request::AdminAction(req.into()),
         };
 
         request::ClientRequest {
@@ -302,6 +305,7 @@ impl TryFrom<proto::requests::active::ClientRequest> for ClientRequest {
                 new: change.new,
                 community: change.community?.try_into()?,
             },
+            AdminAction(action) => ClientRequest::AdminAction(action.try_into()?),
         };
 
         Ok(val)

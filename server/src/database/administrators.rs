@@ -1,5 +1,4 @@
 use crate::database::{Database, DbResult, InvalidUser};
-use bitflags::bitflags;
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
 use tokio_postgres::types::ToSql;
@@ -11,28 +10,20 @@ pub(super) const CREATE_ADMINISTRATORS_TABLE: &str = r"
         permission_flags     BIGINT NOT NULL
     )";
 
-bitflags! {
-    pub struct AdminPermissionFlags: i64 {
-        /// All permissions. Could be used for the server owner.
-        const ALL = 1;
-        /// Ban users.
-        const BAN = 1 << 1;
-    }
-}
-
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CreateAdminError {
     InvalidUser,
     AlreadyAdmin,
 }
 
 impl Database {
-    pub async fn create_admin(
+    pub async fn promote_to_admin(
         &self,
         user: UserId,
         permissions: AdminPermissionFlags,
     ) -> DbResult<Result<(), CreateAdminError>> {
         const STMT: &str = "
-            INSERT (user, permission_flags) INTO administrators
+            INSERT INTO administrators (user_id, permission_flags) VALUES ($1, $2)
                 ON CONFLICT DO NOTHING
         ";
 

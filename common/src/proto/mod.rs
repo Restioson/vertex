@@ -22,6 +22,10 @@ pub mod requests {
     pub mod active {
         include!(concat!(env!("OUT_DIR"), "/vertex.requests.active.rs"));
     }
+
+    pub mod administration {
+        include!(concat!(env!("OUT_DIR"), "/vertex.requests.administration.rs"));
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

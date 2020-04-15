@@ -3,6 +3,7 @@ package vertex.requests.active;
 
 import "types.proto";
 import "structures.proto";
+import "requests/administration.proto";
 
 message ClientMessage {
     types.RequestId id = 1;
@@ -30,6 +31,7 @@ message ClientRequest {
         GetProfile get_profile = 17;
         ChangeCommunityName change_community_name = 18;
         ChangeCommunityDescription change_community_description = 19;
+        administration.AdminRequest admin_action = 20;
     }
 }
 

@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use futures::stream::SplitSink;
 use futures::{Future, SinkExt};
-use log::{error, warn};
+use log::{debug, error, warn};
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
@@ -17,6 +17,7 @@ use crate::handle_disconnected;
 use regular_user::*;
 use std::fmt;
 
+mod administrator;
 mod manager;
 mod regular_user;
 
@@ -74,12 +75,13 @@ impl xtra::Message for AddRoom {
 }
 
 pub struct ActiveSession {
-    ws: SplitSink<WebSocket, ws::Message>,
-    global: crate::Global,
-    heartbeat: Instant,
-    user: UserId,
-    device: DeviceId,
-    perms: TokenPermissionFlags,
+    pub ws: SplitSink<WebSocket, ws::Message>,
+    pub global: crate::Global,
+    pub heartbeat: Instant,
+    pub user: UserId,
+    pub device: DeviceId,
+    pub perms: TokenPermissionFlags,
+    pub admin_perms: AdminPermissionFlags,
 }
 
 impl fmt::Debug for ActiveSession {
@@ -94,23 +96,6 @@ impl fmt::Debug for ActiveSession {
 }
 
 impl ActiveSession {
-    pub fn new(
-        ws: SplitSink<WebSocket, ws::Message>,
-        global: crate::Global,
-        user: UserId,
-        device: DeviceId,
-        perms: TokenPermissionFlags,
-    ) -> Self {
-        ActiveSession {
-            ws,
-            global,
-            heartbeat: Instant::now(),
-            user,
-            device,
-            perms,
-        }
-    }
-
     /// Returns whether the client should be notified and whether the room had unread messages. It
     /// also sets the room to unread.
     fn should_notify_client(
@@ -171,7 +156,7 @@ impl Handler<WebSocketMessage> for ActiveSession {
     ) -> Self::Responder<'a> {
         async move {
             if let Err(e) = self.handle_ws_message(message, ctx).await {
-                error!(
+                debug!(
                     "Error handling websocket message. Error: {:?}\nClient: {:#?}",
                     e, self
                 );

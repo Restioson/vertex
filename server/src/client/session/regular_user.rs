@@ -72,6 +72,19 @@ impl<'a> RequestHandler<'a> {
             ClientRequest::ChangeCommunityDescription { new, community } => {
                 self.change_community_description(new, community).await
             }
+            ClientRequest::AdminAction(req) => {
+                if !self.perms.has_perms(TokenPermissionFlags::ADMINISTER) {
+                    return Err(Error::AccessDenied);
+                }
+
+                let perms = self.session.admin_perms;
+                let handler = administrator::RequestHandler {
+                    session: self.session,
+                    perms,
+                };
+
+                handler.handle_request(req).await
+            }
             _ => Err(Error::Unimplemented),
         }
     }
@@ -255,7 +268,7 @@ impl<'a> RequestHandler<'a> {
 
         let max = self.session.global.config.max_community_name_len as usize;
         if name.len() < 1 || name.len() > max {
-            return Err(Error::TooLong)
+            return Err(Error::TooLong);
         }
 
         let db = &self.session.global.database;
@@ -347,7 +360,7 @@ impl<'a> RequestHandler<'a> {
 
         let max = self.session.global.config.max_channel_name_len as usize;
         if name.len() < 1 || name.len() > max {
-            return Err(Error::TooLong)
+            return Err(Error::TooLong);
         }
 
         let community_id = community;
