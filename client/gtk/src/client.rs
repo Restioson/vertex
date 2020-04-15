@@ -69,6 +69,7 @@ pub struct ClientState<Ui: ClientUi> {
     pub communities: Vec<CommunityEntry<Ui>>,
     pub chat: Option<Chat<Ui>>,
     selected_room: Option<RoomEntry<Ui>>,
+    pub message_entry_is_empty: bool,
 }
 
 #[derive(Clone)]
@@ -84,7 +85,7 @@ pub struct Client<Ui: ClientUi> {
 
     abort_handle: AbortHandle,
 
-    state: WeakSharedMut<ClientState<Ui>>,
+    pub state: WeakSharedMut<ClientState<Ui>>,
 }
 
 impl<Ui: ClientUi> Client<Ui> {
@@ -115,6 +116,7 @@ impl<Ui: ClientUi> Client<Ui> {
             communities: Vec::new(),
             chat: None,
             selected_room: None,
+            message_entry_is_empty: true,
         });
 
         let (abort_signal, abort_handle) = futures::future::abortable(futures::future::pending());

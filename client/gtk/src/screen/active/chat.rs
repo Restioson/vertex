@@ -15,7 +15,7 @@ pub struct ChatWidget {
     pub room_name: gtk::Label,
     pub message_scroll: gtk::ScrolledWindow,
     pub message_list: gtk::ListBox,
-    pub message_entry: gtk::Entry,
+    pub message_entry: gtk::TextView,
     pub groups: LinkedList<MessageGroupWidget>,
 }
 

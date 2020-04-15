@@ -9,7 +9,7 @@ use lazy_static::lazy_static;
 use message::*;
 use room::*;
 
-use crate::{AuthParameters, Client, Error, Result, token_store, TryGetText};
+use crate::{AuthParameters, Client, Error, Result, token_store, scheduler};
 use crate::auth;
 use crate::client;
 use crate::client::RoomEntry;
@@ -20,6 +20,8 @@ use crate::window;
 use std::time::{Instant, Duration};
 use std::sync::RwLock;
 use std::rc::Rc;
+use gdk::enums::key;
+use vertex::requests::AuthError;
 
 mod community;
 mod dialog;
@@ -57,7 +59,7 @@ pub struct Ui {
     pub room_name: gtk::Label,
     pub message_scroll: gtk::ScrolledWindow,
     pub message_list: gtk::ListBox,
-    pub message_entry: gtk::Entry,
+    pub message_entry: gtk::TextView,
 
     message_scroll_state: Rc<RwLock<MessageScrollState>>,
 }
@@ -69,24 +71,22 @@ impl Ui {
         }
 
         let builder: gtk::Builder = GLADE.builder();
+        let message_entry: gtk::TextView = builder.get_object("message_entry").unwrap();
 
-        let main: gtk::Box = builder.get_object("main").unwrap();
-        let content: gtk::Box = builder.get_object("content").unwrap();
-
-        let settings_button: gtk::Button = builder.get_object("settings_button").unwrap();
+        message_entry.set_opacity(0.5);
 
         Ui {
-            main,
-            content,
+            main: builder.get_object("main").unwrap(),
+            content: builder.get_object("content").unwrap(),
             communities: builder.get_object("communities").unwrap(),
-            settings_button,
+            settings_button: builder.get_object("settings_button").unwrap(),
             add_community_button: builder.get_object("add_community_button").unwrap(),
 
             chat: builder.get_object("chat").unwrap(),
             room_name: builder.get_object("room_name").unwrap(),
             message_scroll: builder.get_object("message_scroll").unwrap(),
             message_list: builder.get_object("message_list").unwrap(),
-            message_entry: builder.get_object("message_entry").unwrap(),
+            message_entry,
             message_scroll_state: Rc::new(RwLock::new(MessageScrollState::default())),
         }
     }
@@ -120,18 +120,77 @@ impl client::ClientUi for Ui {
                 .build_widget_event()
         );
 
-        self.message_entry.connect_activate(
-            client.connector()
-                .do_async(|client, entry: gtk::Entry| async move {
+        let client_cloned = client.clone();
+        self.message_entry.connect_focus_out_event(
+            move |entry, _| {
+                let client = client_cloned.clone();
+                let buf = entry.get_buffer().unwrap();
+                let (begin, end) = buf.get_bounds();
+
+                let entry = entry.clone();
+                scheduler::spawn(async move {
+                    let state = client.state.upgrade().unwrap();
+                    let mut state = state.write().await;
+
+                    state.message_entry_is_empty = begin == end;
+
+                    if state.message_entry_is_empty {
+                        entry.get_buffer().unwrap().set_text("Send a message...");
+                        entry.set_opacity(0.5);
+                    }
+                });
+
+                Inhibit(false)
+        });
+
+        let client_cloned = client.clone();
+        self.message_entry.connect_focus_in_event(
+            move |entry, _| {
+                let entry = entry.clone();
+                let client = client_cloned.clone();
+                scheduler::spawn(async move {
+                    let state = client.state.upgrade().unwrap();
+                    let state = state.read().await;
+
+                    if entry.has_focus() && state.message_entry_is_empty {
+                        entry.get_buffer().unwrap().set_text("");
+                        entry.set_opacity(1.0);
+                    }
+                });
+
+                Inhibit(false)
+            }
+        );
+
+        let client_cloned = client.clone();
+        self.message_entry.connect_key_press_event(
+            move |entry, key_event| {
+                let client = client_cloned.clone();
+                if key_event.get_keyval() != key::Return {
+                    return Inhibit(false);
+                }
+
+                if key_event.get_state().contains(gdk::ModifierType::SHIFT_MASK) {
+                    return Inhibit(false);
+                }
+
+                let entry = entry.clone();
+                scheduler::spawn(async move {
                     if let Some(selected_room) = client.selected_room().await {
-                        let content = entry.try_get_text().unwrap_or_default();
+                        let buf = entry.get_buffer().unwrap();
+                        let (begin, end) = &buf.get_bounds();
+                        let content = buf.get_text(begin, end, false);
+                        let content = content.as_ref().map(|c| c.as_str()).unwrap_or_default();
+
                         if !content.trim().is_empty() {
-                            entry.set_text("");
-                            selected_room.send_message(content).await;
+                            buf.set_text("");
+                            selected_room.send_message(content.to_string()).await;
                         }
                     }
-                })
-                .build_cloned_consumer()
+                });
+
+                Inhibit(true)
+            }
         );
 
         let adjustment = self.message_scroll.get_vadjustment().unwrap();
@@ -233,9 +292,8 @@ impl client::ClientUi for Ui {
 
         self.message_entry.set_can_focus(true);
         self.message_entry.set_editable(true);
-
-        self.message_entry.set_placeholder_text(Some("Send message..."));
         self.message_entry.get_style_context().remove_class("disabled");
+        self.message_entry.get_buffer().unwrap().set_text("Send a message...");
 
         self.room_name.set_text(&room.name);
 
@@ -254,9 +312,8 @@ impl client::ClientUi for Ui {
 
         self.message_entry.set_can_focus(false);
         self.message_entry.set_editable(false);
-
-        self.message_entry.set_placeholder_text(Some("Select a room to send messages..."));
         self.message_entry.get_style_context().add_class("disabled");
+        self.message_entry.get_buffer().unwrap().set_text("Select a room to send a message...");
 
         self.room_name.set_text("");
     }
@@ -286,8 +343,12 @@ pub async fn start(parameters: AuthParameters) {
             println!("encountered error connecting client: {:?}", error);
 
             match error {
-                Error::AuthErrorResponse(_) => {
-                    token_store::forget_token();
+                Error::AuthErrorResponse(e) => {
+                    if e != AuthError::TokenInUse {
+                        token_store::forget_token();
+                        println!("Forgetting token, e = {:?}", e);
+                    }
+
                     let screen = screen::login::build().await;
                     window::set_screen(&screen.main);
                 }
@@ -309,7 +370,6 @@ async fn try_start(parameters: AuthParameters) -> Result<Client<Ui>> {
 }
 
 fn describe_error(error: Error) -> String {
-    use vertex::requests::AuthError;
     match error {
         Error::InvalidUrl => "Invalid instance ip".to_string(),
         Error::Http(http) => format!("{}", http),
