@@ -1,6 +1,24 @@
 use super::manager;
-use crate::client::ActiveSession;
+use crate::client::{ActiveSession, Session};
 use vertex::prelude::*;
+use xtra::prelude::*;
+use std::future::Future;
+use crate::handle_disconnected;
+
+struct AdminPermissionsChanged(AdminPermissionFlags);
+
+impl xtra::Message for AdminPermissionsChanged {
+    type Result = ();
+}
+
+impl Handler<AdminPermissionsChanged> for ActiveSession {
+    type Responder<'a> = impl Future<Output = ()> + 'a;
+
+    fn handle<'a>(&'a mut self, message: AdminPermissionsChanged, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
+        let msg = ServerMessage::Event(ServerEvent::AdminPermissionsChanged(message.0));
+        self.send(msg, ctx)
+    }
+}
 
 impl ActiveSession {
     pub async fn handle_admin_request(
@@ -74,7 +92,18 @@ impl ActiveSession {
 
         db.set_admin_permissions(user, no_perms)
             .await?
-            .map_err(|_| Error::InvalidUser)
-            .map(|_| OkResponse::NoData)
+            .map_err(|_| Error::InvalidUser)?;
+
+        let active = manager::get_active_user(user).map_err(|_| Error::InvalidUser)?;
+
+        active.sessions
+            .values()
+            .filter_map(Session::as_active_actor)
+            .for_each(|a| {
+                let _ = a.do_send(AdminPermissionsChanged(no_perms))
+                    .map_err(handle_disconnected("ClientSession")); // Don't care
+            });
+
+        Ok(OkResponse::NoData)
     }
 }

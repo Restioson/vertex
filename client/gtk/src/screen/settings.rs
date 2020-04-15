@@ -46,8 +46,11 @@ fn bind_events(screen: &Screen) {
 
                     match name.as_str() {
                         "log_out" => {
+                            println!("x");
                             token_store::forget_token();
+                            println!("y");
                             screen.client.log_out().await;
+                            println!("z");
                         }
                         "close" => {
                             window::set_screen(&screen.client.ui.main);

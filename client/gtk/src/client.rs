@@ -163,7 +163,6 @@ impl<Ui: ClientUi> Client<Ui> {
             ServerEvent::SessionLoggedOut => {
                 let screen = screen::login::build().await;
                 window::set_screen(&screen.main);
-
                 self.abort_handle.abort();
             }
             unexpected => println!("unhandled server event: {:?}", unexpected),
@@ -352,7 +351,6 @@ impl<Ui: ClientUi> Client<Ui> {
 
     pub async fn log_out(&self) {
         self.request.send(ClientRequest::LogOut).await;
-        self.abort_handle.abort();
     }
 }
 

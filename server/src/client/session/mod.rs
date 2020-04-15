@@ -177,7 +177,7 @@ impl Handler<NotifyClientReady> for ActiveSession {
             if let Err(e) = self.ready(ctx).await {
                 // Probably non-recoverable
                 let _ = self
-                    .send(ServerMessage::Event(ServerEvent::InternalError))
+                    .try_send(ServerMessage::Event(ServerEvent::InternalError))
                     .await;
                 error!("Error in client ready. Error: {:?}\nClient: {:#?}", e, self);
                 ctx.stop();
@@ -221,13 +221,7 @@ impl Handler<ForwardMessage> for ActiveSession {
                 Err(_) => return, // It's *probably* a timing anomaly.
             };
 
-            if let Err(e) = self.send(ServerMessage::Event(msg)).await {
-                error!(
-                    "Error forwarding message. Error: {:?}\nClient: {:#?}",
-                    e, self
-                );
-                ctx.stop()
-            }
+            self.send(ServerMessage::Event(msg), ctx).await;
         }
     }
 }
@@ -240,7 +234,7 @@ impl Handler<AddRoom> for ActiveSession {
             let mut user = match manager::get_active_user_mut(self.user) {
                 Ok(user) => user,
                 Err(_) => {
-                    let _ = self.send(ServerMessage::Event(ServerEvent::SessionLoggedOut));
+                    let _ = self.send(ServerMessage::Event(ServerEvent::SessionLoggedOut), ctx);
                     warn!(
                         "Nonexistent user! Is this a timing anomaly? Client: {:#?}",
                         self
@@ -265,13 +259,7 @@ impl Handler<AddRoom> for ActiveSession {
                 });
 
                 drop(user); // Drop lock
-                if let Err(e) = self.send(msg).await {
-                    error!(
-                        "Error adding room in client actor. Error: {:?}\nClient: {:#?}",
-                        e, self
-                    );
-                    ctx.stop()
-                }
+                self.send(msg, ctx).await;
             } // Else case is *probably* a timing anomaly
         }
     }
@@ -285,35 +273,35 @@ impl Handler<SendMessage<ServerMessage>> for ActiveSession {
         msg: SendMessage<ServerMessage>,
         ctx: &'a mut Context<Self>,
     ) -> Self::Responder<'a> {
-        async move {
-            if let Err(e) = self.send(msg.0).await {
-                error!(
-                    "Error sending server message. Error: {:?}\nClient: {:#?}",
-                    e, self
-                );
-                ctx.stop()
-            }
-        }
+        self.send(msg.0, ctx)
     }
 }
 
 impl Handler<LogoutThisSession> for ActiveSession {
     type Responder<'a> = impl Future<Output = ()> + 'a;
 
-    fn handle(&mut self, _: LogoutThisSession, _: &mut Context<Self>) -> Self::Responder<'_> {
+    fn handle<'a>(&'a mut self, _: LogoutThisSession, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
         async move {
-            let _ = self
-                .send(ServerMessage::Event(ServerEvent::SessionLoggedOut))
-                .await;
+            self.send(ServerMessage::Event(ServerEvent::SessionLoggedOut), ctx).await;
             self.log_out();
         }
     }
 }
 
 impl ActiveSession {
-    #[inline]
-    async fn send<M: Into<Vec<u8>>>(&mut self, msg: M) -> Result<(), warp::Error> {
+    async fn try_send<M: Into<Vec<u8>>>(&mut self, msg: M) -> Result<(), warp::Error> {
         self.ws.send(ws::Message::binary(msg)).await
+    }
+    
+    #[inline]
+    async fn send<M: Into<Vec<u8>>>(&mut self, msg: M, ctx: &mut Context<Self>) {
+        if let Err(e) = self.try_send(msg).await {
+            error!(
+                "Error sending websocket message. Error: {:?}\nClient: {:#?}",
+                e, self
+            );
+            ctx.stop()
+        }
     }
 
     /// Remove the device from wherever it is referenced
@@ -390,16 +378,12 @@ impl ActiveSession {
                 display_name: user.display_name,
             },
             communities,
+            permissions: self.perms,
+            admin_permissions: active.admin_perms,
         };
 
         let msg = ServerMessage::Event(ServerEvent::ClientReady(ready));
-        if let Err(e) = self.send(msg).await {
-            error!(
-                "Error sending websocket message. Error: {:?}\nClient: {:#?}",
-                e, self
-            );
-            ctx.stop()
-        }
+        self.send(msg, ctx).await;
 
         Ok(())
     }
@@ -415,7 +399,7 @@ impl ActiveSession {
             let ratelimiter = self.global.ratelimiter.load();
 
             if let Err(not_until) = ratelimiter.check_key(&self.device) {
-                self.send(ServerMessage::RateLimited {
+                self.try_send(ServerMessage::RateLimited {
                     ready_in: not_until.wait_time_from(Instant::now()),
                 })
                 .await?;
@@ -431,7 +415,7 @@ impl ActiveSession {
             let msg = match ClientMessage::from_protobuf_bytes(message.as_bytes()) {
                 Ok(m) => m,
                 Err(_) => {
-                    self.send(ServerMessage::MalformedMessage).await?;
+                    self.try_send(ServerMessage::MalformedMessage).await?;
                     return Ok(());
                 }
             };
@@ -454,12 +438,12 @@ impl ActiveSession {
                 ctx.stop();
             }
 
-            self.send(ServerMessage::Response { id: msg.id, result })
+            self.try_send(ServerMessage::Response { id: msg.id, result })
                 .await?;
         } else if message.is_close() {
             ctx.stop();
         } else {
-            self.send(ServerMessage::MalformedMessage).await?;
+            self.try_send(ServerMessage::MalformedMessage).await?;
         }
 
         Ok(())

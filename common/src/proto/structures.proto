@@ -61,6 +61,8 @@ message ClientReady {
     types.UserId user = 1;
     Profile profile = 2;
     repeated CommunityStructure communities = 3;
+    int64 permission_flags = 4;
+    int64 admin_permission_flags = 5;
 }
 
 message Profile {

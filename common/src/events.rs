@@ -3,6 +3,7 @@ use crate::proto::DeserializeError;
 use crate::responses::*;
 use crate::structures::*;
 use crate::types::*;
+use crate::requests::AdminPermissionFlags;
 use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
 
@@ -126,6 +127,7 @@ pub enum ServerEvent {
         id: CommunityId,
         reason: RemoveCommunityReason,
     },
+    AdminPermissionsChanged(AdminPermissionFlags),
 }
 
 impl From<ServerEvent> for proto::events::ServerEvent {
@@ -168,6 +170,7 @@ impl From<ServerEvent> for proto::events::ServerEvent {
                 })
             },
             InternalError => Event::InternalError(proto::types::None {}),
+            AdminPermissionsChanged(new) => Event::AdminPermissionsChanged(new.bits()),
         };
 
         proto::events::ServerEvent { event: Some(inner) }
@@ -208,6 +211,10 @@ impl TryFrom<proto::events::ServerEvent> for ServerEvent {
                     id: remove.id?.try_into()?,
                     reason: reason.try_into()?,
                 }
+            }
+            AdminPermissionsChanged(new) => {
+                let new = AdminPermissionFlags::from_bits_truncate(new);
+                ServerEvent::AdminPermissionsChanged(new)
             }
         })
     }

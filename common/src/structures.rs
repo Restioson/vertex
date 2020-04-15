@@ -1,5 +1,6 @@
 use crate::proto::{self, DeserializeError};
 use crate::types::*;
+use crate::requests::AdminPermissionFlags;
 use bitflags::bitflags;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use std::convert::{TryFrom, TryInto};
@@ -281,6 +282,8 @@ pub struct ClientReady {
     pub user: UserId,
     pub profile: Profile,
     pub communities: Vec<CommunityStructure>,
+    pub permissions: TokenPermissionFlags,
+    pub admin_permissions: AdminPermissionFlags,
 }
 
 impl From<ClientReady> for proto::structures::ClientReady {
@@ -289,6 +292,8 @@ impl From<ClientReady> for proto::structures::ClientReady {
             user: Some(ready.user.into()),
             profile: Some(ready.profile.into()),
             communities: ready.communities.into_iter().map(Into::into).collect(),
+            permission_flags: ready.permissions.bits(),
+            admin_permission_flags: ready.admin_permissions.bits(),
         }
     }
 }
@@ -307,6 +312,8 @@ impl TryFrom<proto::structures::ClientReady> for ClientReady {
             user: ready.user?.try_into()?,
             profile: ready.profile?.try_into()?,
             communities,
+            permissions: TokenPermissionFlags::from_bits_truncate(ready.permission_flags),
+            admin_permissions: AdminPermissionFlags::from_bits_truncate(ready.admin_permission_flags),
         })
     }
 }

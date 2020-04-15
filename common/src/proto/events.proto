@@ -25,11 +25,12 @@ message ServerEvent {
         NotifyMessageReady notify_message_ready = 3;
         structures.Edit edit = 4;
         structures.Delete delete = 5;
-        types.None SessionLoggedOut = 6;
+        types.None session_logged_out = 6;
         AddRoom add_room = 7;
         structures.CommunityStructure add_community = 8;
         RemoveCommunity remove_community = 9;
-        types.None InternalError = 10;
+        types.None internal_error = 10;
+        int64 admin_permissions_changed = 11;
     }
 }
 
