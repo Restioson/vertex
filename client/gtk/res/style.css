@@ -208,6 +208,11 @@ popover {
   background: @lower_bar_bg_color;
 }
 
+#active #chat {
+  background: @sidebar_bg_color;
+  min-height: 26px;
+}
+
 #active #chat #chat_header {
   background: @sidebar_bg_color;
   min-height: 26px;
@@ -240,7 +245,6 @@ popover {
 
 #active #message_entry.disabled {
   background: shade(@message_entry_color, 0.95);
-  color: transparent;
 }
 
 #active #message_entry.disabled selection {
