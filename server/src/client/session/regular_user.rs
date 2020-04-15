@@ -77,13 +77,7 @@ impl<'a> RequestHandler<'a> {
                     return Err(Error::AccessDenied);
                 }
 
-                let perms = self.session.admin_perms;
-                let handler = administrator::RequestHandler {
-                    session: self.session,
-                    perms,
-                };
-
-                handler.handle_request(req).await
+                self.session.handle_admin_request(req).await
             }
             _ => Err(Error::Unimplemented),
         }

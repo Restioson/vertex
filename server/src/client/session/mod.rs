@@ -81,7 +81,6 @@ pub struct ActiveSession {
     pub user: UserId,
     pub device: DeviceId,
     pub perms: TokenPermissionFlags,
-    pub admin_perms: AdminPermissionFlags,
 }
 
 impl fmt::Debug for ActiveSession {
