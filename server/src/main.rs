@@ -6,7 +6,7 @@ use std::fs::OpenOptions;
 use std::num::NonZeroU32;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use directories::ProjectDirs;
@@ -28,6 +28,7 @@ use crate::client::{session::WebSocketMessage, Authenticator};
 use crate::community::{Community, CommunityActor};
 use crate::config::Config;
 use crate::database::{DbResult, MalformedInviteCode};
+use clap::{App, Arg};
 
 mod auth;
 mod client;
@@ -102,7 +103,7 @@ fn setup_logging(config: &Config) {
     let dir = dirs.data_dir().join("logs");
 
     fs::create_dir_all(&dir)
-        .unwrap_or_else(|_| panic!("Error creating log dirs ({})", dir.to_string_lossy(),));
+        .unwrap_or_else(|_| panic!("Error creating log dirs ({})", dir.to_string_lossy()));
 
     fern::Dispatch::new()
         .format(|out, message, record| {
@@ -152,6 +153,20 @@ async fn load_communities(db: Database) {
 
 #[tokio::main]
 async fn main() {
+    let args = App::new("Vertex server")
+        .version("0.1")
+        .author("Restioson <restiosondev@gmail.com>")
+        .about("Server for the Vertex chat application https://github.com/Restioson/vertex")
+        .arg(
+            Arg::with_name("add-admin")
+                .short("A")
+                .long("add-admin")
+                .value_name("USERNAME")
+                .help("Adds an admin with all permissions")
+                .takes_value(true),
+        )
+        .get_matches();
+
     println!("Vertex server starting...");
 
     let config = config::load_config();
@@ -168,6 +183,26 @@ async fn main() {
             .clone()
             .sweep_invite_codes_loop(Duration::from_secs(config.invite_codes_sweep_interval_secs)),
     );
+
+    for name in args.values_of("add-admin").into_iter().flat_map(|x| x) {
+        let id = database
+            .get_user_by_name(name.to_string())
+            .await
+            .expect("Error promoting user to admin")
+            .expect(&format!("Invalid username {} to add as admin", name))
+            .id;
+
+        database
+            .promote_to_admin(id, AdminPermissionFlags::ALL)
+            .await
+            .expect(&format!("Error promoting user {} to admin", name))
+            .expect(&format!("Error promoting user {} to admin", name));
+
+        info!(
+            "User {} successfully promoted to admin with all permissions!",
+            name
+        );
+    }
 
     load_communities(database.clone()).await;
 
@@ -272,14 +307,23 @@ async fn login(
         global: global.clone(),
     };
 
-    let (user, device, perms) = authenticator.login(login.device, login.token).await?;
+    let details = authenticator.login(login.device, login.token).await?;
+    let (user, device, perms, admin_perms) = details;
 
     match client::session::insert(global.database.clone(), user, device).await? {
         Ok(_) => {
             let upgrade = ws.on_upgrade(move |websocket| {
                 let (sink, stream) = websocket.split();
 
-                let session = ActiveSession::new(sink, global, user, device, perms);
+                let session = ActiveSession {
+                    ws: sink,
+                    global,
+                    heartbeat: Instant::now(),
+                    user,
+                    device,
+                    perms,
+                    admin_perms,
+                };
                 let session = session.spawn();
 
                 session.clone().attach_stream(stream.map(WebSocketMessage));

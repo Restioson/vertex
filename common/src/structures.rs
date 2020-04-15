@@ -451,6 +451,8 @@ bitflags! {
         const CREATE_ROOMS = 1 << 10;
         /// Create invites to communities
         const CREATE_INVITES = 1 << 11;
+        /// Perform administrator actions
+        const ADMINISTER = 1 << 12;
     }
 }
 
