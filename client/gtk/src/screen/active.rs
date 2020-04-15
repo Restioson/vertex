@@ -108,7 +108,7 @@ impl client::ClientUi for Ui {
         self.settings_button.connect_button_release_event(
             client.connector()
                 .do_async(|client, (_button, _event)| async move {
-                    let screen = screen::settings::build(client);
+                    let screen = screen::settings::build(client).await;
                     window::set_screen(&screen.main);
                 })
                 .build_widget_event()

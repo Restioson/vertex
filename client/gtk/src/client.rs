@@ -70,6 +70,7 @@ pub struct ClientState<Ui: ClientUi> {
     pub chat: Option<Chat<Ui>>,
     selected_room: Option<RoomEntry<Ui>>,
     pub message_entry_is_empty: bool,
+    pub admin_perms: AdminPermissionFlags,
 }
 
 #[derive(Clone)]
@@ -117,6 +118,7 @@ impl<Ui: ClientUi> Client<Ui> {
             chat: None,
             selected_room: None,
             message_entry_is_empty: true,
+            admin_perms: ready.admin_permissions,
         });
 
         let (abort_signal, abort_handle) = futures::future::abortable(futures::future::pending());
