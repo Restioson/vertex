@@ -13,6 +13,12 @@ use std::str::FromStr;
 pub struct Config {
     #[serde(default = "max_message_len")]
     pub max_message_len: u32,
+    #[serde(default = "max_community_name_len")]
+    pub max_community_name_len: u16,
+    #[serde(default = "max_community_description_len")]
+    pub max_community_description_len: u16,
+    #[serde(default = "max_channel_name_len")]
+    pub max_channel_name_len: u16,
     #[serde(default = "max_password_len")]
     pub max_password_len: u16,
     #[serde(default = "min_password_len")]
@@ -23,8 +29,6 @@ pub struct Config {
     pub min_username_len: u16,
     #[serde(default = "max_display_name_len")]
     pub max_display_name_len: u16,
-    #[serde(default = "min_display_name_len")]
-    pub min_display_name_len: u16,
     #[serde(default = "tokens_sweep_interval_secs")]
     pub tokens_sweep_interval_secs: u64,
     #[serde(default = "token_stale_days")]
@@ -47,6 +51,18 @@ fn max_message_len() -> u32 {
     2500
 }
 
+fn max_community_name_len() -> u16 {
+    50
+}
+
+fn max_community_description_len() -> u16 {
+    100
+}
+
+fn max_channel_name_len() -> u16 {
+    50
+}
+
 fn max_password_len() -> u16 {
     1000
 }
@@ -65,10 +81,6 @@ fn min_username_len() -> u16 {
 
 fn max_display_name_len() -> u16 {
     64
-}
-
-fn min_display_name_len() -> u16 {
-    1
 }
 
 fn https() -> bool {
@@ -173,16 +185,28 @@ pub fn load_config() -> Config {
         panic!("Maximum username length must be greater than or equal to minimum username length");
     }
 
-    if config.min_display_name_len < 1 {
-        panic!("Minimum display name length must be greater than or equal to 1");
-    }
-
     if config.max_display_name_len < config.min_username_len {
         panic!("Maximum display name length must be greater than or equal to minimum display name length");
     }
 
     if config.tokens_sweep_interval_secs < 60 {
         panic!("Tokens sweep interval must be greater than 1 minute!");
+    }
+
+    if config.max_message_len < 1 {
+        panic!("Maximum message length must be greater than or equal to 1");
+    }
+
+    if config.max_community_name_len < 1 {
+        panic!("Maximum community name length must be greater than or equal to 1");
+    }
+
+    if config.max_community_description_len < 1 {
+        panic!("Maximum community description length must be greater than or equal to 1");
+    }
+
+    if config.max_channel_name_len < 1 {
+        panic!("Maximum channel length must be greater than or equal to 1");
     }
 
     if Level::from_str(&config.log_level).is_err() {

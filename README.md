@@ -41,58 +41,6 @@ Run `./flatpak/flatpak.sh` in the `client/gtk` directory. It will ask for `sudo`
 `.flatpak-builder` directory (which currently breaks Cargo). Don't just believe us though, go read the shell script for
 yourself :)
 
-## Server Configuration
-
-The configuration file will be located in the standard configuration directories per platform, or in a similar location:
-
-| Linux                                                             | Windows                                                      | macOS                                                             |
-|-------------------------------------------------------------------|--------------------------------------------------------------|-------------------------------------------------------------------|
-| `$XDG_CONFIG_HOME/vertex_server` or `$HOME/.config/vertex_server` | `{FOLDERID_RoamingAppData}\vertex_chat\vertex_server\config` | `$HOME/Library/Preferences/vertex_chat.vertex_server`             |
-
-When using Docker, put the `config.toml` in the `server/docker/` folder. Upon changing this file, please make sure to
-rebuild the docker image with `docker-compose up --build`.
-
-| Key                                | Value                                                                                                                                                                                                                               | Default                            |
-|------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
-| `max_message_len`                  | The maximum message length allowed for local users.                                                                                                                                                                                 | 2500                               |
-| `max_password_len`                 | The maximum password length that a user may enter. It must be greater than or equal to 1 and the minimum password length. This is applied only for future passwords -- it is not retroactively applied. Should be a large value.    | 1000                               |
-| `min_password_len`                 | The minimum password length that a user may enter. It must be greater than 8. This is applied only for future passwords -- it is not retroactively applied. **Serious security consideration should be taken before altering.**     | 12                                 |
-| `max_username_len`                 | The maximum username length that a user may enter. It must be greater than or equal to 1 and the minimum password length. This is applied only for future usernames -- it is not retroactively applied.                             | 64                                 |
-| `min_username_len`                 | The minimum username length that a user may enter. It must be greater than or equal to 1. This is applied only for future usernames -- it is not retroactively applied.                                                             | 1                                  |
-| `max_display_name_len`             | The maximum display name length that a user may enter. It must be greater than or equal to 1 and the minimum password length. This is applied only for future display names -- it is not retroactively applied.                     | 64                                 |
-| `min_display_name_len`             | The minimum password length that a user may enter. It must be  greater than or equal to 1. This is  applied only for future display names -- it is not retroactively applied.                                                       | 1                                  |
-| `tokens_sweep_interval_secs`       | How often to sweep the database for possibly expired tokens in seconds. A warning will be printed if this is less than the time taken to complete a single sweep.                                                                   | 1800 (30min)                       |
-| `token_stale_days`                 | How many days it takes for a token to become stale and require the user to refresh it with their password.                                                                                                                          | 7 (1 week)                         |
-| `token_expiry_days`                | How many days it takes for a token to expire and the device to be deleted from the user's account.                                                                                                                                  | 90 (~3 months)                     |
-| `max_invite_codes_per_community`   | The maximum allowed number of invite codes per community. They are limited to prevent DOS attacks.                                                                                                                                  | 100                                |
-| `invite_codes_sweep_interval_secs` | How often to sweep the database for possibly expired invite codes in seconds. A warning will be printed if this is less than the time taken to complete a single sweep.                                                             | 1800 (30min)                       |
-| `log_level`                        | The minimum log level to display log statements for. Valid options are `trace`, `debug`, `info`, `warn`, and `error`. It must be written in quotation marks (e.g `"info"`).                                                         | `"info"`                           |
-| `https`                            | Whether to use HTTPS on the Vertex server. This is useful to disable TLS for reverse proxied servers.                                                                                                                               | true                               |
-| `ip`                               | The IP and port to bind the server to. It is recommended that this value be changed appropriately.                                                                                                                                  | 127.0.0.1:8443                     |
-
-It is written in TOML. 
-
-There must also be a `db.conf` file present in the same configuration directory, using the postgres syntax. For example:
-```
-host=localhost user=postgres password=postgres dbname=vertex
-```
-
-If it is not present, the above config will be used. For docker, this should be placed in `server/docker/`.
-
-The server must also be provided with a certificate and private key pair if `https` is set to true. They should be named `cert.pem` and `key.pem`
-respectively, and be contained in the standard configuration directories, as is the config file. The private key must be
-encrypted, and it must not have a passphrase.
-
-When using Docker, put the `cert.pem` and `key.pem` in the `server/docker/` folder. Upon changing these, please make
-sure to rebuild the docker image with `docker-compose up --build`. Furthermore, the port must be provided through the 
-`VERTEX_SERVER_PORT` environment variable.
-
-The server's log files can be found in the log folder, under the standard data directories:
-
-| Linux                                                                            | Windows                                                          | macOS                                                               |
-|----------------------------------------------------------------------------------|------------------------------------------------------------------|---------------------------------------------------------------------|
-| `$XDG_DATA_HOME/vertex_server/logs/` or `$HOME/.local/share/vertex_server/logs/` | `{FOLDERID_RoamingAppData}\vertex_chat\vertex_server\data\logs\` | `$HOME/Library/Application Support/vertex_chat.vertex_server/logs/` |
-
 ## Objectives
 
 - [x] Basic Messaging:
