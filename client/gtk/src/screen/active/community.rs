@@ -8,7 +8,7 @@ use vertex::types::InviteCode;
 
 use crate::{client, window};
 use crate::connect::AsConnector;
-use crate::Glade;
+use crate::{TryGetText, Glade};
 
 use super::*;
 
