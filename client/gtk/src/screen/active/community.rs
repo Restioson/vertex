@@ -92,7 +92,7 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
 
     fn add_room(&self, name: String) -> RoomEntryWidget {
         let widget = RoomEntryWidget::build(name);
-        self.room_list.add(&widget.label);
+        self.room_list.add(&widget.container);
         self.room_list.show_all();
 
         widget

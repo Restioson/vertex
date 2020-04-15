@@ -346,7 +346,6 @@ pub async fn start(parameters: AuthParameters) {
                 Error::AuthErrorResponse(e) => {
                     if e != AuthError::TokenInUse {
                         token_store::forget_token();
-                        println!("Forgetting token, e = {:?}", e);
                     }
 
                     let screen = screen::login::build().await;
