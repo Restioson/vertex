@@ -10,6 +10,10 @@ bitflags! {
         const ALL = 1;
         /// Ban users.
         const BAN = 1 << 1;
+        /// Demote users.
+        const DEMOTE = 1 << 2;
+        /// Promote users.
+        const PROMOTE = 1 << 3;
     }
 }
 

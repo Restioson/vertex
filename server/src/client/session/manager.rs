@@ -12,9 +12,11 @@ lazy_static! {
     static ref USERS: DashMap<UserId, ActiveUser> = DashMap::new();
 }
 
+/// Stuff that is shared between sessions.
 pub struct ActiveUser {
     pub communities: HashMap<CommunityId, UserCommunity>,
     pub sessions: HashMap<DeviceId, Session>,
+    pub admin_perms: AdminPermissionFlags,
 }
 
 impl ActiveUser {
@@ -25,6 +27,7 @@ impl ActiveUser {
         session: Session,
     ) -> DbResult<Self> {
         let communities = db.get_communities_for_user(user).await?;
+        let admin_perms = db.get_admin_permissions(user).await?;
         let db = &db; // To prevent move
 
         let communities = communities
@@ -42,6 +45,7 @@ impl ActiveUser {
         Ok(ActiveUser {
             communities,
             sessions,
+            admin_perms,
         })
     }
 }

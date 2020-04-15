@@ -308,7 +308,7 @@ async fn login(
     };
 
     let details = authenticator.login(login.device, login.token).await?;
-    let (user, device, perms, admin_perms) = details;
+    let (user, device, perms) = details;
 
     match client::session::insert(global.database.clone(), user, device).await? {
         Ok(_) => {
@@ -322,7 +322,6 @@ async fn login(
                     user,
                     device,
                     perms,
-                    admin_perms,
                 };
                 let session = session.spawn();
 

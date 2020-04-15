@@ -16,7 +16,7 @@ impl Authenticator {
         &self,
         device: DeviceId,
         pass: AuthToken,
-    ) -> Result<(UserId, DeviceId, TokenPermissionFlags, AdminPermissionFlags), AuthError> {
+    ) -> Result<(UserId, DeviceId, TokenPermissionFlags), AuthError> {
         let token = match self.global.database.get_token(device).await? {
             Some(token) => token,
             None => return Err(AuthError::InvalidToken),
@@ -60,9 +60,7 @@ impl Authenticator {
             return Err(AuthError::InvalidToken);
         }
 
-        let admin_perms = self.global.database.get_admin_permissions(user).await?;
-
-        Ok((user, device, permission_flags, admin_perms))
+        Ok((user, device, permission_flags))
     }
 
     pub async fn create_user(
