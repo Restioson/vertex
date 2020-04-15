@@ -78,8 +78,11 @@ impl ActiveSession {
 
         db.set_admin_permissions(user, perms)
             .await?
-            .map_err(|_| Error::InvalidUser)
-            .map(|_| OkResponse::NoData)
+            .map_err(|_| Error::InvalidUser)?;
+
+        notify_of_admin_perm_change(user)?;
+
+        Ok(OkResponse::NoData)
     }
 
     async fn demote(&mut self, user: UserId) -> Result<OkResponse, Error> {
@@ -94,16 +97,23 @@ impl ActiveSession {
             .await?
             .map_err(|_| Error::InvalidUser)?;
 
-        let active = manager::get_active_user(user).map_err(|_| Error::InvalidUser)?;
-
-        active.sessions
-            .values()
-            .filter_map(Session::as_active_actor)
-            .for_each(|a| {
-                let _ = a.do_send(AdminPermissionsChanged(no_perms))
-                    .map_err(handle_disconnected("ClientSession")); // Don't care
-            });
+        notify_of_admin_perm_change(user)?;
 
         Ok(OkResponse::NoData)
     }
+}
+
+fn notify_of_admin_perm_change(user: UserId) -> Result<(), Error> {
+    let active = manager::get_active_user(user).map_err(|_| Error::InvalidUser)?;
+    let no_perms = AdminPermissionFlags::from_bits_truncate(0);
+
+    active.sessions
+        .values()
+        .filter_map(Session::as_active_actor)
+        .for_each(|a| {
+            let _ = a.do_send(AdminPermissionsChanged(no_perms))
+                .map_err(handle_disconnected("ClientSession")); // Don't care
+        });
+
+    Ok(())
 }
