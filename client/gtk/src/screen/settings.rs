@@ -72,7 +72,7 @@ fn bind_events(screen: &Screen) {
                         "close" => {
                             window::set_screen(&screen.client.ui.main);
                         }
-                        x => {}
+                        _ => {}
                     }
                 }
             })

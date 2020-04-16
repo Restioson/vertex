@@ -167,6 +167,10 @@ impl<Ui: ClientUi> Client<Ui> {
                 window::set_screen(&screen.main);
                 self.abort_handle.abort();
             }
+            ServerEvent::AdminPermissionsChanged(new_perms) => {
+                let state = self.state.upgrade().unwrap();
+                state.write().await.admin_perms = new_perms;
+            }
             unexpected => println!("unhandled server event: {:?}", unexpected),
         }
     }
