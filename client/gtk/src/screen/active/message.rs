@@ -184,16 +184,16 @@ fn build_invite_embed(client: &Client<Ui>, embed: InviteEmbed) -> gtk::Widget {
     motd_label.set_text(&embed.description);
 
     let join_button: gtk::Button = builder.get_object("join_button").unwrap();
-    join_button.connect_button_release_event(
+    join_button.connect_activate(
         client.connector()
-            .do_async(move |client, (_, _)| {
+            .do_async(move |client, _| {
                 let code = embed.code.clone();
                 async move {
                     // TODO: report error
                     let _ = client.join_community(code).await;
                 }
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 
     invite.upcast()

@@ -54,6 +54,7 @@ impl CommunityEntryWidget {
 
 impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
     fn bind_events(&self, community_entry: &client::CommunityEntry<Ui>) {
+        // TODO(a11y)
         self.menu_button.connect_button_release_event(
             community_entry.connector()
                 .do_sync(|community, (button, _)| {
@@ -111,9 +112,9 @@ fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
     let create_channel_button: gtk::Button = builder.get_object("create_channel_button").unwrap();
     let _settings_button: gtk::Button = builder.get_object("settings_button").unwrap();
 
-    invite_button.connect_button_release_event(
+    invite_button.connect_activate(
         (menu.clone(), community_entry.clone()).connector()
-            .do_async(move |(menu, community_entry), (_widget, _event)| async move {
+            .do_async(move |(menu, community_entry), _| async move {
                 menu.hide();
 
                 match community_entry.create_invite(None).await {
@@ -121,16 +122,16 @@ fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
                     Err(err) => dialog::show_generic_error(&err),
                 }
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 
-    create_channel_button.connect_button_release_event(
+    create_channel_button.connect_activate(
         (menu.clone(), community_entry).connector()
-            .do_sync(move |(menu, community_entry), (_widget, _event)| {
+            .do_sync(move |(menu, community_entry), _| {
                 menu.hide();
                 show_create_room(community_entry);
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 
     menu
@@ -149,6 +150,7 @@ fn show_invite_dialog(invite: InviteCode) {
         code_view.set_text(&invite.0);
     }
 
+    // TODO(a11y)
     code_view.connect_button_release_event(|code_view, _| {
         if let Some(buf) = code_view.get_buffer() {
             let (start, end) = (buf.get_start_iter(), buf.get_end_iter());
@@ -173,7 +175,7 @@ fn show_create_room(community: client::CommunityEntry<Ui>) {
 
     let dialog = window::show_dialog(main);
 
-    create_button.connect_button_release_event(
+    create_button.connect_activate(
         community.connector()
             .do_async(move |community, _| {
                 let name_entry = name_entry.clone();
@@ -188,7 +190,7 @@ fn show_create_room(community: client::CommunityEntry<Ui>) {
                     }
                 }
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 }
 
@@ -218,9 +220,10 @@ impl CommunityExpander {
             expanded: Rc::new(AtomicBool::new(false)),
         };
 
+        // TODO(a11y)
         event_header.connect_button_release_event(
             expander.connector()
-                .do_sync(|expander, (_, _)| {
+                .do_sync(|expander, _| {
                     let expanded = expander.expanded.load(Ordering::SeqCst);
                     if expanded {
                         expander.widget.remove(&expander.content);

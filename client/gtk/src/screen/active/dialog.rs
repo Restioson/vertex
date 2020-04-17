@@ -23,7 +23,7 @@ pub fn show_add_community(client: Client<Ui>) {
 
     let dialog = window::show_dialog(main);
 
-    create_community_button.connect_button_release_event(
+    create_community_button.connect_activate(
         client.connector()
             .do_sync({
                 let dialog = dialog.clone();
@@ -32,10 +32,10 @@ pub fn show_add_community(client: Client<Ui>) {
                     show_create_community(client);
                 }
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 
-    join_community_button.connect_button_release_event(
+    join_community_button.connect_activate(
         client.connector()
             .do_sync({
                 move |client, _| {
@@ -43,7 +43,7 @@ pub fn show_add_community(client: Client<Ui>) {
                     show_join_community(client);
                 }
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 }
 
@@ -60,7 +60,7 @@ pub fn show_create_community(client: Client<Ui>) {
 
     let dialog = window::show_dialog(main);
 
-    create_button.connect_button_release_event(
+    create_button.connect_activate(
         client.connector()
             .do_async(move |client, _| {
                 let name_entry = name_entry.clone();
@@ -84,7 +84,7 @@ pub fn show_create_community(client: Client<Ui>) {
                     }
                 }
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 }
 
@@ -101,7 +101,7 @@ pub fn show_join_community(client: Client<Ui>) {
 
     let dialog = window::show_dialog(main);
 
-    join_button.connect_button_release_event(
+    join_button.connect_activate(
         client.connector()
             .do_async(move |client, _| {
                 let code_entry = code_entry.clone();
@@ -117,7 +117,7 @@ pub fn show_join_community(client: Client<Ui>) {
                     }
                 }
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 }
 
@@ -136,11 +136,11 @@ pub fn show_generic_error<E: std::fmt::Display>(error: &E) {
 
     let dialog = window::show_dialog(main);
 
-    ok_button.connect_button_press_event(
+    ok_button.connect_activate(
         dialog.connector()
             .do_sync(|dialog, _| {
                 dialog.close();
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 }

@@ -74,6 +74,7 @@ pub fn show_dialog<W: glib::IsA<gtk::Widget>>(widget: W) -> Dialog {
             widget,
         };
 
+        // TODO(a11y)
         dialog.background.connect_button_release_event({
             let dialog = dialog.clone();
             move |_, _| {

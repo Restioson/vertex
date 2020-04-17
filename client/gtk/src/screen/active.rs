@@ -105,19 +105,19 @@ impl client::ClientUi for Ui {
     type MessageEntryWidget = MessageEntryWidget;
 
     fn bind_events(&self, client: &Client<Ui>) {
-        self.settings_button.connect_button_release_event(
+        self.settings_button.connect_activate(
             client.connector()
-                .do_async(|client, (_button, _event)| async move {
+                .do_async(|client, _| async move {
                     let screen = screen::settings::build(client);
                     window::set_screen(&screen.main);
                 })
-                .build_widget_event()
+                .build_cloned_consumer()
         );
 
-        self.add_community_button.connect_button_release_event(
+        self.add_community_button.connect_activate(
             client.connector()
                 .do_sync(|screen, _| show_add_community(screen))
-                .build_widget_event()
+                .build_cloned_consumer()
         );
 
         let client_cloned = client.clone();
@@ -250,7 +250,7 @@ impl client::ClientUi for Ui {
 
         self.message_list.connect_size_allocate(
             (self.message_scroll_state.clone(), adjustment).connector()
-                .do_async(|(scroll_state, adjustment), (_, _)| async move {
+                .do_async(|(scroll_state, adjustment), _| async move {
                     let mut old = scroll_state.write().unwrap();
 
                     let new_bottom = adjustment.get_upper() - adjustment.get_page_size();
