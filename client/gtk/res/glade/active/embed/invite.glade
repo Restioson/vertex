@@ -65,8 +65,8 @@
               </packing>
             </child>
             <child>
-              <object class="GtkLabel" id="community_description">
-                <property name="name">community_description</property>
+              <object class="GtkLabel" id="invite_community_description">
+                <property name="name">invite_community_description</property>
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>

@@ -114,16 +114,24 @@
           </packing>
         </child>
         <child>
-          <object class="GtkViewport" id="settings_viewport">
-            <property name="name">settings_viewport</property>
+          <object class="GtkScrolledWindow" id="settings_scroll">
+            <property name="name">settings_scroll</property>
             <property name="visible">True</property>
-            <property name="can_focus">False</property>
+            <property name="can_focus">True</property>
+            <property name="shadow_type">in</property>
             <child>
-              <placeholder/>
+              <object class="GtkViewport" id="settings_viewport">
+                <property name="name">settings_viewport</property>
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <child>
+                  <placeholder/>
+                </child>
+              </object>
             </child>
           </object>
           <packing>
-            <property name="expand">True</property>
+            <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">1</property>
           </packing>
