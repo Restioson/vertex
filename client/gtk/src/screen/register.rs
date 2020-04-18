@@ -46,7 +46,7 @@ pub async fn build() -> Screen {
 }
 
 async fn bind_events(screen: &Screen) {
-    screen.login_button.connect_activate(
+    screen.login_button.connect_clicked(
         screen.connector()
             .do_async(|_screen, _| async move {
                 let screen = screen::login::build().await;
@@ -55,7 +55,7 @@ async fn bind_events(screen: &Screen) {
             .build_cloned_consumer()
     );
 
-    screen.register_button.connect_activate(
+    screen.register_button.connect_clicked(
         screen.connector()
             .do_async(|screen, _| async move {
                 let instance_ip = screen.instance_entry.try_get_text().unwrap_or_default();

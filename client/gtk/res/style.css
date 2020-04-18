@@ -26,6 +26,10 @@
   all: unset;
 }
 
+.window-frame {
+  box-shadow: 0 0px 0px 0px alpha(black, 0.0);
+}
+
 viewport {
   background: @content_bg_color;
 }
@@ -148,6 +152,10 @@ popover {
   box-shadow: 0 2px 6px 1px rgba(0, 0, 0, 0.35);
 }
 
+/*
+  Dialog
+*/
+
 #dialog_bg {
   background-color: rgba(0, 0, 0, 0.4);
 }
@@ -158,16 +166,32 @@ popover {
   min-height: 100px;
   padding: 20px;
   border-radius: 20px;
-  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0);
 }
 
-.dialog #title {
+.dialog .title {
   font-size: 20px;
 }
 
-#dialog button, #dialog entry {
+.dialog .title, .dialog entry, .dialog button {
   padding: 8px;
   margin: 4px;
+}
+
+.dialog button, .dialog entry {
+  font-size: 16px;
+}
+
+.dialog .invite_code_text {
+  background: @widget_bg_color;
+  padding: 8px;
+  border-radius: 8px;
+  margin: 4px;
+}
+
+.dialog .error_description {
+  color: @error_color;
+  font-size: 16px;
 }
 
 /* specific styling */
@@ -484,25 +508,9 @@ popover {
   min-height: 100px;
 }
 
-#create_community button, #create_community entry, #create_room button, #create_room entry {
-  padding: 8px;
-  margin: 4px;
-}
-
 #join_community button, #join_community entry {
   padding: 8px;
   margin: 4px;
-}
-
-#invite_community textview {
-  background: @widget_bg_color;
-  padding: 8px;
-  border-radius: 8px;
-  margin: 4px;
-}
-
-#error_dialog #description {
-  color: @error_color;
 }
 
 /*
@@ -547,18 +555,18 @@ popover {
   settings screen
 */
 
-#settings #category_list {
+#settings .category_list {
   min-width: 228px;
   background: @sidebar_bg_color;
   padding: 16px;
 }
 
-#settings #category_list row {
+#settings .category_list row {
   padding: 8px;
   border-radius: 10px;
 }
 
-#settings #category_list row label {
+#settings .category_list row label {
   padding-left: 4px;
   font-size: 18px;
 }
@@ -604,31 +612,4 @@ popover {
   min-height: 20px;
   padding: 8px;
   margin: 4px;
-}
-
-/*
-  generic error screen
-*/
-
-#error_dialog #title {
-  font-size: 20px;
-  font-weight: 500;
-}
-
-#error_dialog #error_label {
-  font-size: 16px;
-  color: @error_color;
-  padding-bottom: 20px;
-}
-
-#error_dialog #ok_button {
-  min-height: 20px;
-  padding: 8px;
-  margin: 4px;
-}
-
-#error_dialog #flavour_text {
-  font-size: 14px;
-  font-style: italic;
-  color: @subtitle_color;
 }

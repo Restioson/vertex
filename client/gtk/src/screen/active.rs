@@ -105,7 +105,7 @@ impl client::ClientUi for Ui {
     type MessageEntryWidget = MessageEntryWidget;
 
     fn bind_events(&self, client: &Client<Ui>) {
-        self.settings_button.connect_activate(
+        self.settings_button.connect_clicked(
             client.connector()
                 .do_async(|client, _| async move {
                     let screen = screen::settings::build(client);
@@ -114,7 +114,7 @@ impl client::ClientUi for Ui {
                 .build_cloned_consumer()
         );
 
-        self.add_community_button.connect_activate(
+        self.add_community_button.connect_clicked(
             client.connector()
                 .do_sync(|screen, _| show_add_community(screen))
                 .build_cloned_consumer()

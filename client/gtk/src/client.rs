@@ -352,7 +352,6 @@ impl<Ui: ClientUi> Client<Ui> {
 
     pub async fn log_out(&self) {
         self.request.send(ClientRequest::LogOut).await;
-        self.abort_handle.abort();
     }
 }
 

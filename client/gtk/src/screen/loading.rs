@@ -31,7 +31,7 @@ pub fn build_error<F, Fut>(error: String, retry: F) -> gtk::Viewport
     error_label.set_text(&error);
 
     let login_button: gtk::Button = builder.get_object("login_button").unwrap();
-    login_button.connect_activate(
+    login_button.connect_clicked(
         ().connector()
             .do_async(|_, _| async move {
                 let screen = screen::login::build().await;
@@ -41,7 +41,7 @@ pub fn build_error<F, Fut>(error: String, retry: F) -> gtk::Viewport
     );
 
     let retry_button: gtk::Button = builder.get_object("connect_button").unwrap();
-    retry_button.connect_activate(
+    retry_button.connect_clicked(
         ().connector()
             .do_async(move |_, _| retry())
             .build_cloned_consumer()

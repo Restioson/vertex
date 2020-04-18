@@ -63,32 +63,34 @@
         <property name="position">1</property>
       </packing>
     </child>
+  </object>
+  <object class="GtkButton" id="menu_button">
+    <property name="name">menu_button</property>
+    <property name="visible">True</property>
+    <property name="can_focus">True</property>
+    <property name="receives_default">True</property>
+    <property name="relief">none</property>
     <child>
-      <object class="GtkButton" id="menu_button">
-        <property name="name">menu_button</property>
+      <object class="GtkImage">
         <property name="visible">True</property>
-        <property name="can_focus">True</property>
-        <property name="receives_default">True</property>
-        <property name="relief">none</property>
-        <child>
-          <object class="GtkImage">
-            <property name="visible">True</property>
-            <property name="can_focus">False</property>
-            <property name="pixbuf">res/feather/menu.svg</property>
-          </object>
-        </child>
+        <property name="can_focus">False</property>
+        <property name="pixbuf">res/feather/menu.svg</property>
       </object>
-      <packing>
-        <property name="expand">False</property>
-        <property name="fill">True</property>
-        <property name="pack_type">end</property>
-        <property name="position">2</property>
-      </packing>
+    </child>
+    <child internal-child="accessible">
+      <object class="AtkObject" id="menu_button-atkobject">
+        <property name="AtkObject::accessible-name" translatable="yes">Community settings</property>
+      </object>
     </child>
   </object>
   <object class="GtkListBox" id="room_list">
     <property name="name">room_list</property>
     <property name="visible">True</property>
     <property name="can_focus">False</property>
+    <child internal-child="accessible">
+      <object class="AtkObject" id="room_list-atkobject">
+        <property name="AtkObject::accessible-name" translatable="yes">Channel list</property>
+      </object>
+    </child>
   </object>
 </interface>

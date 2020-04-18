@@ -107,6 +107,11 @@
                         </style>
                       </object>
                     </child>
+                    <child internal-child="accessible">
+                      <object class="AtkObject" id="register_button-atkobject">
+                        <property name="AtkObject::accessible-name" translatable="yes">Switch to registration</property>
+                      </object>
+                    </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>
