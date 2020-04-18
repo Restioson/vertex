@@ -38,6 +38,7 @@ gdk = "0.12"
 pango = "0.8"
 gdk-pixbuf = "0.8"
 gtk = { version = "0.8", features = ["v3_20"] }
+atk = "0.8"
 
 atk = "0.8"
 
