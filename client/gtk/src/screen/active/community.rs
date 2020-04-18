@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 
 use gtk::prelude::*;
 
@@ -11,6 +11,8 @@ use crate::connect::AsConnector;
 use crate::{Glade, TryGetText};
 
 use super::*;
+use atk::{AtkObjectExt, RelationType, RelationSetExt};
+use gtk::Orientation;
 
 #[derive(Clone)]
 pub struct CommunityEntryWidget {
@@ -29,6 +31,7 @@ impl CommunityEntryWidget {
         let builder: gtk::Builder = GLADE.builder();
 
         let community_header: gtk::Box = builder.get_object("community_header").unwrap();
+        let settings: gtk::Button = builder.get_object("menu_button").unwrap();
 
         let community_name: gtk::Label = builder.get_object("community_name").unwrap();
         community_name.set_text(&name);
@@ -40,6 +43,9 @@ impl CommunityEntryWidget {
         let room_list: gtk::ListBox = builder.get_object("room_list").unwrap();
 
         let expander = CommunityExpander::new(
+            community_name.upcast(),
+            community_description.upcast(),
+            settings.upcast(),
             community_header.upcast(),
             room_list.clone().upcast(),
         );
@@ -54,10 +60,9 @@ impl CommunityEntryWidget {
 
 impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
     fn bind_events(&self, community_entry: &client::CommunityEntry<Ui>) {
-        // TODO(a11y)
-        self.menu_button.connect_button_release_event(
+        self.menu_button.connect_clicked(
             community_entry.connector()
-                .do_sync(|community, (button, _)| {
+                .do_sync(|community, button| {
                     let menu = build_menu(community);
                     menu.set_relative_to(Some(&button));
                     menu.show();
@@ -68,7 +73,7 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
                     });
                 })
                 .inhibit(true)
-                .build_widget_event()
+                .build_cloned_consumer()
         );
         self.room_list.connect_row_selected(
             community_entry.connector()
@@ -112,7 +117,7 @@ fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
     let create_channel_button: gtk::Button = builder.get_object("create_channel_button").unwrap();
     let _settings_button: gtk::Button = builder.get_object("settings_button").unwrap();
 
-    invite_button.connect_activate(
+    invite_button.connect_clicked(
         (menu.clone(), community_entry.clone()).connector()
             .do_async(move |(menu, community_entry), _| async move {
                 menu.hide();
@@ -125,7 +130,7 @@ fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
             .build_cloned_consumer()
     );
 
-    create_channel_button.connect_activate(
+    create_channel_button.connect_clicked(
         (menu.clone(), community_entry).connector()
             .do_sync(move |(menu, community_entry), _| {
                 menu.hide();
@@ -175,7 +180,7 @@ fn show_create_room(community: client::CommunityEntry<Ui>) {
 
     let dialog = window::show_dialog(main);
 
-    create_button.connect_activate(
+    create_button.connect_clicked(
         community.connector()
             .do_async(move |community, _| {
                 let name_entry = name_entry.clone();
@@ -202,39 +207,44 @@ pub struct CommunityExpander {
 }
 
 impl CommunityExpander {
-    fn new(header: gtk::Widget, content: gtk::Widget) -> Self {
-        let widget = gtk::BoxBuilder::new()
-            .orientation(gtk::Orientation::Vertical)
+    fn new(
+        heading: gtk::Label,
+        description: gtk::Label,
+        settings: gtk::Widget,
+        header: gtk::Widget, // The heading & description
+        content: gtk::Widget
+    ) -> Self {
+        let widget = gtk::ExpanderBuilder::new()
+            .label_widget(&header)
+            .child(&content)
             .build();
 
-        let event_header = gtk::EventBoxBuilder::new()
-            .above_child(false)
+        // Needed to stop vexpanding
+        let settings_box = gtk::BoxBuilder::new()
+            .orientation(Orientation::Vertical)
+            .child(&settings)
+            .vexpand(false)
             .build();
-        event_header.add(&header);
 
-        widget.add(&event_header);
+        let container = gtk::BoxBuilder::new()
+            .orientation(Orientation::Horizontal)
+            .build();
+
+        container.add(&widget);
+        container.add(&settings_box);
+
+        let objs = (widget.get_accessible(), heading.get_accessible(), description.get_accessible());
+        if let (Some(exp), Some(heading), Some(desc)) = objs {
+            let relations = exp.ref_relation_set().expect("Error getting relations set");
+            relations.add_relation_by_type(RelationType::LabelledBy, &heading);
+            relations.add_relation_by_type(RelationType::LabelledBy, &desc);
+        }
 
         let expander = CommunityExpander {
-            widget,
+            widget: container,
             content,
             expanded: Rc::new(AtomicBool::new(false)),
         };
-
-        // TODO(a11y)
-        event_header.connect_button_release_event(
-            expander.connector()
-                .do_sync(|expander, _| {
-                    let expanded = expander.expanded.load(Ordering::SeqCst);
-                    if expanded {
-                        expander.widget.remove(&expander.content);
-                    } else {
-                        expander.widget.add(&expander.content);
-                        expander.content.show_all();
-                    }
-                    expander.expanded.store(!expanded, Ordering::SeqCst);
-                })
-                .build_widget_event()
-        );
 
         expander
     }

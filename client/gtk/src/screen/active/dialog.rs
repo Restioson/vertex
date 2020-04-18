@@ -23,7 +23,7 @@ pub fn show_add_community(client: Client<Ui>) {
 
     let dialog = window::show_dialog(main);
 
-    create_community_button.connect_activate(
+    create_community_button.connect_clicked(
         client.connector()
             .do_sync({
                 let dialog = dialog.clone();
@@ -35,7 +35,7 @@ pub fn show_add_community(client: Client<Ui>) {
             .build_cloned_consumer()
     );
 
-    join_community_button.connect_activate(
+    join_community_button.connect_clicked(
         client.connector()
             .do_sync({
                 move |client, _| {
@@ -60,7 +60,7 @@ pub fn show_create_community(client: Client<Ui>) {
 
     let dialog = window::show_dialog(main);
 
-    create_button.connect_activate(
+    create_button.connect_clicked(
         client.connector()
             .do_async(move |client, _| {
                 let name_entry = name_entry.clone();
@@ -101,7 +101,7 @@ pub fn show_join_community(client: Client<Ui>) {
 
     let dialog = window::show_dialog(main);
 
-    join_button.connect_activate(
+    join_button.connect_clicked(
         client.connector()
             .do_async(move |client, _| {
                 let code_entry = code_entry.clone();
@@ -136,7 +136,7 @@ pub fn show_generic_error<E: std::fmt::Display>(error: &E) {
 
     let dialog = window::show_dialog(main);
 
-    ok_button.connect_activate(
+    ok_button.connect_clicked(
         dialog.connector()
             .do_sync(|dialog, _| {
                 dialog.close();

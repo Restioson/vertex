@@ -26,6 +26,10 @@
   all: unset;
 }
 
+.window-frame {
+  box-shadow: 0 0px 0px 0px alpha(black, 0.0);
+}
+
 viewport {
   background: @content_bg_color;
 }
