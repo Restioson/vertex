@@ -18,7 +18,7 @@
             <property name="halign">center</property>
             <accessibility>
               <relation type="labelled-by" target="label1"/>
-              <relation type="labelled-by" target="label2"/>
+              <relation type="described-by" target="label2"/>
             </accessibility>
           </object>
           <packing>
@@ -38,9 +38,6 @@
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>
                 <property name="label" translatable="yes">Narrate New Messages</property>
-                <accessibility>
-                  <relation type="label-for" target="narrate_new"/>
-                </accessibility>
                 <style>
                   <class name="setting_heading"/>
                 </style>
@@ -59,9 +56,6 @@
                 <property name="margin_top">1</property>
                 <property name="label" translatable="yes">When a message is sent to the room that the user is looking at, send a system notification to allow screen readers to narrate the message.</property>
                 <property name="wrap">True</property>
-                <accessibility>
-                  <relation type="label-for" target="narrate_new"/>
-                </accessibility>
                 <style>
                   <class name="setting_description"/>
                 </style>
