@@ -55,7 +55,6 @@ impl MessageGroupWidget {
             ChatSide::Front => self.entry_list.add(&entry.content.widget),
             ChatSide::Back => self.entry_list.insert(&entry.content.widget, 0),
         }
-
         entry
     }
 

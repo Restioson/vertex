@@ -191,13 +191,19 @@ impl<Ui: ClientUi> Client<Ui> {
     async fn handle_add_message(&self, community: CommunityId, room: RoomId, message: Message) {
         if let Some(community) = self.community_by_id(community).await {
             if let Some(room) = community.room_by_id(room).await {
-                if !self.ui.window_focused() || !self.is_selected(room.community, room.id).await {
+                let focused = self.ui.window_focused();
+                let selected = self.is_selected(room.community, room.id).await;
+                if (!focused || !selected) || (focused && selected) {
+                    // Read it out if looking at the room, but in short form
+                    let a11y_narration = focused && selected;
+
                     let profile = self.profiles.get_or_default(message.author, message.author_profile_version).await;
                     self.notifier.notify_message(
                         &profile,
                         &community.state.read().await.name,
                         &room.name,
                         message.content.as_ref().map(|s| s as &str),
+                        a11y_narration,
                     ).await;
                 }
 
