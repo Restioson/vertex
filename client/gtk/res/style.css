@@ -547,6 +547,10 @@ popover {
   settings screen
 */
 
+#settings {
+  background: @sidebar_bg_color;
+}
+
 #settings #category_list {
   min-width: 228px;
   background: @sidebar_bg_color;
@@ -563,13 +567,24 @@ popover {
   font-size: 18px;
 }
 
-#settings #log_out label {
+#settings #log_out_button_label {
   color: @error_color;
-  font-weight: 600;
 }
 
-#settings #close label {
+/* "Close" & "Log out" */
+#settings .leave_button {
+  background: @sidebar_bg_color;
+  margin: 12px;
+}
+
+#settings .leave_button:hover {
+  background: shade(@sidebar_bg_color, 1.1);
+}
+
+#settings .button_label  {
   font-weight: 600;
+  font-size: 18px;
+  padding: 8px;
 }
 
 /*

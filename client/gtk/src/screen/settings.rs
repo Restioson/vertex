@@ -14,6 +14,8 @@ pub struct Screen {
     client: Client<screen::active::Ui>,
     category_list: gtk::ListBox,
     settings_viewport: gtk::Viewport,
+    close: gtk::Button,
+    log_out: gtk::Button,
 }
 
 pub async fn build(client: Client<screen::active::Ui>) -> Screen {
@@ -22,6 +24,8 @@ pub async fn build(client: Client<screen::active::Ui>) -> Screen {
     }
 
     let builder: gtk::Builder = GLADE.builder();
+    let close: gtk::Button = builder.get_object("close_button").unwrap();
+    let log_out: gtk::Button = builder.get_object("log_out_button").unwrap();
     let category_list: gtk::ListBox = builder.get_object("category_list").unwrap();
 
     let perms = client.state.upgrade().unwrap().read().await.admin_perms;
@@ -44,6 +48,8 @@ pub async fn build(client: Client<screen::active::Ui>) -> Screen {
         client,
         category_list,
         settings_viewport: builder.get_object("settings_viewport").unwrap(),
+        close,
+        log_out,
     };
 
     bind_events(&screen);
@@ -52,30 +58,36 @@ pub async fn build(client: Client<screen::active::Ui>) -> Screen {
 }
 
 fn bind_events(screen: &Screen) {
-    screen.category_list.connect_row_selected(
+    screen.close.connect_clicked(
         screen.connector()
-            .do_async(|screen, (_list, row)| async move {
-                if let Some(row) = row {
-                    let row: gtk::ListBoxRow = row;
-                    let name = row.get_widget_name()
-                        .map(|s| s.as_str().to_owned())
-                        .unwrap_or_default();
-
-                    match name.as_str() {
-                        "log_out" => {
-                            println!("x");
-                            token_store::forget_token();
-                            println!("y");
-                            screen.client.log_out().await;
-                            println!("z");
-                        }
-                        "close" => {
-                            window::set_screen(&screen.client.ui.main);
-                        }
-                        _ => {}
-                    }
-                }
-            })
-            .build_widget_and_option_consumer()
+            .do_sync(|screen, _| window::set_screen(&screen.client.ui.main))
+            .build_cloned_consumer()
     );
+
+    screen.log_out.connect_clicked(
+        screen.connector()
+            .do_async(|screen, _| async move {
+                token_store::forget_token();
+                screen.client.log_out().await;
+            })
+            .build_cloned_consumer()
+    );
+
+    // Template v v v
+    // screen.category_list.connect_row_selected(
+    //     screen.connector()
+    //         .do_async(|screen, (_list, row)| async move {
+    //             if let Some(row) = row {
+    //                 let row: gtk::ListBoxRow = row;
+    //                 let name = row.get_widget_name()
+    //                     .map(|s| s.as_str().to_owned())
+    //                     .unwrap_or_default();
+    //
+    //                 match name.as_str() {
+    //                     _ => ()
+    //                 }
+    //             }
+    //         })
+    //         .build_widget_and_option_consumer()
+    // );
 }
