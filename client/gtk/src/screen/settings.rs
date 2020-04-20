@@ -2,7 +2,7 @@ use gtk::prelude::*;
 
 use lazy_static::lazy_static;
 
-use crate::{Client, token_store, window};
+use crate::{Client, token_store, window, SharedMut};
 use crate::connect::AsConnector;
 use crate::Glade;
 use crate::screen;
@@ -13,6 +13,7 @@ pub struct Screen {
     client: Client<screen::active::Ui>,
     category_list: gtk::ListBox,
     settings_viewport: gtk::Viewport,
+    current_settings: SharedMut<Option<gtk::Widget>>,
     close: gtk::Button,
     log_out: gtk::Button,
 }
@@ -31,6 +32,7 @@ pub fn build(client: Client<screen::active::Ui>) -> Screen {
         client,
         category_list: builder.get_object("category_list").unwrap(),
         settings_viewport: builder.get_object("settings_viewport").unwrap(),
+        current_settings: SharedMut::new(None),
         close,
         log_out,
     };
@@ -57,20 +59,44 @@ fn bind_events(screen: &Screen) {
     );
 
     // Template v v v
-    // screen.category_list.connect_row_selected(
-    //     screen.connector()
-    //         .do_async(|screen, (_list, row)| async move {
-    //             if let Some(row) = row {
-    //                 let row: gtk::ListBoxRow = row;
-    //                 let name = row.get_widget_name()
-    //                     .map(|s| s.as_str().to_owned())
-    //                     .unwrap_or_default();
-    //
-    //                 match name.as_str() {
-    //                     _ => ()
-    //                 }
-    //             }
-    //         })
-    //         .build_widget_and_option_consumer()
-    // );
+    screen.category_list.connect_row_selected(
+        screen.connector()
+            .do_async(|screen, (_list, row)| async move {
+                if let Some(row) = row {
+                    let row: gtk::ListBoxRow = row;
+                    let name = row.get_widget_name()
+                        .map(|s| s.as_str().to_owned())
+                        .unwrap_or_default();
+
+                    let widget = match name.as_str() {
+                        "a11y" => Some(build_accessibility()),
+                        _ => None,
+                    };
+
+                    if let Some(widget) = widget {
+                        let mut cur = screen.current_settings.write().await;
+                        if let Some(cur) = cur.take() {
+                            screen.settings_viewport.remove(&cur);
+                        }
+
+                        screen.settings_viewport.add(&widget);
+                        widget.show_all();
+                        screen.settings_viewport.show_all();
+
+                        *cur = Some(widget);
+                    }
+                }
+            })
+            .build_widget_and_option_consumer()
+    );
+}
+
+fn build_accessibility() -> gtk::Widget {
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("settings/a11y.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
+    let viewport: gtk::Box = builder.get_object("main").unwrap();
+    viewport.upcast()
 }
