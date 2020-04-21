@@ -2,6 +2,7 @@
 @define-color sidebar_bg_color #303030;
 @define-color toolbar_bg_color #3D3D3D;
 @define-color dark_widget_bg_color #2D2D2D;
+@define-color menu_bg_color #202020;
 
 @define-color dialog_bg_color #313131;
 
@@ -32,6 +33,37 @@
 
 viewport {
   background: @content_bg_color;
+}
+
+menu {
+  background: @menu_bg_color;
+  min-width: 200px;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  color: #ffffff;
+}
+
+menu separator {
+  background: shade(@menu_bg_color, 0.9);
+}
+
+menu menuitem {
+  margin: 2px;
+  border-radius: 6px;
+}
+
+menu menuitem:disabled label {
+  color: #4e4e4e;
+}
+
+menu menuitem label {
+  padding: 4px;
+}
+
+menu menuitem:hover {
+  background: @widget_bg_color;
 }
 
 entry {
