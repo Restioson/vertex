@@ -174,6 +174,7 @@ impl CommunityExpander {
 
         container.add(&widget);
         container.add(&settings_box);
+        container.pack_end(&settings_box, false, true, 0);
 
         let objs = (widget.get_accessible(), heading.get_accessible(), description.get_accessible());
         if let (Some(exp), Some(heading), Some(desc)) = objs {

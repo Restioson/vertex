@@ -152,6 +152,32 @@ popover {
   box-shadow: 0 2px 6px 1px rgba(0, 0, 0, 0.35);
 }
 
+switch {
+  transition: all 250ms cubic-bezier(0, 0, 0.2, 1);
+  margin: 0 4px;
+  min-height: 25px;
+  border-radius: 9999px;
+  background-color: @lower_bar_bg_color;
+  font-size: 0;
+}
+
+switch:checked {
+  background-color: @accent_color;
+}
+
+switch slider {
+  transition: all 200ms cubic-bezier(0, 0, 0.2, 1);
+  min-width: 25px;
+  min-height: 25px;
+  margin: 2px;
+  border-radius: 9999px;
+  background-color: shade(@lower_bar_bg_color, 0.7);
+}
+
+switch:checked slider {
+  background-color: shade(@accent_color, 0.6);
+}
+
 /*
   Dialog
 */
@@ -381,11 +407,11 @@ popover {
 
 #active #sidebar #community_header #community_name {
   color: #d0d0d0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
 
-#active #sidebar #community_header #community_description_box {
+#active #sidebar #community_header #community_description {
   color: @subtitle_color;
   font-size: 14px;
   font-style: italic;
@@ -433,11 +459,11 @@ popover {
 }
 
 #active #message_group {
+  font-size: 15px;
   padding: 7px;
 }
 
 #active #message_group #author_name {
-  font-size: 18px;
   font-weight: 600;
   padding-left: 2px;
 }
@@ -450,13 +476,13 @@ popover {
 }
 
 #active #message_group #author_icon {
-  min-width: 45px;
-  min-height: 45px;
+  min-width: 40px;
+  min-height: 40px;
 
   background-image: url('icon.png');
-  background-size: 45px;
+  background-size: 40px;
 
-  border-radius: 25px;
+  border-radius: 20px;
 }
 
 #active #entry_list row {
@@ -572,15 +598,23 @@ popover {
 
 #settings #category_list row label {
   padding-left: 4px;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 #settings #log_out_button_label {
   color: @error_color;
 }
 
+#settings switch {
+  margin-right: 10px;
+}
+
 #settings .setting_heading {
   font-weight: 600;
+}
+
+#settings .setting_description {
+  color: #d0d0d0;
 }
 
 #settings label {
@@ -599,8 +633,12 @@ popover {
 
 #settings .button_label  {
   font-weight: 600;
-  font-size: 18px;
+  font-size: 16px;
   padding: 8px;
+}
+
+#settings #a11y {
+  padding: 20px;
 }
 
 /*

@@ -18,6 +18,8 @@ fn main() {
     let out_dir = PathBuf::from(out_dir).to_slash().unwrap();
     let out_dir = format!("{}/", out_dir);
 
+    println!("{}", out_dir);
+
     winres::WindowsResource::new()
         .set_output_directory(&out_dir)
         .set_icon("res/icon.ico")
@@ -27,7 +29,8 @@ fn main() {
 
 #[cfg(windows)]
 fn generate_wix_files() -> StdResult<()> {
-    use std::fs::File;
+    use std::fs::{self, File};
+    use std::path::PathBuf;
     use walkdir::WalkDir;
     use path_slash::PathExt;
 
@@ -63,7 +66,10 @@ fn generate_wix_files() -> StdResult<()> {
         }
     }
 
-    let resources_file = File::create("wix/generated/resources.wxs")?;
+    let wix_generated = PathBuf::from("wix/generated");
+    fs::create_dir_all(&wix_generated)?;
+
+    let resources_file = File::create(wix_generated.join("resources.wxs"))?;
     wix::write(resources_file, resources)?;
 
     const MINGW_BIN: &str = "C:\\msys64\\mingw64\\bin";
