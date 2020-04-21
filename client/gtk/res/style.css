@@ -1,7 +1,7 @@
 @define-color content_bg_color #343434;
 @define-color sidebar_bg_color #303030;
 @define-color toolbar_bg_color #3D3D3D;
-@define-color lower_bar_bg_color #2D2D2D;
+@define-color dark_widget_bg_color #2D2D2D;
 
 @define-color dialog_bg_color #313131;
 
@@ -157,7 +157,7 @@ switch {
   margin: 0 4px;
   min-height: 25px;
   border-radius: 9999px;
-  background-color: @lower_bar_bg_color;
+  background-color: @dark_widget_bg_color;
   font-size: 0;
 }
 
@@ -171,7 +171,7 @@ switch slider {
   min-height: 25px;
   margin: 2px;
   border-radius: 9999px;
-  background-color: shade(@lower_bar_bg_color, 0.7);
+  background-color: shade(@dark_widget_bg_color, 0.7);
 }
 
 switch:checked slider {
@@ -254,10 +254,6 @@ switch:checked slider {
   background: @widget_bg_color;
 }
 
-#active #sidebar_lower_bar {
-  background: @lower_bar_bg_color;
-}
-
 #active #chat {
   background: @sidebar_bg_color;
   min-height: 26px;
@@ -275,7 +271,8 @@ switch:checked slider {
 }
 
 #active #chat #lower_bar {
-  background: @lower_bar_bg_color;
+  background: @sidebar_bg_color;
+  padding: 10px 5px;
 }
 
 #active #messages {
