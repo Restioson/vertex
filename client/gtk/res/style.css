@@ -293,8 +293,12 @@ switch:checked slider {
   border-radius: 10px;
 }
 
+#active #message_entry:focus {
+  background: shade(@message_entry_color, 1.2);
+}
+
 #active #message_entry.disabled {
-  background: shade(@message_entry_color, 0.95);
+  background: shade(@message_entry_color, 0.9);
 }
 
 #active #message_entry.disabled selection {

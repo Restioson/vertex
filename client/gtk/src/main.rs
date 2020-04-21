@@ -191,6 +191,10 @@ async fn main() {
     let application = gtk::Application::new(None, Default::default())
         .expect("failed to create application");
 
+    // use native windows decoration
+    #[cfg(windows)]
+    std::env::set_var("GTK_CSD", "0");
+
     setup_gtk_style();
 
     application.connect_activate(move |application| {
@@ -198,7 +202,8 @@ async fn main() {
             .application(application)
             .title(&format!("Vertex {}", crate::VERSION))
             .default_width(1280)
-            .default_height(720);
+            .default_height(720)
+            .decorated(true);
 
         if let Ok(icon) = gdk_pixbuf::Pixbuf::new_from_file(resource("icon.svg")) {
             window = window.icon(&icon);

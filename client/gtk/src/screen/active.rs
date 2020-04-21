@@ -73,8 +73,6 @@ impl Ui {
         let builder: gtk::Builder = GLADE.builder();
         let message_entry: gtk::TextView = builder.get_object("message_entry").unwrap();
 
-        message_entry.set_opacity(0.5);
-
         Ui {
             main: builder.get_object("main").unwrap(),
             content: builder.get_object("content").unwrap(),
@@ -136,7 +134,6 @@ impl client::ClientUi for Ui {
 
                     if state.message_entry_is_empty {
                         entry.get_buffer().unwrap().set_text("Send a message...");
-                        entry.set_opacity(0.5);
                     }
                 });
 
@@ -154,7 +151,6 @@ impl client::ClientUi for Ui {
 
                     if entry.has_focus() && state.message_entry_is_empty {
                         entry.get_buffer().unwrap().set_text("");
-                        entry.set_opacity(1.0);
                     }
                 });
 
