@@ -33,7 +33,7 @@ pub fn valid_password(password: &str, config: &Config) -> bool {
 }
 
 pub fn valid_display_name(display_name: &str, config: &Config) -> bool {
-    display_name.len() <= config.max_display_name_len as usize && display_name.len() >= 1
+    display_name.len() <= config.max_display_name_len as usize && !display_name.is_empty()
 }
 
 fn valid_username(username: &str, config: &Config) -> bool {

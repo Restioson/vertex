@@ -280,9 +280,14 @@ impl Handler<SendMessage<ServerMessage>> for ActiveSession {
 impl Handler<LogoutThisSession> for ActiveSession {
     type Responder<'a> = impl Future<Output = ()> + 'a;
 
-    fn handle<'a>(&'a mut self, _: LogoutThisSession, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
+    fn handle<'a>(
+        &'a mut self,
+        _: LogoutThisSession,
+        ctx: &'a mut Context<Self>,
+    ) -> Self::Responder<'a> {
         async move {
-            self.send(ServerMessage::Event(ServerEvent::SessionLoggedOut), ctx).await;
+            self.send(ServerMessage::Event(ServerEvent::SessionLoggedOut), ctx)
+                .await;
             self.log_out();
         }
     }
@@ -292,7 +297,7 @@ impl ActiveSession {
     async fn try_send<M: Into<Vec<u8>>>(&mut self, msg: M) -> Result<(), warp::Error> {
         self.ws.send(ws::Message::binary(msg)).await
     }
-    
+
     #[inline]
     async fn send<M: Into<Vec<u8>>>(&mut self, msg: M, ctx: &mut Context<Self>) {
         if let Err(e) = self.try_send(msg).await {

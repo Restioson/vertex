@@ -1,6 +1,6 @@
 use crate::proto::{self, DeserializeError};
-use crate::types::*;
 use crate::requests::AdminPermissionFlags;
+use crate::types::*;
 use bitflags::bitflags;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use std::convert::{TryFrom, TryInto};
@@ -313,7 +313,9 @@ impl TryFrom<proto::structures::ClientReady> for ClientReady {
             profile: ready.profile?.try_into()?,
             communities,
             permissions: TokenPermissionFlags::from_bits_truncate(ready.permission_flags),
-            admin_permissions: AdminPermissionFlags::from_bits_truncate(ready.admin_permission_flags),
+            admin_permissions: AdminPermissionFlags::from_bits_truncate(
+                ready.admin_permission_flags,
+            ),
         })
     }
 }

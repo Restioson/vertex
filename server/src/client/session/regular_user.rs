@@ -261,7 +261,7 @@ impl<'a> RequestHandler<'a> {
         }
 
         let max = self.session.global.config.max_community_name_len as usize;
-        if name.len() < 1 || name.len() > max {
+        if name.is_empty() || name.len() > max {
             return Err(Error::TooLong);
         }
 
@@ -353,7 +353,7 @@ impl<'a> RequestHandler<'a> {
         }
 
         let max = self.session.global.config.max_channel_name_len as usize;
-        if name.len() < 1 || name.len() > max {
+        if name.is_empty() || name.len() > max {
             return Err(Error::TooLong);
         }
 

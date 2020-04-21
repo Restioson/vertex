@@ -24,7 +24,10 @@ pub mod requests {
     }
 
     pub mod administration {
-        include!(concat!(env!("OUT_DIR"), "/vertex.requests.administration.rs"));
+        include!(concat!(
+            env!("OUT_DIR"),
+            "/vertex.requests.administration.rs"
+        ));
     }
 }
 

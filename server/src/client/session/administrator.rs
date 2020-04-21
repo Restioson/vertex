@@ -1,11 +1,11 @@
 use super::manager;
+use crate::auth::HashSchemeVersion;
 use crate::client::{ActiveSession, Session};
+use crate::handle_disconnected;
+use futures::TryStreamExt;
+use std::future::Future;
 use vertex::prelude::*;
 use xtra::prelude::*;
-use std::future::Future;
-use futures::TryStreamExt;
-use crate::handle_disconnected;
-use crate::auth::HashSchemeVersion;
 
 struct AdminPermissionsChanged(AdminPermissionFlags);
 
@@ -16,7 +16,11 @@ impl xtra::Message for AdminPermissionsChanged {
 impl Handler<AdminPermissionsChanged> for ActiveSession {
     type Responder<'a> = impl Future<Output = ()> + 'a;
 
-    fn handle<'a>(&'a mut self, message: AdminPermissionsChanged, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
+    fn handle<'a>(
+        &'a mut self,
+        message: AdminPermissionsChanged,
+        ctx: &'a mut Context<Self>,
+    ) -> Self::Responder<'a> {
         let msg = ServerMessage::Event(ServerEvent::AdminPermissionsChanged(message.0));
         self.send(msg, ctx)
     }
@@ -111,17 +115,17 @@ impl ActiveSession {
         }
 
         let stream = self.global.database.search_user(name).await?;
-        let users: Vec<ServerUser> = stream.map_ok(|record|
-            ServerUser {
+        let users: Vec<ServerUser> = stream
+            .map_ok(|record| ServerUser {
                 username: record.username,
                 display_name: record.display_name,
                 banned: record.banned,
                 locked: record.locked,
                 compromised: record.compromised,
-                latest_hash_scheme: record.hash_scheme_version == HashSchemeVersion::LATEST
-            }
-        ).try_collect()
-        .await?;
+                latest_hash_scheme: record.hash_scheme_version == HashSchemeVersion::LATEST,
+            })
+            .try_collect()
+            .await?;
         Ok(OkResponse::Admin(AdminResponse::SearchedUsers(users)))
     }
 }
@@ -130,11 +134,13 @@ fn notify_of_admin_perm_change(user: UserId) -> Result<(), Error> {
     let active = manager::get_active_user(user).map_err(|_| Error::InvalidUser)?;
     let no_perms = AdminPermissionFlags::from_bits_truncate(0);
 
-    active.sessions
+    active
+        .sessions
         .values()
         .filter_map(Session::as_active_actor)
         .for_each(|a| {
-            let _ = a.do_send(AdminPermissionsChanged(no_perms))
+            let _ = a
+                .do_send(AdminPermissionsChanged(no_perms))
                 .map_err(handle_disconnected("ClientSession")); // Don't care
         });
 

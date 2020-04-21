@@ -184,19 +184,19 @@ async fn main() {
             .sweep_invite_codes_loop(Duration::from_secs(config.invite_codes_sweep_interval_secs)),
     );
 
-    for name in args.values_of("add-admin").into_iter().flat_map(|x| x) {
+    for name in args.values_of("add-admin").into_iter().flatten() {
         let id = database
             .get_user_by_name(name.to_string())
             .await
             .expect("Error promoting user to admin")
-            .expect(&format!("Invalid username {} to add as admin", name))
+            .unwrap_or_else(|| panic!("Invalid username {} to add as admin", name))
             .id;
 
         database
             .promote_to_admin(id, AdminPermissionFlags::ALL)
             .await
-            .expect(&format!("Error promoting user {} to admin", name))
-            .expect(&format!("Error promoting user {} to admin", name));
+            .unwrap_or_else(|_| panic!("Error promoting user {} to admin", name))
+            .unwrap_or_else(|_| panic!("Error promoting user {} to admin", name));
 
         info!(
             "User {} successfully promoted to admin with all permissions!",

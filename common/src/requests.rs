@@ -1,7 +1,7 @@
 pub use active::*;
-pub use auth::*;
 pub use administration::*;
+pub use auth::*;
 
 mod active;
-mod auth;
 mod administration;
+mod auth;

@@ -1,9 +1,9 @@
 use crate::proto;
 use crate::proto::DeserializeError;
+use crate::requests::AdminPermissionFlags;
 use crate::responses::*;
 use crate::structures::*;
 use crate::types::*;
-use crate::requests::AdminPermissionFlags;
 use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
 
@@ -168,7 +168,7 @@ impl From<ServerEvent> for proto::events::ServerEvent {
                     id: Some(id.into()),
                     reason: proto::events::RemoveCommunityReason::from(reason) as i32,
                 })
-            },
+            }
             InternalError => Event::InternalError(proto::types::None {}),
             AdminPermissionsChanged(new) => Event::AdminPermissionsChanged(new.bits()),
         };

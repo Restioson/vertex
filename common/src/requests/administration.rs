@@ -1,8 +1,8 @@
-use bitflags::bitflags;
 use crate::proto;
-use crate::types::UserId;
-use std::convert::{TryFrom, TryInto};
 use crate::proto::DeserializeError;
+use crate::types::UserId;
+use bitflags::bitflags;
+use std::convert::{TryFrom, TryInto};
 
 bitflags! {
     pub struct AdminPermissionFlags: i64 {
@@ -32,14 +32,14 @@ pub enum AdminRequest {
     Ban(UserId),
     SearchUser {
         name: String,
-    }
+    },
 }
 
 impl From<AdminRequest> for proto::requests::administration::AdminRequest {
     fn from(req: AdminRequest) -> Self {
-        use AdminRequest::*;
-        use proto::requests::administration::admin_request::Request;
         use proto::requests::administration as request;
+        use proto::requests::administration::admin_request::Request;
+        use AdminRequest::*;
 
         let inner = match req {
             Promote { user, permissions } => Request::PromoteUser(request::Promote {
@@ -65,38 +65,35 @@ impl TryFrom<proto::requests::administration::AdminRequest> for AdminRequest {
     type Error = DeserializeError;
 
     fn try_from(
-        req: proto::requests::administration::AdminRequest
+        req: proto::requests::administration::AdminRequest,
     ) -> Result<Self, DeserializeError> {
         use proto::requests::administration::admin_request::Request::*;
 
         let req = match req.request? {
-            PromoteUser(promote) => {
-                AdminRequest::Promote {
-                    user: promote.user?.try_into()?,
-                    permissions: AdminPermissionFlags::from_bits_truncate(promote.permissions_flags),
-                }
+            PromoteUser(promote) => AdminRequest::Promote {
+                user: promote.user?.try_into()?,
+                permissions: AdminPermissionFlags::from_bits_truncate(promote.permissions_flags),
             },
             DemoteUser(demote) => AdminRequest::Demote(demote.user?.try_into()?),
             BanUser(ban) => AdminRequest::Ban(ban.user?.try_into()?),
-            SearchUser(search) => AdminRequest::SearchUser { name: search.name }
+            SearchUser(search) => AdminRequest::SearchUser { name: search.name },
         };
 
         Ok(req)
     }
 }
 
-
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum AdminResponse {
-    SearchedUsers(Vec<ServerUser>)
+    SearchedUsers(Vec<ServerUser>),
 }
 
 impl From<AdminResponse> for proto::requests::administration::AdminResponse {
     fn from(res: AdminResponse) -> Self {
-        use AdminResponse::*;
-        use proto::requests::administration::admin_response::Response;
         use proto::requests::administration as request;
+        use proto::requests::administration::admin_response::Response;
+        use AdminResponse::*;
 
         let inner = match res {
             SearchedUsers(users) => {
@@ -105,14 +102,18 @@ impl From<AdminResponse> for proto::requests::administration::AdminResponse {
             }
         };
 
-        proto::requests::administration::AdminResponse { response: Some(inner) }
+        proto::requests::administration::AdminResponse {
+            response: Some(inner),
+        }
     }
 }
 
 impl TryFrom<proto::requests::administration::AdminResponse> for AdminResponse {
     type Error = DeserializeError;
 
-    fn try_from(res: proto::requests::administration::AdminResponse) -> Result<Self, DeserializeError> {
+    fn try_from(
+        res: proto::requests::administration::AdminResponse,
+    ) -> Result<Self, DeserializeError> {
         use proto::requests::administration::admin_response::Response::*;
 
         let res = match res.response? {

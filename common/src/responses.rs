@@ -3,9 +3,9 @@ use std::fmt;
 
 use crate::proto;
 use crate::proto::DeserializeError;
+use crate::requests::AdminResponse;
 use crate::structures::*;
 use crate::types::*;
-use crate::requests::AdminResponse;
 
 pub type ResponseResult = Result<OkResponse, Error>;
 

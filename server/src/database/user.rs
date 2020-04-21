@@ -267,7 +267,7 @@ impl Database {
 
     pub async fn search_user(
         &self,
-        name: String
+        name: String,
     ) -> DbResult<impl Stream<Item = DbResult<UserRecord>>> {
         const QUERY: &str = "SELECT * FROM USERS WHERE $1 % name";
 
