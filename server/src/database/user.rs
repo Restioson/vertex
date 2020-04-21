@@ -264,4 +264,18 @@ impl Database {
             Err(NonexistentUser)
         })
     }
+
+    pub async fn search_user(
+        &self,
+        name: String
+    ) -> DbResult<impl Stream<Item = DbResult<UserRecord>>> {
+        const QUERY: &str = "SELECT * FROM USERS WHERE $1 % name";
+
+        let stream = self.query_stream(QUERY, &[&name]).await?;
+        let stream = stream
+            .and_then(|row| async move { Ok(UserRecord::try_from(row)?) })
+            .map_err(|e| e.into());
+
+        Ok(stream)
+    }
 }

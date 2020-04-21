@@ -3,7 +3,9 @@ use crate::client::{ActiveSession, Session};
 use vertex::prelude::*;
 use xtra::prelude::*;
 use std::future::Future;
+use futures::TryStreamExt;
 use crate::handle_disconnected;
+use crate::auth::HashSchemeVersion;
 
 struct AdminPermissionsChanged(AdminPermissionFlags);
 
@@ -29,6 +31,7 @@ impl ActiveSession {
             AdminRequest::Ban(user) => self.ban(user).await,
             AdminRequest::Promote { user, permissions } => self.promote(user, permissions).await,
             AdminRequest::Demote(user) => self.demote(user).await,
+            AdminRequest::SearchUser { name } => self.search_user(name).await,
             _ => Err(Error::Unimplemented),
         }
     }
@@ -100,6 +103,26 @@ impl ActiveSession {
         notify_of_admin_perm_change(user)?;
 
         Ok(OkResponse::NoData)
+    }
+
+    async fn search_user(&mut self, name: String) -> Result<OkResponse, Error> {
+        if !self.admin_perms()?.is_empty() {
+            return Err(Error::AccessDenied);
+        }
+
+        let stream = self.global.database.search_user(name).await?;
+        let users: Vec<ServerUser> = stream.map_ok(|record|
+            ServerUser {
+                username: record.username,
+                display_name: record.display_name,
+                banned: record.banned,
+                locked: record.locked,
+                compromised: record.compromised,
+                latest_hash_scheme: record.hash_scheme_version == HashSchemeVersion::LATEST
+            }
+        ).try_collect()
+        .await?;
+        Ok(OkResponse::Admin(AdminResponse::SearchedUsers(users)))
     }
 }
 

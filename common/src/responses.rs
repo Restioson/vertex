@@ -5,6 +5,7 @@ use crate::proto;
 use crate::proto::DeserializeError;
 use crate::structures::*;
 use crate::types::*;
+use crate::requests::AdminResponse;
 
 pub type ResponseResult = Result<OkResponse, Error>;
 
@@ -23,6 +24,7 @@ pub enum OkResponse {
     NewInvite(InviteCode),
     RoomUpdate(RoomUpdate),
     MessageHistory(MessageHistory),
+    Admin(AdminResponse),
 }
 
 impl From<OkResponse> for proto::responses::Ok {
@@ -46,6 +48,7 @@ impl From<OkResponse> for proto::responses::Ok {
             }
             RoomUpdate(update) => Response::RoomUpdate(update.into()),
             MessageHistory(history) => Response::MessageHistory(history.into()),
+            Admin(admin) => Response::Admin(admin.into()),
         };
 
         proto::responses::Ok {
@@ -73,6 +76,7 @@ impl TryFrom<proto::responses::Ok> for OkResponse {
             NewInvite(new_invite) => OkResponse::NewInvite(InviteCode(new_invite.code)),
             RoomUpdate(update) => OkResponse::RoomUpdate(update.try_into()?),
             MessageHistory(history) => OkResponse::MessageHistory(history.try_into()?),
+            Admin(admin) => OkResponse::Admin(admin.try_into()?),
         })
     }
 }

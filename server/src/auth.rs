@@ -8,10 +8,14 @@ use crate::database::UserRecord;
 
 pub const MAX_TOKEN_LENGTH: usize = 45;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[repr(u8)]
 pub enum HashSchemeVersion {
     Argon2V1 = 1,
+}
+
+impl HashSchemeVersion {
+    pub const LATEST: HashSchemeVersion = HashSchemeVersion::Argon2V1;
 }
 
 impl From<i16> for HashSchemeVersion {

@@ -30,7 +30,7 @@ pub async fn build(client: Client<screen::active::Ui>) -> Screen {
     let category_list: gtk::ListBox = builder.get_object("category_list").unwrap();
 
     let perms = client.state.upgrade().unwrap().read().await.admin_perms;
-    if perms.bits() > 0 { // If has any flags
+    if !perms.is_empty() {
         let label = gtk::LabelBuilder::new()
             .label("Administration")
             .halign(Align::Start)

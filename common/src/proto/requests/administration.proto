@@ -8,6 +8,13 @@ message AdminRequest {
         Promote promote_user = 1;
         Demote demote_user = 2;
         Ban ban_user = 3;
+        SearchUser search_user = 4;
+    }
+}
+
+message AdminResponse {
+    oneof response {
+        SearchedUsers searched_users = 1;
     }
 }
 
@@ -22,5 +29,21 @@ message Demote {
 
 message Ban {
     types.UserId user = 1;
+}
 
+message SearchUser {
+    string name = 1;
+}
+
+message SearchedUsers {
+    repeated ServerUser users = 1;
+}
+
+message ServerUser {
+    string username = 1;
+    string display_name = 2;
+    bool banned = 3;
+    bool locked = 4;
+    bool compromised = 5;
+    bool latest_hash_scheme = 6;
 }

@@ -131,6 +131,7 @@ impl Database {
             CREATE_MESSAGES_TABLE,
             CREATE_USER_ROOM_STATES_TABLE,
             CREATE_ADMINISTRATORS_TABLE,
+            "CREATE EXTENSION IF NOT EXISTS pg_trgm;", // Allow fuzzy searching
         ];
 
         for cmd in &cmds {
