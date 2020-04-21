@@ -18,8 +18,6 @@ fn main() {
     let out_dir = PathBuf::from(out_dir).to_slash().unwrap();
     let out_dir = format!("{}/", out_dir);
 
-    println!("{}", out_dir);
-
     winres::WindowsResource::new()
         .set_output_directory(&out_dir)
         .set_icon("res/icon.ico")
