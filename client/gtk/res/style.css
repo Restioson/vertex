@@ -571,6 +571,31 @@ popover {
   color: @error_color;
 }
 
+#settings .setting_heading {
+  font-weight: 600;
+  font-size: 18px;
+  padding: 8px;
+}
+
+#settings label {
+  font-size: 16px;
+}
+
+#settings .search_list_scroll {
+  min-height: 100px;
+  min-width: 100px;
+  padding: 10px;
+}
+
+#settings .search_entry, #settings button {
+  padding: 10px;
+  margin-left: 10px;
+}
+
+#settings .search_list {
+  background: @sidebar_bg_color;
+}
+
 /* "Close" & "Log out" */
 #settings .leave_button {
   background: @sidebar_bg_color;

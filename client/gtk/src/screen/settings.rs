@@ -2,11 +2,11 @@ use gtk::prelude::*;
 
 use lazy_static::lazy_static;
 
-use crate::{Client, token_store, window};
+use crate::{Client, token_store, window, SharedMut};
 use crate::connect::AsConnector;
 use crate::Glade;
 use crate::screen;
-use gtk::Align;
+use gtk::{Align, Orientation};
 
 #[derive(Clone)]
 pub struct Screen {
@@ -14,6 +14,7 @@ pub struct Screen {
     client: Client<screen::active::Ui>,
     category_list: gtk::ListBox,
     settings_viewport: gtk::Viewport,
+    current_settings: SharedMut<gtk::Widget>,
     close: gtk::Button,
     log_out: gtk::Button,
 }
@@ -35,19 +36,24 @@ pub async fn build(client: Client<screen::active::Ui>) -> Screen {
             .halign(Align::Start)
             .build();
 
-        let pos = (category_list.get_children().len() - 2) as i32; // 2 for divider & close
+        let pos = category_list.get_children().len() as i32;
         category_list.insert(&label, pos);
 
         let row = category_list.get_row_at_index(pos).unwrap();
-        row.set_widget_name("administration");
+        row.set_widget_name("admin");
         category_list.show_all();
     }
+
+    let settings_viewport: gtk::Viewport = builder.get_object("settings_viewport").unwrap();
+    let empty = gtk::Box::new(Orientation::Vertical, 0).upcast();
+    settings_viewport.add(&empty);
 
     let screen = Screen {
         main: builder.get_object("viewport").unwrap(),
         client,
         category_list,
-        settings_viewport: builder.get_object("settings_viewport").unwrap(),
+        settings_viewport,
+        current_settings: SharedMut::new(empty),
         close,
         log_out,
     };
@@ -74,20 +80,40 @@ fn bind_events(screen: &Screen) {
     );
 
     // Template v v v
-    // screen.category_list.connect_row_selected(
-    //     screen.connector()
-    //         .do_async(|screen, (_list, row)| async move {
-    //             if let Some(row) = row {
-    //                 let row: gtk::ListBoxRow = row;
-    //                 let name = row.get_widget_name()
-    //                     .map(|s| s.as_str().to_owned())
-    //                     .unwrap_or_default();
-    //
-    //                 match name.as_str() {
-    //                     _ => ()
-    //                 }
-    //             }
-    //         })
-    //         .build_widget_and_option_consumer()
-    // );
+    screen.category_list.connect_row_selected(
+        screen.connector()
+            .do_async(|screen, (_list, row)| async move {
+                if let Some(row) = row {
+                    let row: gtk::ListBoxRow = row;
+                    let name = row.get_widget_name()
+                        .map(|s| s.as_str().to_owned())
+                        .unwrap_or_default();
+
+                    let widget = match name.as_str() {
+                        "admin" => Some(build_administration()),
+                        _ => None,
+                    };
+
+                    let mut cur = screen.current_settings.write().await;
+                    screen.settings_viewport.remove(&*cur);
+                    let widget = widget.unwrap_or_else(|| {
+                        gtk::Box::new(Orientation::Vertical, 0).upcast()
+                    });
+
+                    screen.settings_viewport.add(&widget);
+                    *cur = widget;
+                }
+            })
+            .build_widget_and_option_consumer()
+    );
+}
+
+fn build_administration() -> gtk::Widget {
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("settings/administration.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
+    let main: gtk::Box = builder.get_object("main").unwrap();
+    main.upcast()
 }
