@@ -2,10 +2,13 @@ use gtk::prelude::*;
 
 use lazy_static::lazy_static;
 
+mod administration;
+
 use crate::{Client, token_store, window, SharedMut};
 use crate::connect::AsConnector;
 use crate::Glade;
 use crate::screen;
+use administration::*;
 use gtk::{Align, Orientation};
 
 #[derive(Clone)]
@@ -79,7 +82,6 @@ fn bind_events(screen: &Screen) {
             .build_cloned_consumer()
     );
 
-    // Template v v v
     screen.category_list.connect_row_selected(
         screen.connector()
             .do_async(|screen, (_list, row)| async move {
@@ -90,7 +92,7 @@ fn bind_events(screen: &Screen) {
                         .unwrap_or_default();
 
                     let widget = match name.as_str() {
-                        "admin" => Some(build_administration()),
+                        "admin" => Some(build_administration(screen.client)),
                         _ => None,
                     };
 
@@ -106,14 +108,4 @@ fn bind_events(screen: &Screen) {
             })
             .build_widget_and_option_consumer()
     );
-}
-
-fn build_administration() -> gtk::Widget {
-    lazy_static! {
-        static ref GLADE: Glade = Glade::open("settings/administration.glade").unwrap();
-    }
-
-    let builder: gtk::Builder = GLADE.builder();
-    let main: gtk::Box = builder.get_object("main").unwrap();
-    main.upcast()
 }

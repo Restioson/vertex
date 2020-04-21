@@ -582,8 +582,7 @@ popover {
 }
 
 #settings .search_list_scroll {
-  min-height: 100px;
-  min-width: 100px;
+  min-height: 300px;
   padding: 10px;
 }
 
@@ -594,6 +593,14 @@ popover {
 
 #settings .search_list {
   background: @sidebar_bg_color;
+}
+
+#settings .user_property {
+  font-weight: 500;
+}
+
+#settings .user_property_item {
+  padding: 10px;
 }
 
 /* "Close" & "Log out" */

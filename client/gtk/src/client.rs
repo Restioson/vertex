@@ -358,6 +358,16 @@ impl<Ui: ClientUi> Client<Ui> {
     pub async fn log_out(&self) {
         self.request.send(ClientRequest::LogOut).await;
     }
+
+    pub async fn search_users(&self, name: String) -> Result<Vec<ServerUser>> {
+        let req = ClientRequest::AdminAction(AdminRequest::SearchUser { name });
+        let req = self.request.send(req).await;
+
+        match req.response().await? {
+            OkResponse::Admin(AdminResponse::SearchedUsers(users)) => Ok(users),
+            _ => Err(Error::UnexpectedMessage)
+        }
+    }
 }
 
 struct ClientLoop<Ui: ClientUi, S> {

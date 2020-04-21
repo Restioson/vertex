@@ -269,7 +269,7 @@ impl Database {
         &self,
         name: String,
     ) -> DbResult<impl Stream<Item = DbResult<UserRecord>>> {
-        const QUERY: &str = "SELECT * FROM USERS WHERE $1 % name";
+        const QUERY: &str = "SELECT * FROM USERS WHERE $1 % username";
 
         let stream = self.query_stream(QUERY, &[&name]).await?;
         let stream = stream

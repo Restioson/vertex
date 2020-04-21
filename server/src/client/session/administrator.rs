@@ -110,7 +110,7 @@ impl ActiveSession {
     }
 
     async fn search_user(&mut self, name: String) -> Result<OkResponse, Error> {
-        if !self.admin_perms()?.is_empty() {
+        if self.admin_perms()?.is_empty() {
             return Err(Error::AccessDenied);
         }
 

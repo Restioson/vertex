@@ -24,7 +24,7 @@ use gdk::enums::key;
 use vertex::requests::AuthError;
 
 mod community;
-mod dialog;
+pub mod dialog;
 mod message;
 mod room;
 mod chat;
