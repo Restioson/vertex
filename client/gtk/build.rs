@@ -92,7 +92,7 @@ fn generate_wix_files() -> StdResult<()> {
         "libgmodule-2.0-0.dll",
         "libintl-8.dll",
         "libpcre-1.dll",
-        "libffi-6.dll",
+        "libffi-7.dll",
         "libepoxy-0.dll",
         "libpangocairo-1.0-0.dll",
         "libpangowin32-1.0-0.dll",
