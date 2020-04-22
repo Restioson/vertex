@@ -70,6 +70,19 @@ impl TryFrom<Row> for UserRecord {
     }
 }
 
+impl Into<ServerUser> for UserRecord {
+    fn into(self) -> ServerUser {
+        ServerUser {
+            username: self.username,
+            display_name: self.display_name,
+            banned: self.banned,
+            locked: self.locked,
+            compromised: self.compromised,
+            latest_hash_scheme: self.hash_scheme_version == HashSchemeVersion::LATEST,
+        }
+    }
+}
+
 pub struct UsernameConflict;
 pub struct NonexistentUser;
 
@@ -269,9 +282,24 @@ impl Database {
         &self,
         name: String,
     ) -> DbResult<impl Stream<Item = DbResult<UserRecord>>> {
-        const QUERY: &str = "SELECT * FROM USERS WHERE $1 % username";
+        const QUERY: &str = "SELECT * FROM users
+                                WHERE $1 % username
+                                ORDER BY SIMILARITY($1, username) DESC";
 
         let stream = self.query_stream(QUERY, &[&name]).await?;
+        let stream = stream
+            .and_then(|row| async move { Ok(UserRecord::try_from(row)?) })
+            .map_err(|e| e.into());
+
+        Ok(stream)
+    }
+
+    pub async fn list_all_server_users(
+        &self,
+    ) -> DbResult<impl Stream<Item = DbResult<UserRecord>>> {
+        const QUERY: &str = "SELECT * FROM users";
+
+        let stream = self.query_stream(QUERY, &[]).await?;
         let stream = stream
             .and_then(|row| async move { Ok(UserRecord::try_from(row)?) })
             .map_err(|e| e.into());

@@ -18,28 +18,30 @@ pub fn build_administration(
     let main: gtk::Box = builder.get_object("main").unwrap();
 
     let users_search: gtk::SearchEntry = builder.get_object("users_search_entry").unwrap();
+    let list_all_button: gtk::Button = builder.get_object("list_users_button").unwrap();
     let users_list: gtk::Grid = builder.get_object("users_search_grid").unwrap();
     let len = Rc::new(Cell::new(0));
 
     users_search.connect_activate(
-        (client, users_list, len).connector()
+        (client.clone(), users_list.clone(), len.clone()).connector()
             .do_async(|(client, list, len), entry: gtk::SearchEntry| {
                 async move {
                     let txt = entry.try_get_text().unwrap_or_else(|_| String::new());
                     match client.search_users(txt).await {
-                        Ok(users) => {
-                            // Clear all rows
-                            for y in 1..len.get() + 1 {
-                                list.remove_row(y as i32)
-                            }
+                        Ok(users) => insert_users(&len, &list, users),
+                        Err(err) => dialog::show_generic_error(&err),
+                    }
+                }
+            })
+            .build_cloned_consumer()
+    );
 
-                            // Add new rows
-                            len.set(users.len());
-                            for (y, user) in users.into_iter().enumerate() {
-                                insert_user(&list, user, y as i32 + 1);
-                                list.show_all();
-                            }
-                        }
+    list_all_button.connect_clicked(
+        (client, users_list, len).connector()
+            .do_async(|(client, list, len), _| {
+                async move {
+                    match client.list_all_server_users().await {
+                        Ok(users) => insert_users(&len, &list, users),
                         Err(err) => dialog::show_generic_error(&err),
                     }
                 }
@@ -48,6 +50,21 @@ pub fn build_administration(
     );
 
     main.upcast()
+}
+
+fn insert_users(len: &Cell<usize>, grid: &gtk::Grid, users: Vec<ServerUser>) {
+    // Clear all rows
+    for _ in 0..len.get() {
+        // Row number changes down as is removed
+        grid.remove_row(1 as i32);
+    }
+
+    // Add new rows
+    len.set(users.len());
+    for (y, user) in users.into_iter().enumerate() {
+        insert_user(grid, user, y as i32 + 1);
+        grid.show_all();
+    }
 }
 
 fn insert_user(grid: &gtk::Grid, user: ServerUser, y: i32) {

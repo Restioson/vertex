@@ -603,6 +603,10 @@ popover {
   padding: 10px;
 }
 
+#settings #list_users_button {
+  padding: 10px;
+}
+
 /* "Close" & "Log out" */
 #settings .leave_button {
   background: @sidebar_bg_color;

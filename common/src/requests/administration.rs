@@ -33,6 +33,7 @@ pub enum AdminRequest {
     SearchUser {
         name: String,
     },
+    ListAllUsers,
 }
 
 impl From<AdminRequest> for proto::requests::administration::AdminRequest {
@@ -53,6 +54,7 @@ impl From<AdminRequest> for proto::requests::administration::AdminRequest {
                 user: Some(user.into()),
             }),
             SearchUser { name } => Request::SearchUser(request::SearchUser { name }),
+            ListAllUsers => Request::ListAllUsers(proto::types::None {}),
         };
 
         proto::requests::administration::AdminRequest {
@@ -77,6 +79,7 @@ impl TryFrom<proto::requests::administration::AdminRequest> for AdminRequest {
             DemoteUser(demote) => AdminRequest::Demote(demote.user?.try_into()?),
             BanUser(ban) => AdminRequest::Ban(ban.user?.try_into()?),
             SearchUser(search) => AdminRequest::SearchUser { name: search.name },
+            ListAllUsers(_) => AdminRequest::ListAllUsers,
         };
 
         Ok(req)

@@ -1,5 +1,4 @@
 use super::manager;
-use crate::auth::HashSchemeVersion;
 use crate::client::{ActiveSession, Session};
 use crate::handle_disconnected;
 use futures::TryStreamExt;
@@ -36,6 +35,7 @@ impl ActiveSession {
             AdminRequest::Promote { user, permissions } => self.promote(user, permissions).await,
             AdminRequest::Demote(user) => self.demote(user).await,
             AdminRequest::SearchUser { name } => self.search_user(name).await,
+            AdminRequest::ListAllUsers => self.list_all_users().await,
             _ => Err(Error::Unimplemented),
         }
     }
@@ -115,17 +115,17 @@ impl ActiveSession {
         }
 
         let stream = self.global.database.search_user(name).await?;
-        let users: Vec<ServerUser> = stream
-            .map_ok(|record| ServerUser {
-                username: record.username,
-                display_name: record.display_name,
-                banned: record.banned,
-                locked: record.locked,
-                compromised: record.compromised,
-                latest_hash_scheme: record.hash_scheme_version == HashSchemeVersion::LATEST,
-            })
-            .try_collect()
-            .await?;
+        let users: Vec<ServerUser> = stream.map_ok(Into::into).try_collect().await?;
+        Ok(OkResponse::Admin(AdminResponse::SearchedUsers(users)))
+    }
+
+    async fn list_all_users(&mut self) -> Result<OkResponse, Error> {
+        if self.admin_perms()?.is_empty() {
+            return Err(Error::AccessDenied);
+        }
+
+        let stream = self.global.database.list_all_server_users().await?;
+        let users: Vec<ServerUser> = stream.map_ok(Into::into).try_collect().await?;
         Ok(OkResponse::Admin(AdminResponse::SearchedUsers(users)))
     }
 }

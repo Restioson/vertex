@@ -368,6 +368,16 @@ impl<Ui: ClientUi> Client<Ui> {
             _ => Err(Error::UnexpectedMessage)
         }
     }
+
+    pub async fn list_all_server_users(&self) -> Result<Vec<ServerUser>> {
+        let req = ClientRequest::AdminAction(AdminRequest::ListAllUsers);
+        let req = self.request.send(req).await;
+
+        match req.response().await? {
+            OkResponse::Admin(AdminResponse::SearchedUsers(users)) => Ok(users),
+            _ => Err(Error::UnexpectedMessage)
+        }
+    }
 }
 
 struct ClientLoop<Ui: ClientUi, S> {
