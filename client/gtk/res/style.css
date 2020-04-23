@@ -125,6 +125,7 @@ spinner:checked {
 scrollbar {
   transition: 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
+
 scrollbar slider {
   min-width: 6px;
   min-height: 6px;
@@ -134,9 +135,11 @@ scrollbar slider {
   background-clip: padding-box;
   background-color: @room_list_bg_color;
 }
+
 scrollbar slider:hover {
   background-color: shade(@room_list_bg_color, 1.1);
 }
+
 scrollbar slider:hover:active {
   background-color: shade(@room_list_bg_color, 1.1);
 }
@@ -265,7 +268,7 @@ popover {
 }
 
 #active #message #invite #label {
-  color:@subtitle_color;
+  color: @subtitle_color;
   font-size: 15px;
 }
 
@@ -593,6 +596,35 @@ popover {
 
 #settings .search_list {
   background: @sidebar_bg_color;
+  border-top-color: shade(@content_bg_color, 1.5);
+  color: #e0e0e0;
+  font-size: 16px;
+}
+
+#settings .search_list button {
+  background-color: @content_bg_color;
+  margin: 0px;
+  padding: 5px;
+  border-radius: 0px;
+  font-weight: 500;
+}
+
+#settings .search_list:hover {
+  color: #e0e0e0;
+  background: shade(@sidebar_bg_color, 1.1);
+}
+
+#settings .search_list:active {
+  color: @error_color;
+}
+
+
+#settings .search_list check {
+  margin: 2px;
+  padding: 4px;
+  min-height: 17px;
+  min-width: 17px;
+  background-color: @lower_bar_bg_color;
 }
 
 #settings .user_property {

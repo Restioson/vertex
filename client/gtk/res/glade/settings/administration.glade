@@ -91,6 +91,7 @@
                     <property name="name">users_search_list</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
+                    <property name="rubber_banding">True</property>
                     <property name="enable_grid_lines">both</property>
                     <child internal-child="selection">
                       <object class="GtkTreeSelection"/>

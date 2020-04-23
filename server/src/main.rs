@@ -426,6 +426,7 @@ async fn invite(
 
     let html = format!(
         r#"
+        <html>
             <head>
                 <meta property="vertex:invite_code" content="{invite_code}"/>
                 <meta property="vertex:invite_name" content="{community}"/>
@@ -440,6 +441,7 @@ async fn invite(
                     window.location.replace("vertex" + no_http);
                 </script>
             </script>
+        </html>
         "#,
         //        hostname = hostname, // TODO https://github.com/seanmonstar/warp/issues/432
         // We just use JS as a workaround
