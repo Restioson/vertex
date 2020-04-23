@@ -87,114 +87,13 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <child>
-                  <object class="GtkGrid" id="users_search_grid">
-                    <property name="name">users_search_grid</property>
+                  <object class="GtkTreeView" id="users_search_list">
+                    <property name="name">users_search_list</property>
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Username</property>
-                        <style>
-                          <class name="user_property"/>
-                          <class name="user_property_item"/>
-                        </style>
-                      </object>
-                      <packing>
-                        <property name="left_attach">1</property>
-                        <property name="top_attach">0</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Display name</property>
-                        <style>
-                          <class name="user_property"/>
-                          <class name="user_property_item"/>
-                        </style>
-                      </object>
-                      <packing>
-                        <property name="left_attach">2</property>
-                        <property name="top_attach">0</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Banned</property>
-                        <style>
-                          <class name="user_property"/>
-                          <class name="user_property_item"/>
-                        </style>
-                      </object>
-                      <packing>
-                        <property name="left_attach">3</property>
-                        <property name="top_attach">0</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Compromised</property>
-                        <style>
-                          <class name="user_property"/>
-                          <class name="user_property_item"/>
-                        </style>
-                      </object>
-                      <packing>
-                        <property name="left_attach">4</property>
-                        <property name="top_attach">0</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Locked</property>
-                        <style>
-                          <class name="user_property"/>
-                          <class name="user_property_item"/>
-                        </style>
-                      </object>
-                      <packing>
-                        <property name="left_attach">5</property>
-                        <property name="top_attach">0</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Latest hash scheme</property>
-                        <style>
-                          <class name="user_property"/>
-                        </style>
-                      </object>
-                      <packing>
-                        <property name="left_attach">6</property>
-                        <property name="top_attach">0</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkCheckButton">
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="receives_default">False</property>
-                        <property name="use_stock">True</property>
-                        <property name="draw_indicator">True</property>
-                        <style>
-                          <class name="user_property_item"/>
-                        </style>
-                      </object>
-                      <packing>
-                        <property name="left_attach">0</property>
-                        <property name="top_attach">0</property>
-                      </packing>
+                    <property name="can_focus">True</property>
+                    <property name="enable_grid_lines">both</property>
+                    <child internal-child="selection">
+                      <object class="GtkTreeSelection"/>
                     </child>
                     <style>
                       <class name="search_list"/>
@@ -370,5 +269,165 @@
         <property name="position">2</property>
       </packing>
     </child>
+  </object>
+  <object class="GtkGrid" id="users_search_grid">
+    <property name="name">users_search_grid</property>
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <child>
+      <object class="GtkLabel">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="label" translatable="yes">Username</property>
+        <property name="selectable">True</property>
+        <child internal-child="accessible">
+          <object class="AtkObject">
+            <property name="AtkObject::accessible-role" translatable="yes">table-column-header</property>
+          </object>
+        </child>
+        <style>
+          <class name="user_property"/>
+          <class name="user_property_item"/>
+        </style>
+      </object>
+      <packing>
+        <property name="left_attach">1</property>
+        <property name="top_attach">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="label" translatable="yes">Display name</property>
+        <property name="selectable">True</property>
+        <child internal-child="accessible">
+          <object class="AtkObject">
+            <property name="AtkObject::accessible-role" translatable="yes">table-column-header</property>
+          </object>
+        </child>
+        <style>
+          <class name="user_property"/>
+          <class name="user_property_item"/>
+        </style>
+      </object>
+      <packing>
+        <property name="left_attach">2</property>
+        <property name="top_attach">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="label" translatable="yes">Banned</property>
+        <property name="selectable">True</property>
+        <child internal-child="accessible">
+          <object class="AtkObject">
+            <property name="AtkObject::accessible-role" translatable="yes">table-column-header</property>
+          </object>
+        </child>
+        <style>
+          <class name="user_property"/>
+          <class name="user_property_item"/>
+        </style>
+      </object>
+      <packing>
+        <property name="left_attach">3</property>
+        <property name="top_attach">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="label" translatable="yes">Compromised</property>
+        <property name="selectable">True</property>
+        <child internal-child="accessible">
+          <object class="AtkObject">
+            <property name="AtkObject::accessible-role" translatable="yes">table-column-header</property>
+          </object>
+        </child>
+        <style>
+          <class name="user_property"/>
+          <class name="user_property_item"/>
+        </style>
+      </object>
+      <packing>
+        <property name="left_attach">4</property>
+        <property name="top_attach">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="label" translatable="yes">Locked</property>
+        <property name="selectable">True</property>
+        <child internal-child="accessible">
+          <object class="AtkObject">
+            <property name="AtkObject::accessible-role" translatable="yes">table-column-header</property>
+          </object>
+        </child>
+        <style>
+          <class name="user_property"/>
+          <class name="user_property_item"/>
+        </style>
+      </object>
+      <packing>
+        <property name="left_attach">5</property>
+        <property name="top_attach">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="label" translatable="yes">Latest hash scheme</property>
+        <property name="selectable">True</property>
+        <child internal-child="accessible">
+          <object class="AtkObject">
+            <property name="AtkObject::accessible-role" translatable="yes">table-column-header</property>
+          </object>
+        </child>
+        <style>
+          <class name="user_property"/>
+        </style>
+      </object>
+      <packing>
+        <property name="left_attach">6</property>
+        <property name="top_attach">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkCheckButton">
+        <property name="visible">True</property>
+        <property name="can_focus">True</property>
+        <property name="receives_default">False</property>
+        <property name="use_stock">True</property>
+        <property name="draw_indicator">True</property>
+        <child internal-child="accessible">
+          <object class="AtkObject">
+            <property name="AtkObject::accessible-name" translatable="yes">Selected</property>
+            <property name="AtkObject::accessible-role" translatable="yes">table-column-header</property>
+          </object>
+        </child>
+        <style>
+          <class name="user_property_item"/>
+        </style>
+      </object>
+      <packing>
+        <property name="left_attach">0</property>
+        <property name="top_attach">0</property>
+      </packing>
+    </child>
+    <child internal-child="accessible">
+      <object class="AtkObject" id="users_search_grid-atkobject">
+        <property name="AtkObject::accessible-role" translatable="yes">table</property>
+      </object>
+    </child>
+    <style>
+      <class name="search_list"/>
+    </style>
   </object>
 </interface>

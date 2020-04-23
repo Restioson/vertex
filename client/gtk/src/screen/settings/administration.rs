@@ -1,11 +1,11 @@
+use atk::prelude::*;
 use gtk::prelude::*;
 use lazy_static::lazy_static;
 use crate::{Glade, Client, screen, TryGetText};
 use crate::connect::AsConnector;
 use crate::screen::active::dialog;
 use vertex::requests::ServerUser;
-use std::rc::Rc;
-use std::cell::Cell;
+use std::iter;
 
 pub fn build_administration(
     client: Client<screen::active::Ui>
@@ -19,16 +19,17 @@ pub fn build_administration(
 
     let users_search: gtk::SearchEntry = builder.get_object("users_search_entry").unwrap();
     let list_all_button: gtk::Button = builder.get_object("list_users_button").unwrap();
-    let users_list: gtk::Grid = builder.get_object("users_search_grid").unwrap();
-    let len = Rc::new(Cell::new(0));
+    let users_list_view: gtk::TreeView = builder.get_object("users_search_list").unwrap();
+    create_and_setup_view(&users_list_view);
+    let users_list = create_treeview(&users_list_view);
 
     users_search.connect_activate(
-        (client.clone(), users_list.clone(), len.clone()).connector()
-            .do_async(|(client, list, len), entry: gtk::SearchEntry| {
+        (client.clone(), users_list.clone(), users_list_view.clone()).connector()
+            .do_async(|(client, list, view), entry: gtk::SearchEntry| {
                 async move {
                     let txt = entry.try_get_text().unwrap_or_else(|_| String::new());
                     match client.search_users(txt).await {
-                        Ok(users) => insert_users(&len, &list, users),
+                        Ok(users) => insert_users(&list, &view, users),
                         Err(err) => dialog::show_generic_error(&err),
                     }
                 }
@@ -37,11 +38,11 @@ pub fn build_administration(
     );
 
     list_all_button.connect_clicked(
-        (client, users_list, len).connector()
-            .do_async(|(client, list, len), _| {
+        (client, users_list, users_list_view).connector()
+            .do_async(|(client, list, view), _| {
                 async move {
                     match client.list_all_server_users().await {
-                        Ok(users) => insert_users(&len, &list, users),
+                        Ok(users) => insert_users(&list, &view, users),
                         Err(err) => dialog::show_generic_error(&err),
                     }
                 }
@@ -52,41 +53,85 @@ pub fn build_administration(
     main.upcast()
 }
 
-fn insert_users(len: &Cell<usize>, grid: &gtk::Grid, users: Vec<ServerUser>) {
-    // Clear all rows
-    for _ in 0..len.get() {
-        // Row number changes down as is removed
-        grid.remove_row(1 as i32);
-    }
+fn create_treeview(view: &gtk::TreeView) -> gtk::ListStore {
+    let types: Vec<glib::Type> = Some(bool::static_type())
+        .into_iter()
+        .chain(iter::repeat(String::static_type()))
+        .take(7)
+        .collect();
+    let users_list = gtk::ListStore::new(&types);
 
-    // Add new rows
-    len.set(users.len());
-    for (y, user) in users.into_iter().enumerate() {
-        insert_user(grid, user, y as i32 + 1);
-        grid.show_all();
+    view.set_model(Some(&users_list));
+    users_list
+}
+
+fn append_text_column(tree: &gtk::TreeView, id: i32) {
+    let column = gtk::TreeViewColumn::new();
+    let cell = gtk::CellRendererText::new();
+
+    column.pack_start(&cell, true);
+    // Association of the view's column with the model's `id` column.
+    column.add_attribute(&cell, "text", id);
+    tree.append_column(&column);
+}
+
+fn create_and_setup_view(tree: &gtk::TreeView) {
+    tree.set_headers_visible(false);
+
+    let column = gtk::TreeViewColumn::new();
+    let cell = gtk::CellRendererToggle::new();
+    column.pack_start(&cell, true);
+    column.add_attribute(&cell, "", 0);
+    tree.append_column(&column);
+
+    for i in 1..7 {
+        append_text_column(tree, i);
     }
 }
 
-fn insert_user(grid: &gtk::Grid, user: ServerUser, y: i32) {
+fn insert_users(
+    list: &gtk::ListStore,
+    view: &gtk::TreeView,
+    users: Vec<ServerUser>
+) {
+    // Clear all rows
+    list.clear();
+
+    for (y, user) in users.into_iter().enumerate() {
+        insert_user(list, user, y as i32 + 1);
+    }
+
+    view.set_model(Some(list));
+    view.show_all();
+}
+
+fn insert_user(list: &gtk::ListStore, user: ServerUser, y: i32) {
     // +---------+----------+--------------+--------+-------------+--------+------------+
     // | Checked | Username | Display name | Banned | Compromised | Locked | Latest HSV |
     // +---------+----------+--------------+--------+-------------+--------+------------+
 
-    let check = gtk::CheckButton::new().upcast();
-    let name = gtk::Label::new(Some(&user.username)).upcast();
-    let display_name = gtk::Label::new(Some(&user.display_name)).upcast();
-    let banned = label_for_bool(user.banned);
-    let compromised = label_for_bool(user.compromised);
-    let locked = label_for_bool(user.locked);
-    let latest_hsv = label_for_bool(user.latest_hash_scheme);
-    let arr = [check, name, display_name, banned, compromised, locked, latest_hsv];
+    let arr: &[&dyn glib::ToValue] = &[
+        &false,
+        &user.username,
+        &user.display_name,
+        &label_for_bool(user.banned),
+        &label_for_bool(user.compromised),
+        &label_for_bool(user.locked),
+        &label_for_bool(user.latest_hash_scheme),
+    ];
 
-    for (x, widget) in arr.iter().enumerate() {
-        widget.get_style_context().add_class("user_property_item");
-        grid.attach(widget, x as i32, y, 1, 1);
-    }
+    let cols: Vec<_> = (0..7).collect();
+    list.insert_with_values(None, &cols, arr);
 }
 
-fn label_for_bool(b: bool) -> gtk::Widget {
-    gtk::Label::new(Some(if b { "Yes" } else { "No" })).upcast()
+fn label_for(text: &str) -> &str {
+    // gtk::LabelBuilder::new()
+    //     .label(text)
+    //     .selectable(true)
+    //     .build()
+    text
+}
+
+fn label_for_bool(b: bool) -> &'static str {
+    label_for(if b { "Yes" } else { "No" })
 }
