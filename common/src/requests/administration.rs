@@ -121,7 +121,8 @@ impl TryFrom<proto::requests::administration::AdminResponse> for AdminResponse {
 
         let res = match res.response? {
             SearchedUsers(results) => {
-                let users = results.users.into_iter().map(Into::into).collect();
+                let res: Result<_, _> = results.users.into_iter().map(TryInto::try_into).collect();
+                let users: Vec<ServerUser> = res?;
                 AdminResponse::SearchedUsers(users)
             }
         };
@@ -138,6 +139,7 @@ pub struct ServerUser {
     pub locked: bool,
     pub compromised: bool,
     pub latest_hash_scheme: bool,
+    pub id: UserId,
 }
 
 impl From<ServerUser> for proto::requests::administration::ServerUser {
@@ -149,19 +151,25 @@ impl From<ServerUser> for proto::requests::administration::ServerUser {
             locked: user.locked,
             compromised: user.compromised,
             latest_hash_scheme: user.latest_hash_scheme,
+            id: Some(user.id.into()),
         }
     }
 }
 
-impl From<proto::requests::administration::ServerUser> for ServerUser {
-    fn from(user: proto::requests::administration::ServerUser) -> Self {
-        ServerUser {
+impl TryFrom<proto::requests::administration::ServerUser> for ServerUser {
+    type Error = DeserializeError;
+
+    fn try_from(
+        user: proto::requests::administration::ServerUser
+    ) -> Result<Self, DeserializeError> {
+        Ok(ServerUser {
             username: user.username,
             display_name: user.display_name,
             banned: user.banned,
             locked: user.locked,
             compromised: user.compromised,
             latest_hash_scheme: user.latest_hash_scheme,
-        }
+            id: user.id?.try_into()?,
+        })
     }
 }

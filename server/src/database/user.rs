@@ -79,6 +79,7 @@ impl Into<ServerUser> for UserRecord {
             locked: self.locked,
             compromised: self.compromised,
             latest_hash_scheme: self.hash_scheme_version == HashSchemeVersion::LATEST,
+            id: self.id,
         }
     }
 }

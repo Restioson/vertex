@@ -378,6 +378,26 @@ impl<Ui: ClientUi> Client<Ui> {
             _ => Err(Error::UnexpectedMessage)
         }
     }
+
+    pub async fn ban_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
+        use std::result::Result as StdResult;
+
+        let futures = users.into_iter()
+            .map(|user| async move {
+                let req = ClientRequest::AdminAction(AdminRequest::Ban(user));
+                let req = self.request.send(req).await;
+
+                match req.response().await {
+                    Ok(OkResponse::NoData) => Ok(Ok(())),
+                    Ok(_) => Ok(Err((user, Error::UnexpectedMessage))),
+                    Err(e @ Error::ErrorResponse(_)) => Ok(Err((user, e))),
+                    Err(e) => Err(e),
+                }
+            });
+
+        futures::future::try_join_all(futures).await
+            .map(|vec| vec.into_iter().filter_map(StdResult::err).collect())
+    }
 }
 
 struct ClientLoop<Ui: ClientUi, S> {

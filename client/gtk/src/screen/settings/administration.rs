@@ -6,6 +6,10 @@ use crate::connect::AsConnector;
 use crate::screen::active::dialog;
 use vertex::requests::ServerUser;
 use std::iter;
+use std::sync::Mutex;
+use bimap::BiMap;
+use vertex::types::UserId;
+use std::rc::Rc;
 
 pub fn build_administration(
     client: Client<screen::active::Ui>
@@ -20,32 +24,65 @@ pub fn build_administration(
     let users_search: gtk::SearchEntry = builder.get_object("users_search_entry").unwrap();
     let list_all_button: gtk::Button = builder.get_object("list_users_button").unwrap();
     let users_list_view: gtk::TreeView = builder.get_object("users_search_list").unwrap();
+    let ban_button: gtk::Button = builder.get_object("ban_button").unwrap();
     let users_list = create_model();
+    let username_to_id: Rc<Mutex<BiMap<String, UserId>>> = Rc::new(Mutex::new(BiMap::new()));
     create_and_setup_view(&users_list,&users_list_view);
 
     users_search.connect_activate(
-        (client.clone(), users_list.clone(), users_list_view.clone()).connector()
-            .do_async(|(client, list, view), entry: gtk::SearchEntry| {
-                async move {
-                    let txt = entry.try_get_text().unwrap_or_else(|_| String::new());
-                    match client.search_users(txt).await {
-                        Ok(users) => insert_users(&list, &view, users),
-                        Err(err) => dialog::show_generic_error(&err),
-                    }
+        (client.clone(), users_list.clone(), users_list_view.clone(), username_to_id.clone()).connector()
+            .do_async(|(client, list, view, map), entry: gtk::SearchEntry| async move {
+                let txt = entry.try_get_text().unwrap_or_else(|_| String::new());
+                match client.search_users(txt).await {
+                    Ok(users) => insert_users(&list, &view, map, users),
+                    Err(err) => dialog::show_generic_error(&err),
                 }
             })
             .build_cloned_consumer()
     );
 
     list_all_button.connect_clicked(
-        (client, users_list, users_list_view).connector()
-            .do_async(|(client, list, view), _| {
-                async move {
-                    match client.list_all_server_users().await {
-                        Ok(users) => insert_users(&list, &view, users),
-                        Err(err) => dialog::show_generic_error(&err),
-                    }
+        (client.clone(), users_list.clone(), users_list_view, username_to_id.clone()).connector()
+            .do_async(|(client, list, view, map), _| async move {
+                match client.list_all_server_users().await {
+                    Ok(users) => insert_users(&list, &view, map, users),
+                    Err(err) => dialog::show_generic_error(&err),
                 }
+            })
+            .build_cloned_consumer()
+    );
+
+    ban_button.connect_clicked(
+        (client, users_list, username_to_id).connector()
+            .do_async(|(client, list, username_to_id), _| async move {
+                let mut selected = Vec::new();
+                let map = username_to_id.lock().unwrap();
+                list.foreach(|_, _, iter| {
+                    let toggled = list.get_value(iter, 0).get::<bool>().unwrap().unwrap();
+                    if toggled {
+                        let name = list.get_value(iter, 1).get::<String>().unwrap();
+                        selected.push(*map.get_by_left(&name.unwrap()).unwrap());
+                        list.set_value(iter, 0, &false.to_value());
+                    }
+
+                    false
+                });
+                drop(map);
+
+                match client.ban_users(selected).await {
+                    Ok(errors) if !errors.is_empty() => {
+                        let map = username_to_id.lock().unwrap();
+                        let mut msg = format!("Error banning the following {} users:", errors.len());
+                        for (id, error) in errors {
+                            let name = map.get_by_right(&id).unwrap();
+                            msg.push_str(&format!("\n  - {} ({})", name, error));
+                        }
+                        dialog::show_generic_error(&msg)
+                    }
+                    Err(err) => dialog::show_generic_error(&err),
+                    _ => {}
+                }
+
             })
             .build_cloned_consumer()
     );
@@ -82,8 +119,8 @@ fn create_and_setup_view(store: &gtk::ListStore, tree: &gtk::TreeView) {
         store.connector()
             .do_sync(|store, (_cell, path): (gtk::CellRendererToggle, gtk::TreePath)| {
                 let row = store.get_iter(&path).unwrap();
-                let toggled = store.get_value(&row, 0).downcast::<bool>().unwrap();
-                store.set_value(&row, 0, &(!toggled.get_some()).to_value())
+                let toggled = store.get_value(&row, 0).get::<bool>().unwrap().unwrap();
+                store.set_value(&row, 0, &(!toggled).to_value())
             })
             .build_widget_and_owned_listener()
     );
@@ -112,11 +149,15 @@ fn create_and_setup_view(store: &gtk::ListStore, tree: &gtk::TreeView) {
 fn insert_users(
     list: &gtk::ListStore,
     view: &gtk::TreeView,
+    username_to_id: Rc<Mutex<BiMap<String, UserId>>>,
     users: Vec<ServerUser>
 ) {
+    let mut map = username_to_id.lock().unwrap();
     list.clear();
+    map.clear();
 
     for user in users {
+        map.insert(user.username.clone(), user.id);
         insert_user(list, user);
     }
 
@@ -125,9 +166,9 @@ fn insert_users(
 }
 
 fn insert_user(list: &gtk::ListStore, user: ServerUser) {
-    // +---------+----------+--------------+--------+-------------+--------+------------+
-    // | Checked | Username | Display name | Banned | Compromised | Locked | Latest HSV |
-    // +---------+----------+--------------+--------+-------------+--------+------------+
+    // +----------+----------+--------------+--------+-------------+--------+-------------+
+    // | Selected | Username | Display name | Banned | Compromised | Locked | Latest HSV  |
+    // +----------+----------+--------------+--------+-------------+--------+-------------+
 
     let arr: &[&dyn glib::ToValue] = &[
         &false,

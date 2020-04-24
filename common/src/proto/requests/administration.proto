@@ -47,4 +47,5 @@ message ServerUser {
     bool locked = 4;
     bool compromised = 5;
     bool latest_hash_scheme = 6;
+    types.UserId id = 7;
 }

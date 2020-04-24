@@ -591,17 +591,17 @@ popover {
 
 #settings .search_entry, #settings button {
   padding: 10px;
-  margin-left: 10px;
+  margin: 7px;
 }
 
-#settings .search_list {
+#settings .view {
   background: @sidebar_bg_color;
   border-top-color: shade(@content_bg_color, 1.5);
   color: #e0e0e0;
   font-size: 16px;
 }
 
-#settings .search_list button {
+#settings .view button {
   background-color: @content_bg_color;
   margin: 0px;
   padding: 5px;
@@ -618,25 +618,12 @@ popover {
   color: @error_color;
 }
 
-
 #settings .search_list check {
   margin: 2px;
   padding: 4px;
   min-height: 17px;
   min-width: 17px;
   background-color: @lower_bar_bg_color;
-}
-
-#settings .user_property {
-  font-weight: 500;
-}
-
-#settings .user_property_item {
-  padding: 10px;
-}
-
-#settings #list_users_button {
-  padding: 10px;
 }
 
 /* "Close" & "Log out" */
