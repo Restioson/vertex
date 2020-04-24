@@ -379,24 +379,38 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
+    async fn do_to_many(
+        &self,
+        users: Vec<UserId>,
+        req: fn(UserId) -> ClientRequest,
+    ) -> Result<Vec<(UserId, Error)>> {
+        let mut results = Vec::new();
+        for user in users {
+            let req = self.request.send(req(user)).await;
+
+            let res = match req.response().await {
+                Ok(OkResponse::NoData) => {},
+                Ok(_) => results.push((user, Error::UnexpectedMessage)),
+                Err(e @ Error::ErrorResponse(_)) => results.push((user, e)),
+                Err(e) => return Err(e),
+            };
+        }
+
+        Ok(results)
+    }
+
     pub async fn ban_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
-        use std::result::Result as StdResult;
+        self.do_to_many(
+            users,
+            |user| ClientRequest::AdminAction(AdminRequest::Ban(user))
+        ).await
+    }
 
-        let futures = users.into_iter()
-            .map(|user| async move {
-                let req = ClientRequest::AdminAction(AdminRequest::Ban(user));
-                let req = self.request.send(req).await;
-
-                match req.response().await {
-                    Ok(OkResponse::NoData) => Ok(Ok(())),
-                    Ok(_) => Ok(Err((user, Error::UnexpectedMessage))),
-                    Err(e @ Error::ErrorResponse(_)) => Ok(Err((user, e))),
-                    Err(e) => Err(e),
-                }
-            });
-
-        futures::future::try_join_all(futures).await
-            .map(|vec| vec.into_iter().filter_map(StdResult::err).collect())
+    pub async fn unban_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
+        self.do_to_many(
+            users,
+            |user| ClientRequest::AdminAction(AdminRequest::Unban(user))
+        ).await
     }
 }
 

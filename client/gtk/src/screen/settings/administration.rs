@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use bimap::BiMap;
 use vertex::types::UserId;
 use std::rc::Rc;
+use std::fmt;
 
 pub fn build_administration(
     client: Client<screen::active::Ui>
@@ -25,6 +26,7 @@ pub fn build_administration(
     let list_all_button: gtk::Button = builder.get_object("list_users_button").unwrap();
     let users_list_view: gtk::TreeView = builder.get_object("users_search_list").unwrap();
     let ban_button: gtk::Button = builder.get_object("ban_button").unwrap();
+    let unban_button: gtk::Button = builder.get_object("unban_button").unwrap();
     let users_list = create_model();
     let username_to_id: Rc<Mutex<BiMap<String, UserId>>> = Rc::new(Mutex::new(BiMap::new()));
     create_and_setup_view(&users_list,&users_list_view);
@@ -53,41 +55,80 @@ pub fn build_administration(
     );
 
     ban_button.connect_clicked(
+        (client.clone(), users_list.clone(), username_to_id.clone()).connector()
+            .do_async(|(client, list, map), _| {
+                perform_action(Action::Ban, client, list, map)
+            })
+            .build_cloned_consumer()
+    );
+
+    unban_button.connect_clicked(
         (client, users_list, username_to_id).connector()
-            .do_async(|(client, list, username_to_id), _| async move {
-                let mut selected = Vec::new();
-                let map = username_to_id.lock().unwrap();
-                list.foreach(|_, _, iter| {
-                    let toggled = list.get_value(iter, 0).get::<bool>().unwrap().unwrap();
-                    if toggled {
-                        let name = list.get_value(iter, 1).get::<String>().unwrap();
-                        selected.push(*map.get_by_left(&name.unwrap()).unwrap());
-                        list.set_value(iter, 0, &false.to_value());
-                    }
-
-                    false
-                });
-                drop(map);
-
-                match client.ban_users(selected).await {
-                    Ok(errors) if !errors.is_empty() => {
-                        let map = username_to_id.lock().unwrap();
-                        let mut msg = format!("Error banning the following {} users:", errors.len());
-                        for (id, error) in errors {
-                            let name = map.get_by_right(&id).unwrap();
-                            msg.push_str(&format!("\n  - {} ({})", name, error));
-                        }
-                        dialog::show_generic_error(&msg)
-                    }
-                    Err(err) => dialog::show_generic_error(&err),
-                    _ => {}
-                }
-
+            .do_async(|(client, list, map), _| {
+                perform_action(Action::Unban, client, list, map)
             })
             .build_cloned_consumer()
     );
 
     main.upcast()
+}
+
+enum Action {
+    Ban,
+    Unban,
+    //Unlock,
+}
+
+impl fmt::Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        let gerund = match self {
+            Action::Ban => "banning",
+            Action::Unban => "unbanning",
+            //Action::Unlock => "unlocking",
+        };
+
+        f.write_str(gerund)
+    }
+}
+
+async fn perform_action(
+    action: Action,
+    client: Client<screen::active::Ui>,
+    list: gtk::ListStore,
+    username_to_id: Rc<Mutex<BiMap<String, UserId>>>
+) {
+    let mut selected = Vec::new();
+    let map = username_to_id.lock().unwrap();
+    list.foreach(|_, _, iter| {
+        let toggled = list.get_value(iter, 0).get::<bool>().unwrap().unwrap();
+        if toggled {
+            let name = list.get_value(iter, 1).get::<String>().unwrap();
+            selected.push(*map.get_by_left(&name.unwrap()).unwrap());
+            list.set_value(iter, 0, &false.to_value());
+        }
+
+        false
+    });
+    drop(map); // Drop lock
+
+    let res = match action {
+        Action::Ban => client.ban_users(selected).await,
+        Action::Unban => client.unban_users(selected).await,
+    };
+
+    match res {
+        Ok(errors) if !errors.is_empty() => {
+            let map = username_to_id.lock().unwrap();
+            let mut msg = format!("Error {} the following {} users:", action, errors.len());
+            for (id, error) in errors {
+                let name = map.get_by_right(&id).unwrap();
+                msg.push_str(&format!("\n  - {} ({})", name, error));
+            }
+            dialog::show_generic_error(&msg)
+        }
+        Err(err) => dialog::show_generic_error(&err),
+        _ => {}
+    }
 }
 
 fn create_model() -> gtk::ListStore {

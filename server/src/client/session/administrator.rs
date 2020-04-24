@@ -32,6 +32,7 @@ impl ActiveSession {
     ) -> Result<OkResponse, Error> {
         match request {
             AdminRequest::Ban(user) => self.ban(user).await,
+            AdminRequest::Unban(user) => self.unban(user).await,
             AdminRequest::Promote { user, permissions } => self.promote(user, permissions).await,
             AdminRequest::Demote(user) => self.demote(user).await,
             AdminRequest::SearchUser { name } => self.search_user(name).await,
@@ -66,6 +67,19 @@ impl ActiveSession {
         }
 
         db.set_banned(user, true)
+            .await?
+            .map_err(|_| Error::InvalidUser)
+            .map(|_| OkResponse::NoData)
+    }
+
+    async fn unban(&mut self, user: UserId) -> Result<OkResponse, Error> {
+        if !self.has_admin_perms(AdminPermissionFlags::BAN)? {
+            return Err(Error::AccessDenied);
+        }
+
+        let db = &self.global.database;
+
+        db.set_banned(user, false)
             .await?
             .map_err(|_| Error::InvalidUser)
             .map(|_| OkResponse::NoData)

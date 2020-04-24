@@ -8,7 +8,7 @@ bitflags! {
     pub struct AdminPermissionFlags: i64 {
         /// All permissions. Could be used for the server owner.
         const ALL = 1;
-        /// Ban users.
+        /// Ban and unban users.
         const BAN = 1 << 1;
         /// Demote users.
         const DEMOTE = 1 << 2;
@@ -30,6 +30,7 @@ pub enum AdminRequest {
     },
     Demote(UserId),
     Ban(UserId),
+    Unban(UserId),
     SearchUser {
         name: String,
     },
@@ -51,6 +52,9 @@ impl From<AdminRequest> for proto::requests::administration::AdminRequest {
                 user: Some(user.into()),
             }),
             Ban(user) => Request::BanUser(request::Ban {
+                user: Some(user.into()),
+            }),
+            Unban(user) => Request::UnbanUser(request::Unban {
                 user: Some(user.into()),
             }),
             SearchUser { name } => Request::SearchUser(request::SearchUser { name }),
@@ -78,6 +82,7 @@ impl TryFrom<proto::requests::administration::AdminRequest> for AdminRequest {
             },
             DemoteUser(demote) => AdminRequest::Demote(demote.user?.try_into()?),
             BanUser(ban) => AdminRequest::Ban(ban.user?.try_into()?),
+            UnbanUser(unban) => AdminRequest::Unban(unban.user?.try_into()?),
             SearchUser(search) => AdminRequest::SearchUser { name: search.name },
             ListAllUsers(_) => AdminRequest::ListAllUsers,
         };
