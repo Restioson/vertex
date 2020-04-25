@@ -18,6 +18,7 @@ mod rooms;
 mod token;
 mod user;
 mod user_room_states;
+mod reports;
 
 pub use administrators::*;
 pub use communities::*;
