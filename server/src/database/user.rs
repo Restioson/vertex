@@ -279,6 +279,25 @@ impl Database {
         })
     }
 
+    pub async fn set_locked(
+        &self,
+        user: UserId,
+        locked: bool,
+    ) -> DbResult<Result<(), NonexistentUser>> {
+        const STMT: &str = "UPDATE users SET locked = $1 WHERE id = $2";
+
+        let conn = self.pool.connection().await?;
+        let stmt = conn.client.prepare(STMT).await?;
+        let args: &[&(dyn ToSql + Sync)] = &[&locked, &user.0];
+
+        let res = conn.client.execute(&stmt, args).await?;
+        Ok(if res == 1 {
+            Ok(())
+        } else {
+            Err(NonexistentUser)
+        })
+    }
+
     pub async fn search_user(
         &self,
         name: String,

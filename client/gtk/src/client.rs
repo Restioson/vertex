@@ -412,6 +412,13 @@ impl<Ui: ClientUi> Client<Ui> {
             |user| ClientRequest::AdminAction(AdminRequest::Unban(user))
         ).await
     }
+
+    pub async fn unlock_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
+        self.do_to_many(
+            users,
+            |user| ClientRequest::AdminAction(AdminRequest::Unlock(user))
+        ).await
+    }
 }
 
 struct ClientLoop<Ui: ClientUi, S> {

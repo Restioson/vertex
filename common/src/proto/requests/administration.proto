@@ -11,6 +11,7 @@ message AdminRequest {
         SearchUser search_user = 4;
         types.None list_all_users = 5;
         Unban unban_user = 6;
+        Unlock unlock_user = 7;
     }
 }
 
@@ -34,6 +35,10 @@ message Ban {
 }
 
 message Unban {
+    types.UserId user = 1;
+}
+
+message Unlock {
     types.UserId user = 1;
 }
 

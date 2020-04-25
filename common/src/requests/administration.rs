@@ -31,6 +31,7 @@ pub enum AdminRequest {
     Demote(UserId),
     Ban(UserId),
     Unban(UserId),
+    Unlock(UserId),
     SearchUser {
         name: String,
     },
@@ -55,6 +56,9 @@ impl From<AdminRequest> for proto::requests::administration::AdminRequest {
                 user: Some(user.into()),
             }),
             Unban(user) => Request::UnbanUser(request::Unban {
+                user: Some(user.into()),
+            }),
+            Unlock(user) => Request::UnlockUser(request::Unlock {
                 user: Some(user.into()),
             }),
             SearchUser { name } => Request::SearchUser(request::SearchUser { name }),
@@ -83,6 +87,7 @@ impl TryFrom<proto::requests::administration::AdminRequest> for AdminRequest {
             DemoteUser(demote) => AdminRequest::Demote(demote.user?.try_into()?),
             BanUser(ban) => AdminRequest::Ban(ban.user?.try_into()?),
             UnbanUser(unban) => AdminRequest::Unban(unban.user?.try_into()?),
+            UnlockUser(unlock) => AdminRequest::Unlock(unlock.user?.try_into()?),
             SearchUser(search) => AdminRequest::SearchUser { name: search.name },
             ListAllUsers(_) => AdminRequest::ListAllUsers,
         };

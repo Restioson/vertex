@@ -27,6 +27,7 @@ pub fn build_administration(
     let users_list_view: gtk::TreeView = builder.get_object("users_search_list").unwrap();
     let ban_button: gtk::Button = builder.get_object("ban_button").unwrap();
     let unban_button: gtk::Button = builder.get_object("unban_button").unwrap();
+    let unlock_button: gtk::Button = builder.get_object("unlock_button").unwrap();
     let users_list = create_model();
     let username_to_id: Rc<Mutex<BiMap<String, UserId>>> = Rc::new(Mutex::new(BiMap::new()));
     create_and_setup_view(&users_list,&users_list_view);
@@ -63,9 +64,17 @@ pub fn build_administration(
     );
 
     unban_button.connect_clicked(
-        (client, users_list, username_to_id).connector()
+        (client.clone(), users_list.clone(), username_to_id.clone()).connector()
             .do_async(|(client, list, map), _| {
                 perform_action(Action::Unban, client, list, map)
+            })
+            .build_cloned_consumer()
+    );
+
+    unlock_button.connect_clicked(
+        (client, users_list, username_to_id).connector()
+            .do_async(|(client, list, map), _| {
+                perform_action(Action::Unlock, client, list, map)
             })
             .build_cloned_consumer()
     );
@@ -76,7 +85,7 @@ pub fn build_administration(
 enum Action {
     Ban,
     Unban,
-    //Unlock,
+    Unlock,
 }
 
 impl fmt::Display for Action {
@@ -84,7 +93,7 @@ impl fmt::Display for Action {
         let gerund = match self {
             Action::Ban => "banning",
             Action::Unban => "unbanning",
-            //Action::Unlock => "unlocking",
+            Action::Unlock => "unlocking",
         };
 
         f.write_str(gerund)
@@ -114,6 +123,7 @@ async fn perform_action(
     let res = match action {
         Action::Ban => client.ban_users(selected).await,
         Action::Unban => client.unban_users(selected).await,
+        Action::Unlock => client.unlock_users(selected).await,
     };
 
     match res {
