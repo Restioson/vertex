@@ -195,8 +195,8 @@ async fn main() {
         database
             .promote_to_admin(id, AdminPermissionFlags::ALL)
             .await
-            .unwrap_or_else(|_| panic!("Error promoting user {} to admin", name))
-            .unwrap_or_else(|_| panic!("Error promoting user {} to admin", name));
+            .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e))
+            .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e));
 
         info!(
             "User {} successfully promoted to admin with all permissions!",

@@ -12,13 +12,11 @@ use vertex::types::UserId;
 use std::rc::Rc;
 use std::fmt;
 
-pub fn build_administration(
-    client: Client<screen::active::Ui>
-) -> gtk::Widget {
-    lazy_static! {
-        static ref GLADE: Glade = Glade::open("settings/administration.glade").unwrap();
-    }
+lazy_static! {
+    static ref GLADE: Glade = Glade::open("settings/administration.glade").unwrap();
+}
 
+pub fn build_administration(client: Client<screen::active::Ui>) -> gtk::Widget {
     let builder: gtk::Builder = GLADE.builder();
     let main: gtk::Box = builder.get_object("main").unwrap();
 
@@ -28,6 +26,7 @@ pub fn build_administration(
     let ban_button: gtk::Button = builder.get_object("ban_button").unwrap();
     let unban_button: gtk::Button = builder.get_object("unban_button").unwrap();
     let unlock_button: gtk::Button = builder.get_object("unlock_button").unwrap();
+    let demote_button: gtk::Button = builder.get_object("demote_button").unwrap();
     let users_list = create_model();
     let username_to_id: Rc<Mutex<BiMap<String, UserId>>> = Rc::new(Mutex::new(BiMap::new()));
     create_and_setup_view(&users_list,&users_list_view);
@@ -72,9 +71,17 @@ pub fn build_administration(
     );
 
     unlock_button.connect_clicked(
-        (client, users_list, username_to_id).connector()
+        (client.clone(), users_list.clone(), username_to_id.clone()).connector()
             .do_async(|(client, list, map), _| {
                 perform_action(Action::Unlock, client, list, map)
+            })
+            .build_cloned_consumer()
+    );
+
+    demote_button.connect_clicked(
+        (client, users_list, username_to_id).connector()
+            .do_async(|(client, list, map), _| {
+                perform_action(Action::Demote, client, list, map)
             })
             .build_cloned_consumer()
     );
@@ -82,10 +89,33 @@ pub fn build_administration(
     main.upcast()
 }
 
+// TODO(admin) v v v
+// pub fn show_promote(client: Client<screen::active::Ui>, builder: gtk::Builder) {
+//     let main: gtk::Box = builder.get_object("promote_dialog").unwrap();
+//
+//     let all: gtk::CheckButton = builder.get_object("all_checkbutton").unwrap();
+//     let ban: gtk::CheckButton = builder.get_object("ban_checkbutton").unwrap();
+//     let basic: gtk::CheckButton = builder.get_object("basic_checkbutton").unwrap();
+//     let all: gtk::CheckButton = builder.get_object("all_checkbutton").unwrap();
+//     let demote: gtk::CheckButton = builder.get_object("demote_checkbutton").unwrap();
+//     let promote: gtk::CheckButton = builder.get_object("promote_checkbutton").unwrap();
+//
+//     let dialog = window::show_dialog(main);
+//
+//     join_button.connect_button_release_event(
+//         client.connector()
+//             .do_async(move |client, _| {
+//                 let permissions = AdminPermissionFlags::from_bits_truncate(0);
+//             })
+//             .build_widget_event()
+//     );
+// }
+
 enum Action {
     Ban,
     Unban,
     Unlock,
+    Demote,
 }
 
 impl fmt::Display for Action {
@@ -94,6 +124,7 @@ impl fmt::Display for Action {
             Action::Ban => "banning",
             Action::Unban => "unbanning",
             Action::Unlock => "unlocking",
+            Action::Demote => "demoting",
         };
 
         f.write_str(gerund)
@@ -124,6 +155,7 @@ async fn perform_action(
         Action::Ban => client.ban_users(selected).await,
         Action::Unban => client.unban_users(selected).await,
         Action::Unlock => client.unlock_users(selected).await,
+        Action::Demote => client.demote_users(selected).await,
     };
 
     match res {

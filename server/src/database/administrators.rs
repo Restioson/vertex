@@ -13,7 +13,7 @@ pub(super) const CREATE_ADMINISTRATORS_TABLE: &str = r"
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CreateAdminError {
     InvalidUser,
-    AlreadyAdmin,
+    AlreadyAdmin, // In theory this shouldn't fire
 }
 
 impl Database {
@@ -24,7 +24,7 @@ impl Database {
     ) -> DbResult<Result<(), CreateAdminError>> {
         const STMT: &str = "
             INSERT INTO administrators (user_id, permission_flags) VALUES ($1, $2)
-                ON CONFLICT DO NOTHING
+                ON CONFLICT(user_id) DO UPDATE SET permission_flags = $2
         ";
 
         let conn = self.pool.connection().await?;

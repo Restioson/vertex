@@ -388,7 +388,7 @@ impl<Ui: ClientUi> Client<Ui> {
         for user in users {
             let req = self.request.send(req(user)).await;
 
-            let res = match req.response().await {
+             match req.response().await {
                 Ok(OkResponse::NoData) => {},
                 Ok(_) => results.push((user, Error::UnexpectedMessage)),
                 Err(e @ Error::ErrorResponse(_)) => results.push((user, e)),
@@ -417,6 +417,13 @@ impl<Ui: ClientUi> Client<Ui> {
         self.do_to_many(
             users,
             |user| ClientRequest::AdminAction(AdminRequest::Unlock(user))
+        ).await
+    }
+
+    pub async fn demote_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
+        self.do_to_many(
+            users,
+            |user| ClientRequest::AdminAction(AdminRequest::Demote(user))
         ).await
     }
 }

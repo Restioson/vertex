@@ -115,7 +115,7 @@ impl ActiveSession {
             .await?
             .map_err(|_| Error::InvalidUser)?;
 
-        notify_of_admin_perm_change(user)?;
+        notify_of_admin_perm_change(user, perms)?;
 
         Ok(OkResponse::NoData)
     }
@@ -128,11 +128,21 @@ impl ActiveSession {
         let db = &self.global.database;
         let no_perms = AdminPermissionFlags::from_bits_truncate(0);
 
+        let their_perms = db
+            .get_admin_permissions(user)
+            .await
+            .map_err(|_| Error::InvalidUser)?; // Error assumes that we are getting own user
+
+        // Don't allow demoting more privileged users but allow demoting self
+        if user != self.user && their_perms.contains(self.admin_perms()?) {
+            return Err(Error::AccessDenied);
+        }
+
         db.set_admin_permissions(user, no_perms)
             .await?
             .map_err(|_| Error::InvalidUser)?;
 
-        notify_of_admin_perm_change(user)?;
+        notify_of_admin_perm_change(user, no_perms)?;
 
         Ok(OkResponse::NoData)
     }
@@ -158,9 +168,9 @@ impl ActiveSession {
     }
 }
 
-fn notify_of_admin_perm_change(user: UserId) -> Result<(), Error> {
-    let active = manager::get_active_user(user).map_err(|_| Error::InvalidUser)?;
-    let no_perms = AdminPermissionFlags::from_bits_truncate(0);
+fn notify_of_admin_perm_change(user: UserId, new: AdminPermissionFlags) -> Result<(), Error> {
+    let mut active = manager::get_active_user_mut(user).map_err(|_| Error::InvalidUser)?;
+    active.admin_perms = new;
 
     active
         .sessions
@@ -168,7 +178,7 @@ fn notify_of_admin_perm_change(user: UserId) -> Result<(), Error> {
         .filter_map(Session::as_active_actor)
         .for_each(|a| {
             let _ = a
-                .do_send(AdminPermissionsChanged(no_perms))
+                .do_send(AdminPermissionsChanged(new))
                 .map_err(handle_disconnected("ClientSession")); // Don't care
         });
 
