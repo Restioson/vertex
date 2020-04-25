@@ -250,14 +250,17 @@ pub fn show_generic_error<E: std::fmt::Display>(error: &E) {
             &[("Ok", ResponseType::Ok)],
         );
 
-        let label = Label::new(Some("Error"));
-        label.get_style_context().add_class("title");
+        let heading = Label::new(Some("Error"));
+        heading.get_style_context().add_class("title");
+        let flavour = Label::new(Some("I cry :'("));
+        heading.get_style_context().add_class("flavour_text");
 
         let description: gtk::Label = gtk::Label::new(Some(&format!("{}", error)));
         description.get_style_context().add_class("error_description");
 
         let content = dialog.get_content_area();
-        content.add(&label);
+        content.add(&heading);
+        content.add(&flavour);
         content.add(&description);
 
         dialog.connect_response(|dialog, _| dialog.emit_close());

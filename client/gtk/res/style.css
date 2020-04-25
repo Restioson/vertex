@@ -252,6 +252,12 @@ switch:checked slider {
   font-size: 16px;
 }
 
+.dialog .flavour_text {
+  font-size: 14px;
+  font-style: italic;
+  color: @subtitle_color;
+}
+
 /* specific styling */
 
 /*
