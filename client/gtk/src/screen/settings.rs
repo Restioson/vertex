@@ -2,7 +2,8 @@ use gtk::prelude::*;
 
 use lazy_static::lazy_static;
 
-use crate::{Client, token_store, window, SharedMut};
+use crate::{Client, SharedMut, token_store, window};
+use crate::config;
 use crate::connect::AsConnector;
 use crate::Glade;
 use crate::screen;
@@ -98,5 +99,16 @@ fn build_accessibility() -> gtk::Widget {
 
     let builder: gtk::Builder = GLADE.builder();
     let viewport: gtk::Box = builder.get_object("main").unwrap();
+
+    let narrate_new: gtk::Switch = builder.get_object("narrate_new").unwrap();
+
+    let config = config::get();
+    narrate_new.set_state(config.narrate_new_messages);
+
+    narrate_new.connect_state_set(|_switch, state| {
+        config::modify(|config| config.narrate_new_messages = state);
+        gtk::Inhibit(false)
+    });
+
     viewport.upcast()
 }

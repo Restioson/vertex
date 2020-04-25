@@ -18,6 +18,7 @@ use vertex::prelude::*;
 use vertex::proto::DeserializeError;
 
 pub use crate::client::Client;
+pub use crate::config::Config;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -29,6 +30,7 @@ pub mod screen;
 pub mod token_store;
 pub mod window;
 pub mod scheduler;
+pub mod config;
 
 #[derive(Clone)]
 pub struct Glade(Arc<String>);

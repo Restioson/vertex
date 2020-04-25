@@ -10,9 +10,9 @@ pub use notification::*;
 pub use profile::*;
 pub use room::*;
 pub use user::*;
-
 use vertex::prelude::*;
-use crate::{net, scheduler, screen, SharedMut, WeakSharedMut, window};
+
+use crate::{config, net, scheduler, screen, SharedMut, WeakSharedMut, window};
 use crate::{Error, Result};
 
 mod community;
@@ -52,7 +52,7 @@ pub trait ClientUi: Sized + Clone + 'static {
 }
 
 async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
-    where S: Stream<Item = tungstenite::Result<ServerEvent>> + Unpin
+    where S: Stream<Item=tungstenite::Result<ServerEvent>> + Unpin
 {
     if let Some(result) = event_receiver.next().await {
         let event = result?;
@@ -193,10 +193,11 @@ impl<Ui: ClientUi> Client<Ui> {
             if let Some(room) = community.room_by_id(room).await {
                 let focused = self.ui.window_focused();
                 let selected = self.is_selected(room.community, room.id).await;
-                if (!focused || !selected) || (focused && selected) {
-                    // Read it out if looking at the room, but in short form
-                    let a11y_narration = focused && selected;
 
+                // Read it out if looking at the room, but in short form
+                let a11y_narration = focused && selected && config::get().narrate_new_messages;
+
+                if (!focused || !selected) || a11y_narration {
                     let profile = self.profiles.get_or_default(message.author, message.author_profile_version).await;
                     self.notifier.notify_message(
                         &profile,
@@ -369,7 +370,7 @@ struct ClientLoop<Ui: ClientUi, S> {
 }
 
 impl<Ui: ClientUi, S> ClientLoop<Ui, S>
-    where S: Stream<Item = tungstenite::Result<ServerEvent>> + Unpin
+    where S: Stream<Item=tungstenite::Result<ServerEvent>> + Unpin
 {
     async fn run(self) {
         let client = self.client;
