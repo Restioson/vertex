@@ -1,6 +1,3 @@
-use std::rc::Rc;
-use std::sync::atomic::AtomicBool;
-
 use gtk::prelude::*;
 
 use lazy_static::lazy_static;
@@ -11,11 +8,10 @@ use crate::{Glade, };
 
 use super::*;
 use atk::{AtkObjectExt, RelationType, RelationSetExt};
-use gtk::Orientation;
 
 #[derive(Clone)]
 pub struct CommunityEntryWidget {
-    pub expander: CommunityExpander,
+    pub widget: gtk::Box,
     pub room_list: gtk::ListBox,
 
     menu_button: gtk::Button,
@@ -29,28 +25,27 @@ impl CommunityEntryWidget {
 
         let builder: gtk::Builder = GLADE.builder();
 
-        let community_header: gtk::Box = builder.get_object("community_header").unwrap();
-        let settings: gtk::Button = builder.get_object("menu_button").unwrap();
+        let community_entry: gtk::Box = builder.get_object("community_entry").unwrap();
+
+        let community_expander: gtk::Expander = builder.get_object("community_expander").unwrap();
 
         let community_name: gtk::Label = builder.get_object("community_name").unwrap();
         community_name.set_text(&name);
 
         let community_description: gtk::Label = builder.get_object("community_description").unwrap();
         community_description.set_text(&description);
-        // TODO do something with the motd
 
         let room_list: gtk::ListBox = builder.get_object("room_list").unwrap();
 
-        let expander = CommunityExpander::new(
-            community_name.upcast(),
-            community_description.upcast(),
-            settings.upcast(),
-            community_header.upcast(),
-            room_list.clone().upcast(),
-        );
+        let objs = (community_expander.get_accessible(), community_name.get_accessible(), community_description.get_accessible());
+        if let (Some(exp), Some(name), Some(desc)) = objs {
+            let relations = exp.ref_relation_set().expect("Error getting relations set");
+            relations.add_relation_by_type(RelationType::LabelledBy, &name);
+            relations.add_relation_by_type(RelationType::LabelledBy, &desc);
+        }
 
         CommunityEntryWidget {
-            expander,
+            widget: community_entry,
             room_list,
             menu_button: builder.get_object("menu_button").unwrap(),
         }
@@ -141,54 +136,3 @@ fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
     menu
 }
 
-#[derive(Clone)]
-pub struct CommunityExpander {
-    pub widget: gtk::Box,
-    content: gtk::Widget,
-    expanded: Rc<AtomicBool>,
-}
-
-impl CommunityExpander {
-    fn new(
-        heading: gtk::Label,
-        description: gtk::Label,
-        settings: gtk::Widget,
-        header: gtk::Widget, // The heading & description
-        content: gtk::Widget
-    ) -> Self {
-        let widget = gtk::ExpanderBuilder::new()
-            .label_widget(&header)
-            .child(&content)
-            .build();
-
-        // Needed to stop vexpanding
-        let settings_box = gtk::BoxBuilder::new()
-            .orientation(Orientation::Vertical)
-            .child(&settings)
-            .vexpand(false)
-            .build();
-
-        let container = gtk::BoxBuilder::new()
-            .orientation(Orientation::Horizontal)
-            .build();
-
-        container.add(&widget);
-        container.add(&settings_box);
-        container.pack_end(&settings_box, false, true, 0);
-
-        let objs = (widget.get_accessible(), heading.get_accessible(), description.get_accessible());
-        if let (Some(exp), Some(heading), Some(desc)) = objs {
-            let relations = exp.ref_relation_set().expect("Error getting relations set");
-            relations.add_relation_by_type(RelationType::LabelledBy, &heading);
-            relations.add_relation_by_type(RelationType::LabelledBy, &desc);
-        }
-
-        let expander = CommunityExpander {
-            widget: container,
-            content,
-            expanded: Rc::new(AtomicBool::new(false)),
-        };
-
-        expander
-    }
-}
