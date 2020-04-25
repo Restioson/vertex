@@ -7,7 +7,7 @@ use crate::connect::AsConnector;
 use crate::window;
 
 use super::Ui;
-use gtk::{DialogFlags, ResponseType, Label, EntryBuilder};
+use gtk::{DialogFlags, ResponseType, Label, EntryBuilder, WidgetExt};
 
 pub fn show_add_community(client: Client<Ui>) {
     window::show_dialog(|window| {
@@ -252,15 +252,13 @@ pub fn show_generic_error<E: std::fmt::Display>(error: &E) {
 
         let heading = Label::new(Some("Error"));
         heading.get_style_context().add_class("title");
-        let flavour = Label::new(Some("I cry :'("));
-        heading.get_style_context().add_class("flavour_text");
+        heading.set_widget_name("error_title");
 
         let description: gtk::Label = gtk::Label::new(Some(&format!("{}", error)));
         description.get_style_context().add_class("error_description");
 
         let content = dialog.get_content_area();
         content.add(&heading);
-        content.add(&flavour);
         content.add(&description);
 
         dialog.connect_response(|dialog, _| dialog.emit_close());
