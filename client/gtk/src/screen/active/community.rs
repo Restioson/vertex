@@ -31,9 +31,11 @@ impl CommunityEntryWidget {
 
         let community_name: gtk::Label = builder.get_object("community_name").unwrap();
         community_name.set_text(&name);
+        community_name.set_xalign(0.0);
 
         let community_description: gtk::Label = builder.get_object("community_description").unwrap();
         community_description.set_text(&description);
+        community_description.set_xalign(0.0);
 
         let room_list: gtk::ListBox = builder.get_object("room_list").unwrap();
 
