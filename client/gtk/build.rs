@@ -2,7 +2,9 @@
 type StdResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 #[cfg(not(windows))]
-fn main() {}
+fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+}
 
 #[cfg(windows)]
 fn main() {

@@ -59,7 +59,6 @@ fn bind_events(screen: &Screen) {
             .build_cloned_consumer()
     );
 
-    // Template v v v
     screen.category_list.connect_row_selected(
         screen.connector()
             .do_async(|screen, (_list, row)| async move {
