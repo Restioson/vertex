@@ -55,7 +55,6 @@ impl MessageGroupWidget {
             ChatSide::Front => self.entry_list.add(&entry.content.widget),
             ChatSide::Back => self.entry_list.insert(&entry.content.widget, 0),
         }
-
         entry
     }
 
@@ -184,16 +183,16 @@ fn build_invite_embed(client: &Client<Ui>, embed: InviteEmbed) -> gtk::Widget {
     motd_label.set_text(&embed.description);
 
     let join_button: gtk::Button = builder.get_object("join_button").unwrap();
-    join_button.connect_button_release_event(
+    join_button.connect_clicked(
         client.connector()
-            .do_async(move |client, (_, _)| {
+            .do_async(move |client, _| {
                 let code = embed.code.clone();
                 async move {
                     // TODO: report error
                     let _ = client.join_community(code).await;
                 }
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 
     invite.upcast()
@@ -206,24 +205,24 @@ fn pretty_date(msg: DateTime<Utc>) -> String {
     if msg.date() == now.date() {
         msg.format("%H:%M").to_string() // e.g 13:34
     } else if msg.date() + Duration::days(1) == now.date() {
-        msg.format("Yesterday, %H:%M").to_string() // e.g Yesterday, 13:34
+        msg.format("%H:%M, Yesterday").to_string() // e.g 13:34, Yesterday
     } else if msg.year() == now.year() {
         if msg.month() == now.month() {
             let msg_week = msg.iso_week().week() as i32;
             let week = now.iso_week().week() as i32;
 
             if msg_week == week {
-                msg.format("%A, %H:%M").to_string() // e.g Sunday, 13:34
+                msg.format("%H:%M, %A").to_string() // e.g 13:34, Sunday
             } else if msg_week - week == 1 {
-                msg.format("Last week %A, %H:%M").to_string() // e.g Last week Sunday, 13:34
+                msg.format("%H:%M, %A, last week").to_string() // e.g 13:34, Sunday, last week
             } else {
                 let day = Ordinal(msg.day());
-                msg.format(&format!("%A the {}, %H:%M", day)).to_string() // Sunday the 7th, 13:34
+                msg.format(&format!("%H:%M, %A the {}", day)).to_string() // 13:34, Sunday the 7th
             }
         } else {
-            msg.format("%b %d, %H:%M").to_string() // e.g Jul 8, 13:34
+            msg.format("%H:%M, %B %d").to_string() // e.g 13:34, July 8
         }
     } else {
-        msg.format("%d %b %Y, %H:%M").to_string() // e.g 8 Jul 2018, 13:34
+        msg.format("%H:%M, %d %B %Y").to_string() // e.g 13:34, 8 July 2018
     }
 }

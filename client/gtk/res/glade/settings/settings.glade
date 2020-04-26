@@ -11,99 +11,156 @@
         <property name="visible">True</property>
         <property name="can_focus">False</property>
         <child>
-          <object class="GtkListBox" id="category_list">
-            <property name="name">category_list</property>
+          <object class="GtkBox" id="settings">
+            <property name="name">settings</property>
             <property name="visible">True</property>
             <property name="can_focus">False</property>
+            <property name="orientation">vertical</property>
             <child>
-              <object class="GtkListBoxRow" id="close">
-                <property name="name">close</property>
+              <object class="GtkButton" id="close_button">
+                <property name="name">close_button</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="relief">none</property>
                 <child>
-                  <object class="GtkLabel">
+                  <object class="GtkLabel" id="close_button_label">
+                    <property name="name">close_button_label</property>
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="halign">start</property>
                     <property name="label" translatable="yes">Close</property>
+                    <property name="xalign">0</property>
+                    <style>
+                      <class name="button_label"/>
+                    </style>
                   </object>
                 </child>
+                <style>
+                  <class name="leave_button"/>
+                </style>
               </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
             </child>
             <child>
-              <object class="GtkListBoxRow">
+              <object class="GtkSeparator">
                 <property name="visible">True</property>
-                <property name="sensitive">False</property>
                 <property name="can_focus">False</property>
-                <property name="activatable">False</property>
-                <property name="selectable">False</property>
-                <child>
-                  <object class="GtkSeparator">
-                    <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                  </object>
-                </child>
               </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
             </child>
             <child>
-              <object class="GtkListBoxRow" id="my_user">
-                <property name="name">my_user</property>
+              <object class="GtkListBox" id="category_list">
+                <property name="name">category_list</property>
                 <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <child>
-                  <object class="GtkLabel">
-                    <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="halign">start</property>
-                    <property name="label" translatable="yes">My User</property>
-                  </object>
-                </child>
-              </object>
-            </child>
-            <child>
-              <object class="GtkListBoxRow" id="notifications">
-                <property name="name">notifications</property>
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <child>
-                  <object class="GtkLabel">
-                    <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="halign">start</property>
-                    <property name="label" translatable="yes">Notifications</property>
-                  </object>
-                </child>
-              </object>
-            </child>
-            <child>
-              <object class="GtkListBoxRow">
-                <property name="name">separator</property>
-                <property name="visible">True</property>
-                <property name="sensitive">False</property>
                 <property name="can_focus">False</property>
-                <property name="activatable">False</property>
-                <property name="selectable">False</property>
                 <child>
-                  <object class="GtkSeparator">
+                  <object class="GtkListBoxRow" id="my_user">
+                    <property name="name">my_user</property>
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
+                    <property name="can_focus">True</property>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="halign">start</property>
+                        <property name="label" translatable="yes">My User</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkListBoxRow" id="notifications">
+                    <property name="name">notifications</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="halign">start</property>
+                        <property name="label" translatable="yes">Notifications</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkListBoxRow" id="accessibility">
+                    <property name="name">a11y</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="halign">start</property>
+                        <property name="label" translatable="yes">Accessibility</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child internal-child="accessible">
+                  <object class="AtkObject" id="category_list-atkobject">
+                    <property name="AtkObject::accessible-name" translatable="yes">Settings category</property>
                   </object>
                 </child>
               </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">2</property>
+              </packing>
             </child>
             <child>
-              <object class="GtkListBoxRow" id="log_out">
-                <property name="name">log_out</property>
+              <object class="GtkSeparator">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">3</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="log_out_button">
+                <property name="name">log_out_button</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="relief">none</property>
                 <child>
-                  <object class="GtkLabel">
+                  <object class="GtkLabel" id="log_out_button_label">
+                    <property name="name">log_out_button_label</property>
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="halign">start</property>
                     <property name="label" translatable="yes">Log Out</property>
+                    <property name="xalign">0</property>
+                    <style>
+                      <class name="button_label"/>
+                    </style>
                   </object>
                 </child>
+                <style>
+                  <class name="leave_button"/>
+                </style>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">4</property>
+              </packing>
+            </child>
+            <child internal-child="accessible">
+              <object class="AtkObject" id="settings-atkobject">
+                <property name="AtkObject::accessible-name" translatable="yes">Settings</property>
               </object>
             </child>
           </object>
@@ -129,9 +186,14 @@
                 </child>
               </object>
             </child>
+            <child internal-child="accessible">
+              <object class="AtkObject" id="settings_scroll-atkobject">
+                <property name="AtkObject::accessible-name" translatable="yes">Setting options</property>
+              </object>
+            </child>
           </object>
           <packing>
-            <property name="expand">False</property>
+            <property name="expand">True</property>
             <property name="fill">True</property>
             <property name="position">1</property>
           </packing>

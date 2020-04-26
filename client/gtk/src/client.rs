@@ -10,9 +10,9 @@ pub use notification::*;
 pub use profile::*;
 pub use room::*;
 pub use user::*;
-
 use vertex::prelude::*;
-use crate::{net, scheduler, screen, SharedMut, WeakSharedMut, window};
+
+use crate::{config, net, scheduler, screen, SharedMut, WeakSharedMut, window};
 use crate::{Error, Result};
 
 mod community;
@@ -52,7 +52,7 @@ pub trait ClientUi: Sized + Clone + 'static {
 }
 
 async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
-    where S: Stream<Item = tungstenite::Result<ServerEvent>> + Unpin
+    where S: Stream<Item=tungstenite::Result<ServerEvent>> + Unpin
 {
     if let Some(result) = event_receiver.next().await {
         let event = result?;
@@ -68,7 +68,7 @@ async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
 pub struct ClientState<Ui: ClientUi> {
     pub communities: Vec<CommunityEntry<Ui>>,
     pub chat: Option<Chat<Ui>>,
-    selected_room: Option<RoomEntry<Ui>>,
+    pub selected_room: Option<RoomEntry<Ui>>,
     pub message_entry_is_empty: bool,
 }
 
@@ -191,13 +191,20 @@ impl<Ui: ClientUi> Client<Ui> {
     async fn handle_add_message(&self, community: CommunityId, room: RoomId, message: Message) {
         if let Some(community) = self.community_by_id(community).await {
             if let Some(room) = community.room_by_id(room).await {
-                if !self.ui.window_focused() || !self.is_selected(room.community, room.id).await {
+                let focused = self.ui.window_focused();
+                let selected = self.is_selected(room.community, room.id).await;
+
+                // Read it out if looking at the room, but in short form
+                let a11y_narration = focused && selected && config::get().narrate_new_messages;
+
+                if (!focused || !selected) || a11y_narration {
                     let profile = self.profiles.get_or_default(message.author, message.author_profile_version).await;
                     self.notifier.notify_message(
                         &profile,
                         &community.state.read().await.name,
                         &room.name,
                         message.content.as_ref().map(|s| s as &str),
+                        a11y_narration,
                     ).await;
                 }
 
@@ -352,7 +359,6 @@ impl<Ui: ClientUi> Client<Ui> {
 
     pub async fn log_out(&self) {
         self.request.send(ClientRequest::LogOut).await;
-        self.abort_handle.abort();
     }
 }
 
@@ -364,7 +370,7 @@ struct ClientLoop<Ui: ClientUi, S> {
 }
 
 impl<Ui: ClientUi, S> ClientLoop<Ui, S>
-    where S: Stream<Item = tungstenite::Result<ServerEvent>> + Unpin
+    where S: Stream<Item=tungstenite::Result<ServerEvent>> + Unpin
 {
     async fn run(self) {
         let client = self.client;

@@ -109,7 +109,7 @@ impl RequestManager {
                     None
                 }
                 Ok(ServerMessage::MalformedMessage) => panic!("Malformed message"),
-                Ok(_) => unimplemented!(),
+                Ok(e) => unimplemented!("{:#?}", e),
                 Err(e) => Some(Err(e)),
             })
         })

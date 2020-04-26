@@ -73,8 +73,6 @@ impl Ui {
         let builder: gtk::Builder = GLADE.builder();
         let message_entry: gtk::TextView = builder.get_object("message_entry").unwrap();
 
-        message_entry.set_opacity(0.5);
-
         Ui {
             main: builder.get_object("main").unwrap(),
             content: builder.get_object("content").unwrap(),
@@ -105,19 +103,19 @@ impl client::ClientUi for Ui {
     type MessageEntryWidget = MessageEntryWidget;
 
     fn bind_events(&self, client: &Client<Ui>) {
-        self.settings_button.connect_button_release_event(
+        self.settings_button.connect_clicked(
             client.connector()
-                .do_async(|client, (_button, _event)| async move {
+                .do_async(|client, _| async move {
                     let screen = screen::settings::build(client);
                     window::set_screen(&screen.main);
                 })
-                .build_widget_event()
+                .build_cloned_consumer()
         );
 
-        self.add_community_button.connect_button_release_event(
+        self.add_community_button.connect_clicked(
             client.connector()
                 .do_sync(|screen, _| show_add_community(screen))
-                .build_widget_event()
+                .build_cloned_consumer()
         );
 
         let client_cloned = client.clone();
@@ -134,9 +132,10 @@ impl client::ClientUi for Ui {
 
                     state.message_entry_is_empty = begin == end;
 
-                    if state.message_entry_is_empty {
+                    if state.selected_room.is_none() {
+                        entry.get_buffer().unwrap().set_text("Select a room to send a message...");
+                    } else if state.message_entry_is_empty {
                         entry.get_buffer().unwrap().set_text("Send a message...");
-                        entry.set_opacity(0.5);
                     }
                 });
 
@@ -152,9 +151,10 @@ impl client::ClientUi for Ui {
                     let state = client.state.upgrade().unwrap();
                     let state = state.read().await;
 
-                    if entry.has_focus() && state.message_entry_is_empty {
+                    if entry.has_focus() && state.message_entry_is_empty &&
+                        state.selected_room.is_some()
+                    {
                         entry.get_buffer().unwrap().set_text("");
-                        entry.set_opacity(1.0);
                     }
                 });
 
@@ -250,7 +250,7 @@ impl client::ClientUi for Ui {
 
         self.message_list.connect_size_allocate(
             (self.message_scroll_state.clone(), adjustment).connector()
-                .do_async(|(scroll_state, adjustment), (_, _)| async move {
+                .do_async(|(scroll_state, adjustment), _| async move {
                     let mut old = scroll_state.write().unwrap();
 
                     let new_bottom = adjustment.get_upper() - adjustment.get_page_size();
@@ -290,8 +290,9 @@ impl client::ClientUi for Ui {
     fn select_room(&self, room: &RoomEntry<Self>) -> ChatWidget {
         self.clear_messages();
 
+        // TODO(a11y)
         self.message_entry.set_can_focus(true);
-        self.message_entry.set_editable(true);
+        //self.message_entry.set_editable(true);
         self.message_entry.get_style_context().remove_class("disabled");
         self.message_entry.get_buffer().unwrap().set_text("Send a message...");
 
@@ -310,7 +311,8 @@ impl client::ClientUi for Ui {
     fn deselect_room(&self) {
         self.clear_messages();
 
-        self.message_entry.set_can_focus(false);
+        // TODO(a11y)
+        //self.message_entry.set_can_focus(false);
         self.message_entry.set_editable(false);
         self.message_entry.get_style_context().add_class("disabled");
         self.message_entry.get_buffer().unwrap().set_text("Select a room to send a message...");
@@ -320,8 +322,8 @@ impl client::ClientUi for Ui {
 
     fn add_community(&self, name: String, description: String) -> CommunityEntryWidget {
         let entry = CommunityEntryWidget::build(name, description);
-        self.communities.add(&entry.expander.widget);
-        entry.expander.widget.show_all();
+        self.communities.add(&entry.widget);
+        entry.widget.show_all();
 
         entry
     }
