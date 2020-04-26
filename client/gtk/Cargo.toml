@@ -93,7 +93,3 @@ winrt-notification = "0.2"
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
 path-slash = "0.1"
-xml-rs = "0.8"
-uuid = "0.8"
-walkdir = "2.3"
-rand = "0.7"
