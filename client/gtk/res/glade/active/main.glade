@@ -234,6 +234,9 @@
                             <property name="AtkObject::accessible-name" translatable="yes">message editor</property>
                           </object>
                         </child>
+                        <style>
+                          <class name="disabled"/>
+                        </style>
                       </object>
                     </child>
                     <child internal-child="accessible">

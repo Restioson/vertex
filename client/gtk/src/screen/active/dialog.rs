@@ -7,7 +7,8 @@ use crate::connect::AsConnector;
 use crate::window;
 
 use super::Ui;
-use gtk::{DialogFlags, ResponseType, Label, EntryBuilder};
+use gtk::{DialogFlags, ResponseType, Label, EntryBuilder, WidgetExt};
+use atk::{RelationType, AtkObjectExt, RelationSetExt};
 
 pub fn show_add_community(client: Client<Ui>) {
     window::show_dialog(|window| {
@@ -172,6 +173,12 @@ pub fn show_invite_dialog(invite: InviteCode) {
             .buffer(&gtk::TextBufferBuilder::new().text(&invite.0).build())
             .build();
 
+        let objs = (code_view.get_accessible(), label.get_accessible());
+        if let (Some(code_view), Some(label)) = objs {
+            let relations = code_view.ref_relation_set().expect("Error getting relations set");
+            relations.add_relation_by_type(RelationType::LabelledBy, &label);
+        }
+
         code_view.get_style_context().add_class("invite_code_text");
 
         let content = dialog.get_content_area();
@@ -250,14 +257,15 @@ pub fn show_generic_error<E: std::fmt::Display>(error: &E) {
             &[("Ok", ResponseType::Ok)],
         );
 
-        let label = Label::new(Some("Error"));
-        label.get_style_context().add_class("title");
+        let heading = Label::new(Some("Error"));
+        heading.get_style_context().add_class("title");
+        heading.set_widget_name("error_title");
 
         let description: gtk::Label = gtk::Label::new(Some(&format!("{}", error)));
         description.get_style_context().add_class("error_description");
 
         let content = dialog.get_content_area();
-        content.add(&label);
+        content.add(&heading);
         content.add(&description);
 
         dialog.connect_response(|dialog, _| dialog.emit_close());

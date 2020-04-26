@@ -68,7 +68,7 @@ async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
 pub struct ClientState<Ui: ClientUi> {
     pub communities: Vec<CommunityEntry<Ui>>,
     pub chat: Option<Chat<Ui>>,
-    selected_room: Option<RoomEntry<Ui>>,
+    pub selected_room: Option<RoomEntry<Ui>>,
     pub message_entry_is_empty: bool,
 }
 

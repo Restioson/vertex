@@ -132,7 +132,9 @@ impl client::ClientUi for Ui {
 
                     state.message_entry_is_empty = begin == end;
 
-                    if state.message_entry_is_empty {
+                    if state.selected_room.is_none() {
+                        entry.get_buffer().unwrap().set_text("Select a room to send a message...");
+                    } else if state.message_entry_is_empty {
                         entry.get_buffer().unwrap().set_text("Send a message...");
                     }
                 });
@@ -149,7 +151,9 @@ impl client::ClientUi for Ui {
                     let state = client.state.upgrade().unwrap();
                     let state = state.read().await;
 
-                    if entry.has_focus() && state.message_entry_is_empty {
+                    if entry.has_focus() && state.message_entry_is_empty &&
+                        state.selected_room.is_some()
+                    {
                         entry.get_buffer().unwrap().set_text("");
                     }
                 });
@@ -286,8 +290,9 @@ impl client::ClientUi for Ui {
     fn select_room(&self, room: &RoomEntry<Self>) -> ChatWidget {
         self.clear_messages();
 
+        // TODO(a11y)
         self.message_entry.set_can_focus(true);
-        self.message_entry.set_editable(true);
+        //self.message_entry.set_editable(true);
         self.message_entry.get_style_context().remove_class("disabled");
         self.message_entry.get_buffer().unwrap().set_text("Send a message...");
 
@@ -306,7 +311,8 @@ impl client::ClientUi for Ui {
     fn deselect_room(&self) {
         self.clear_messages();
 
-        self.message_entry.set_can_focus(false);
+        // TODO(a11y)
+        //self.message_entry.set_can_focus(false);
         self.message_entry.set_editable(false);
         self.message_entry.get_style_context().add_class("disabled");
         self.message_entry.get_buffer().unwrap().set_text("Select a room to send a message...");

@@ -328,11 +328,7 @@ switch:checked slider {
 
 #active #message_entry.disabled {
   background: shade(@message_entry_color, 0.9);
-}
-
-#active #message_entry.disabled selection {
-  color: transparent;
-  background: transparent;
+  color: shade(@widget_color, 0.5);
 }
 
 #active #message .embed {
@@ -348,7 +344,7 @@ switch:checked slider {
 }
 
 #active #message #invite #label {
-  color:@subtitle_color;
+  color: @subtitle_color;
   font-size: 15px;
 }
 
