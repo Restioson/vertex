@@ -1,0 +1,70 @@
+{
+  "app-id": "cf.vertex.gtk",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "19.08",
+  "sdk": "org.freedesktop.Sdk",
+  "finish-args": [
+    "--share=ipc",
+    "--share=network",
+    "--socket=pulseaudio",
+    "--talk-name=org.freedesktop.secrets",
+    "--socket=fallback-x11",
+    "--socket=wayland",
+    "--device=dri"
+  ],
+  "command": "Vertex",
+  "modules": [
+    {
+      "name": "gtk-app",
+      "buildsystem": "simple",
+      "build-commands": [
+        "install -D vertex_client_gtk /app/bin/Vertex"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "path": "../../target/armv7-unknown-linux-gnueabihf/release/vertex_client_gtk"
+        }
+      ]
+    },
+    {
+      "name": "resources",
+      "buildsystem": "simple",
+      "build-commands": [
+        "cp -r . /app/bin/res"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": "../../res"
+        }
+      ]
+    },
+    {
+      "name": "desktop-file",
+      "buildsystem": "simple",
+      "build-commands": [
+        "install -D vertex.desktop /app/share/applications/cf.vertex.gtk.desktop"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "path": "../vertex.desktop"
+        }
+      ]
+    },
+    {
+      "name": "icon",
+      "buildsystem": "simple",
+      "build-commands": [
+        "install -D icon.svg /app/share/icons/hicolor/scalable/apps/cf.vertex.gtk.svg"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "path": "../../res/icon.svg"
+        }
+      ]
+    }
+  ]
+}

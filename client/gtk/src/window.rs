@@ -1,14 +1,15 @@
 use gtk::prelude::*;
 use once_cell::unsync::OnceCell;
+use crate::connect::AsConnector;
 
 thread_local! {
-    static WINDOW: OnceCell<Window> = OnceCell::new();
+    pub static WINDOW: OnceCell<Window> = OnceCell::new();
 }
 
 #[derive(Debug)]
-struct Window {
-    window: gtk::ApplicationWindow,
-    overlay: gtk::Overlay,
+pub struct Window {
+    pub window: gtk::ApplicationWindow,
+    pub overlay: gtk::Overlay,
 }
 
 pub(super) fn init(window: gtk::ApplicationWindow) {
@@ -46,7 +47,7 @@ pub fn set_screen<W>(screen: &W)
     });
 }
 
-fn build_dialog_bg() -> gtk::Widget {
+pub fn build_dialog_bg() -> gtk::Widget {
     gtk::EventBoxBuilder::new()
         .name("dialog_bg")
         .visible(true)
@@ -56,46 +57,29 @@ fn build_dialog_bg() -> gtk::Widget {
         .upcast()
 }
 
-pub fn show_dialog<W: glib::IsA<gtk::Widget>>(widget: W) -> Dialog {
+pub fn show_dialog<F: FnOnce(&Window) -> gtk::Dialog>(f: F) -> gtk::Dialog {
     WINDOW.with(|window| {
         let window = window.get().expect("window not initialized on this thread");
 
         let background = build_dialog_bg();
-
-        let widget = widget.upcast();
-        widget.get_style_context().add_class("dialog");
-
         window.overlay.add_overlay(&background);
-        window.overlay.add_overlay(&widget);
 
-        let dialog = Dialog {
-            overlay: window.overlay.clone(),
-            background,
-            widget,
-        };
+        let dialog = f(window);
 
-        dialog.background.connect_button_release_event({
-            let dialog = dialog.clone();
-            move |_, _| {
-                dialog.close();
-                gtk::Inhibit(false)
-            }
-        });
+        dialog.get_content_area().get_style_context().add_class("dialog");
 
+        dialog.set_decorated(false);
+        dialog.connect_close(
+            (window.overlay.clone(), background).connector()
+                .do_sync(|(overlay, bg), dialog: gtk::Dialog| {
+                    overlay.remove(&bg);
+                    dialog.destroy();
+                })
+                .build_cloned_consumer()
+        );
+
+        dialog.show_all();
         dialog
     })
 }
 
-#[derive(Clone)]
-pub struct Dialog {
-    overlay: gtk::Overlay,
-    background: gtk::Widget,
-    widget: gtk::Widget,
-}
-
-impl Dialog {
-    pub fn close(&self) {
-        self.overlay.remove(&self.background);
-        self.overlay.remove(&self.widget);
-    }
-}

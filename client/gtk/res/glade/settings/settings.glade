@@ -91,6 +91,21 @@
                     </child>
                   </object>
                 </child>
+                <child>
+                  <object class="GtkListBoxRow" id="accessibility">
+                    <property name="name">a11y</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="halign">start</property>
+                        <property name="label" translatable="yes">Accessibility</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
                 <child internal-child="accessible">
                   <object class="AtkObject" id="category_list-atkobject">
                     <property name="AtkObject::accessible-name" translatable="yes">Settings category</property>

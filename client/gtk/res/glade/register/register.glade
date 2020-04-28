@@ -121,6 +121,11 @@
                         </style>
                       </object>
                     </child>
+                    <child internal-child="accessible">
+                      <object class="AtkObject" id="login_button-atkobject">
+                        <property name="AtkObject::accessible-name" translatable="yes">Switch to login</property>
+                      </object>
+                    </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>

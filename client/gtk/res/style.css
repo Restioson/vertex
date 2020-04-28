@@ -1,7 +1,8 @@
 @define-color content_bg_color #343434;
 @define-color sidebar_bg_color #303030;
 @define-color toolbar_bg_color #3D3D3D;
-@define-color lower_bar_bg_color #2D2D2D;
+@define-color dark_widget_bg_color #2D2D2D;
+@define-color menu_bg_color #202020;
 
 @define-color dialog_bg_color #313131;
 
@@ -26,8 +27,43 @@
   all: unset;
 }
 
+.window-frame {
+  box-shadow: 0 0px 0px 0px alpha(black, 0.0);
+}
+
 viewport {
   background: @content_bg_color;
+}
+
+menu {
+  background: @menu_bg_color;
+  min-width: 200px;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  color: #ffffff;
+}
+
+menu separator {
+  background: shade(@menu_bg_color, 0.9);
+}
+
+menu menuitem {
+  margin: 2px;
+  border-radius: 6px;
+}
+
+menu menuitem:disabled label {
+  color: #4e4e4e;
+}
+
+menu menuitem label {
+  padding: 4px;
+}
+
+menu menuitem:hover {
+  background: @widget_bg_color;
 }
 
 entry {
@@ -151,6 +187,36 @@ popover {
   box-shadow: 0 2px 6px 1px rgba(0, 0, 0, 0.35);
 }
 
+switch {
+  transition: all 250ms cubic-bezier(0, 0, 0.2, 1);
+  margin: 0 4px;
+  min-height: 25px;
+  border-radius: 9999px;
+  background-color: @dark_widget_bg_color;
+  font-size: 0;
+}
+
+switch:checked {
+  background-color: @accent_color;
+}
+
+switch slider {
+  transition: all 200ms cubic-bezier(0, 0, 0.2, 1);
+  min-width: 25px;
+  min-height: 25px;
+  margin: 2px;
+  border-radius: 9999px;
+  background-color: shade(@dark_widget_bg_color, 0.7);
+}
+
+switch:checked slider {
+  background-color: shade(@accent_color, 0.6);
+}
+
+/*
+  Dialog
+*/
+
 #dialog_bg {
   background-color: rgba(0, 0, 0, 0.4);
 }
@@ -161,16 +227,32 @@ popover {
   min-height: 100px;
   padding: 20px;
   border-radius: 20px;
-  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0);
 }
 
-.dialog #title {
+.dialog .title {
   font-size: 20px;
 }
 
-#dialog button, #dialog entry {
+.dialog .title, .dialog entry, .dialog button {
   padding: 8px;
   margin: 4px;
+}
+
+.dialog button, .dialog entry {
+  font-size: 16px;
+}
+
+.dialog .invite_code_text {
+  background: @widget_bg_color;
+  padding: 8px;
+  border-radius: 8px;
+  margin: 4px;
+}
+
+.dialog .error_description {
+  color: @error_color;
+  font-size: 16px;
 }
 
 /* specific styling */
@@ -207,10 +289,6 @@ popover {
   background: @widget_bg_color;
 }
 
-#active #sidebar_lower_bar {
-  background: @lower_bar_bg_color;
-}
-
 #active #chat {
   background: @sidebar_bg_color;
   min-height: 26px;
@@ -228,7 +306,8 @@ popover {
 }
 
 #active #chat #lower_bar {
-  background: @lower_bar_bg_color;
+  background: @sidebar_bg_color;
+  padding: 10px 5px;
 }
 
 #active #messages {
@@ -242,17 +321,19 @@ popover {
 
 #active #message_entry {
   background: @message_entry_color;
+  color: shade(@widget_color, 0.7);
   margin: 7px 4px;
   border-radius: 10px;
 }
 
-#active #message_entry.disabled {
-  background: shade(@message_entry_color, 0.95);
+#active #message_entry:focus {
+  background: shade(@message_entry_color, 1.2);
+  color: @widget_color;
 }
 
-#active #message_entry.disabled selection {
-  color: transparent;
-  background: transparent;
+#active #message_entry.disabled {
+  background: shade(@message_entry_color, 0.9);
+  color: shade(@widget_color, 0.5);
 }
 
 #active #message .embed {
@@ -360,11 +441,11 @@ popover {
 
 #active #sidebar #community_header #community_name {
   color: #d0d0d0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
 
-#active #sidebar #community_header #community_description_box {
+#active #sidebar #community_header #community_description {
   color: @subtitle_color;
   font-size: 14px;
   font-style: italic;
@@ -412,11 +493,11 @@ popover {
 }
 
 #active #message_group {
+  font-size: 15px;
   padding: 7px;
 }
 
 #active #message_group #author_name {
-  font-size: 18px;
   font-weight: 600;
   padding-left: 2px;
 }
@@ -429,13 +510,13 @@ popover {
 }
 
 #active #message_group #author_icon {
-  min-width: 45px;
-  min-height: 45px;
+  min-width: 40px;
+  min-height: 40px;
 
   background-image: url('icon.png');
-  background-size: 45px;
+  background-size: 40px;
 
-  border-radius: 25px;
+  border-radius: 20px;
 }
 
 #active #entry_list row {
@@ -487,25 +568,9 @@ popover {
   min-height: 100px;
 }
 
-#create_community button, #create_community entry, #create_room button, #create_room entry {
-  padding: 8px;
-  margin: 4px;
-}
-
 #join_community button, #join_community entry {
   padding: 8px;
   margin: 4px;
-}
-
-#invite_community textview {
-  background: @widget_bg_color;
-  padding: 8px;
-  border-radius: 8px;
-  margin: 4px;
-}
-
-#error_dialog #description {
-  color: @error_color;
 }
 
 /*
@@ -567,11 +632,15 @@ popover {
 
 #settings #category_list row label {
   padding-left: 4px;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 #settings #log_out_button_label {
   color: @error_color;
+}
+
+#settings switch {
+  margin-right: 10px;
 }
 
 #settings .setting_heading {
@@ -623,7 +692,25 @@ popover {
   padding: 4px;
   min-height: 17px;
   min-width: 17px;
-  background-color: @lower_bar_bg_color;
+  background-color: #2D2D2D;
+}
+
+#settings .setting_description {
+  color: #d0d0d0;
+}
+
+#settings label {
+  font-size: 16px;
+}
+
+/* "Close" & "Log out" */
+#settings .leave_button {
+  background: @sidebar_bg_color;
+  margin: 12px;
+}
+
+#settings .leave_button:hover {
+  background: shade(@sidebar_bg_color, 1.1);
 }
 
 /* "Close" & "Log out" */
@@ -640,6 +727,10 @@ popover {
   font-weight: 600;
   font-size: 18px;
   padding: 8px;
+}
+
+#settings #a11y {
+  padding: 20px;
 }
 
 /*
@@ -674,31 +765,4 @@ popover {
   min-height: 20px;
   padding: 8px;
   margin: 4px;
-}
-
-/*
-  generic error screen
-*/
-
-#error_dialog #title {
-  font-size: 20px;
-  font-weight: 500;
-}
-
-#error_dialog #error_label {
-  font-size: 16px;
-  color: @error_color;
-  padding-bottom: 20px;
-}
-
-#error_dialog #ok_button {
-  min-height: 20px;
-  padding: 8px;
-  margin: 4px;
-}
-
-#error_dialog #flavour_text {
-  font-size: 14px;
-  font-style: italic;
-  color: @subtitle_color;
 }

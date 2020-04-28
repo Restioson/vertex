@@ -45,9 +45,9 @@ pub async fn build() -> Screen {
 }
 
 async fn bind_events(screen: &Screen) {
-    screen.login_button.connect_button_release_event(
+    screen.login_button.connect_clicked(
         screen.connector()
-            .do_async(|screen, (_button, _event)| async move {
+            .do_async(|screen, _| async move {
                 let instance_ip = screen.instance_entry.try_get_text().unwrap_or_default();
 
                 let username = screen.username_entry.try_get_text().unwrap_or_default();
@@ -68,16 +68,16 @@ async fn bind_events(screen: &Screen) {
 
                 screen.status_stack.set_visible_child(&screen.error_label);
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 
-    screen.register_button.connect_button_release_event(
+    screen.register_button.connect_clicked(
         screen.connector()
-            .do_async(|_screen, (_button, _event)| async move {
+            .do_async(|_screen, _| async move {
                 let screen = screen::register::build().await;
                 window::set_screen(&screen.main);
             })
-            .build_widget_event()
+            .build_cloned_consumer()
     );
 }
 

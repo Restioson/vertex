@@ -1,10 +1,9 @@
-use gtk::prelude::*;
-
-use lazy_static::lazy_static;
-
 mod administration;
 
-use crate::{Client, token_store, window, SharedMut};
+use gtk::prelude::*;
+use lazy_static::lazy_static;
+use crate::{Client, SharedMut, token_store, window};
+use crate::config;
 use crate::connect::AsConnector;
 use crate::Glade;
 use crate::screen;
@@ -93,6 +92,7 @@ fn bind_events(screen: &Screen) {
 
                     let widget = match name.as_str() {
                         "admin" => Some(build_administration(screen.client)),
+                        "a11y" => Some(build_accessibility()),
                         _ => None,
                     };
 
@@ -108,4 +108,25 @@ fn bind_events(screen: &Screen) {
             })
             .build_widget_and_option_consumer()
     );
+}
+
+fn build_accessibility() -> gtk::Widget {
+    lazy_static! {
+        static ref GLADE: Glade = Glade::open("settings/a11y.glade").unwrap();
+    }
+
+    let builder: gtk::Builder = GLADE.builder();
+    let viewport: gtk::Box = builder.get_object("main").unwrap();
+
+    let narrate_new: gtk::Switch = builder.get_object("narrate_new").unwrap();
+
+    let config = config::get();
+    narrate_new.set_state(config.narrate_new_messages);
+
+    narrate_new.connect_state_set(|_switch, state| {
+        config::modify(|config| config.narrate_new_messages = state);
+        gtk::Inhibit(false)
+    });
+
+    viewport.upcast()
 }

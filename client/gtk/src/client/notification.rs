@@ -32,8 +32,14 @@ impl Notifier {
         community_name: &str,
         room_name: &str,
         content: Option<&str>,
+        a11y_narration: bool, // Whether the notification is just for a11y to narrate new msgs
     ) {
-        let title = format!("{} in {}", room_name, community_name);
+        let title = if a11y_narration {
+            "Vertex".to_string()
+        } else {
+            format!("{} in {}", room_name, community_name)
+        };
+
         let content = if let Some(content) = content {
             format!("{}: {}", author.display_name, content)
         } else {
@@ -45,30 +51,30 @@ impl Notifier {
         icon_path.push("icon.png");
 
         #[cfg(windows)]
-            tokio::task::spawn_blocking(move || {
-                // TODO: AppId when we have installer
-                let _ = winrt_notification::Toast::new(winrt_notification::Toast::POWERSHELL_APP_ID)
-                    .icon(icon_path.as_path(), winrt_notification::IconCrop::Circular, "Vertex")
-                    .title(&title)
-                    .text1(&content)
-                    .sound(None)
-                    .duration(winrt_notification::Duration::Short)
-                    .show();
-            });
+        tokio::task::spawn_blocking(move || {
+            // TODO: AppId when we have installer
+            let _ = winrt_notification::Toast::new(winrt_notification::Toast::POWERSHELL_APP_ID)
+                .icon(icon_path.as_path(), winrt_notification::IconCrop::Circular, "Vertex")
+                .title(&title)
+                .text1(&content)
+                .sound(None)
+                .duration(winrt_notification::Duration::Short)
+                .show();
+        });
 
         #[cfg(unix)]
-            tokio::task::spawn_blocking(move || {
-                let res = notify_rust::Notification::new()
-                    .summary(&title)
-                    .appname("Vertex")
-                    .icon(&icon_path.to_str().unwrap())
-                    .body(&content)
-                    .show();
+        tokio::task::spawn_blocking(move || {
+            let res = notify_rust::Notification::new()
+                .summary(&title)
+                .appname("Vertex")
+                .icon(&icon_path.to_str().unwrap())
+                .body(&content)
+                .show();
 
-                if let Ok(handle) = res {
-                    handle.on_close(|| {});
-                }
-            });
+            if let Ok(handle) = res {
+                handle.on_close(|| {});
+            }
+        });
 
         if let Some(sound) = &self.sound {
             if let Ok(mut sound) = sound.try_borrow_mut() {
