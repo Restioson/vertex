@@ -191,7 +191,9 @@ fn setup_gtk_style() {
 fn main() {
     let runtime = tokio::runtime::Builder::new()
         .core_threads(2)
+        .max_threads(4)
         .enable_all()
+        .threaded_scheduler()
         .build()
         .unwrap();
 

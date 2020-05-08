@@ -21,7 +21,7 @@ deploy = []
 
 [profile.dev]
 opt-level = 1
-debug = false
+debug = true
 lto = false
 incremental = true
 
