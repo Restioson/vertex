@@ -188,8 +188,13 @@ fn setup_gtk_style() {
     gtk::StyleContext::add_provider_for_screen(&screen, &css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
 }
 
-#[tokio::main(core_threads = 2)]
-async fn main() {
+fn main() {
+    let runtime = tokio::runtime::Builder::new()
+        .core_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+
     let application = gtk::Application::new(None, Default::default())
         .expect("failed to create application");
 
@@ -221,7 +226,9 @@ async fn main() {
         });
     });
 
-    application.run(&[]);
+    runtime.enter(|| {
+        application.run(&[]);
+    });
 }
 
 type StdError = Box<dyn std::error::Error>;
