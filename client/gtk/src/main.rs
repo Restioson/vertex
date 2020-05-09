@@ -1,4 +1,4 @@
-#![feature(type_alias_impl_trait, linked_list_cursors, type_ascription)]
+#![feature(type_alias_impl_trait, linked_list_cursors, type_ascription, move_ref_pattern)]
 #![windows_subsystem = "windows"]
 
 use std::fs::File;
@@ -19,8 +19,10 @@ use vertex::proto::DeserializeError;
 
 pub use crate::client::Client;
 pub use crate::config::Config;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+static RUNNING: AtomicBool = AtomicBool::new(false);
 
 pub mod auth;
 pub mod client;
@@ -189,25 +191,50 @@ fn setup_gtk_style() {
 }
 
 fn main() {
-    let runtime = tokio::runtime::Builder::new()
-        .core_threads(2)
-        .max_threads(4)
-        .enable_all()
-        .threaded_scheduler()
-        .build()
-        .unwrap();
-
-    let application = gtk::Application::new(None, Default::default())
+    let application = gtk::Application::new(
+            Some("cf.vertex.gtk"),
+            gio::ApplicationFlags::HANDLES_OPEN,
+        )
         .expect("failed to create application");
-    let conf = config::get();
 
-    // use native windows decoration
-    #[cfg(windows)]
-    std::env::set_var("GTK_CSD", "0");
 
-    setup_gtk_style();
+    application.connect_open(|_app, files, _hint| {
+        for file in files {
+            let tx = &*client::INVITE_SENDER.lock().unwrap();
+            if let (Ok(url), Some(tx)) = (Url::parse(file.get_uri().as_str()), tx) {
+                if url.scheme() == "vertex" && !url.cannot_be_a_base() {
+                    let _ = tx.unbounded_send(url);
+                }
+            }
+        }
+    });
 
     application.connect_activate(move |application| {
+        if RUNNING.load(Ordering::SeqCst) {
+            return;
+        }
+        RUNNING.store(true, Ordering::SeqCst);
+
+        let conf = config::get();
+        if !conf.uri_installed {
+            let exec = String::from(std::env::current_exe().unwrap().to_str().unwrap());
+            let app = system_uri::App::new(
+                "cf.vertex.gtk".to_string(),
+                "Vertex Developers".to_string(),
+                "Vertex Client".to_string(),
+                exec,
+                None,
+            );
+            if let Err(e) = system_uri::install(&app, &["vertex".to_string()]) {
+                eprintln!("Error installing uri handler for \"vertex://\": {:?}", e);
+            }
+        }
+
+        // use native windows decoration
+        #[cfg(windows)] std::env::set_var("GTK_CSD", "0");
+
+        setup_gtk_style();
+
         let mut window = gtk::ApplicationWindowBuilder::new()
             .application(application)
             .title(&format!("Vertex {}", crate::VERSION))
@@ -236,8 +263,16 @@ fn main() {
         });
     });
 
+    let runtime = tokio::runtime::Builder::new()
+        .core_threads(2)
+        .max_threads(4)
+        .enable_all()
+        .threaded_scheduler()
+        .build()
+        .unwrap();
+
     runtime.enter(|| {
-        application.run(&[]);
+        application.run(&std::env::args().collect::<Vec<String>>());
     });
 }
 

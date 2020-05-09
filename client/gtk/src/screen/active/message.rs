@@ -188,8 +188,9 @@ fn build_invite_embed(client: &Client<Ui>, embed: InviteEmbed) -> gtk::Widget {
             .do_async(move |client, _| {
                 let code = embed.code.clone();
                 async move {
-                    // TODO: report error
-                    let _ = client.join_community(code).await;
+                    if let Err(err) = client.join_community(code).await {
+                        show_generic_error(&err);
+                    }
                 }
             })
             .build_cloned_consumer()

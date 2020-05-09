@@ -36,12 +36,7 @@ fn append_text_column(header: &str, tree: &gtk::TreeView, id: i32) {
     tree.append_column(&column);
 }
 
-fn append_checkbutton_column(
-    header: &str,
-    list: &gtk::ListStore,
-    tree: &gtk::TreeView,
-    id: i32,
-) {
+fn append_checkbutton_column(header: &str, list: &gtk::ListStore, tree: &gtk::TreeView, id: i32) {
     let column = gtk::TreeViewColumn::new();
     let cell = gtk::CellRendererToggle::new();
     cell.set_activatable(true);

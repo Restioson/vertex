@@ -1,7 +1,9 @@
 use std::rc::Rc;
+use std::sync::Mutex;
 
-use futures::{Stream, StreamExt};
+use futures::{FutureExt, Stream, StreamExt};
 use futures::future::{Abortable, AbortHandle};
+use futures::channel::mpsc::{self, UnboundedSender};
 
 pub use chat::*;
 pub use community::*;
@@ -14,6 +16,8 @@ use vertex::prelude::*;
 
 use crate::{config, net, scheduler, screen, SharedMut, WeakSharedMut, window};
 use crate::{Error, Result};
+use url::Url;
+use crate::screen::active::dialog::show_generic_error;
 
 mod community;
 mod room;
@@ -24,6 +28,12 @@ mod chat;
 mod notification;
 
 pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
+
+lazy_static::lazy_static! {
+    /// Channel through which messages to the invite-listener are sent, to allow for following invite
+    /// links from other apps through the `vertex://` protocol
+    pub static ref INVITE_SENDER: Mutex<Option<UnboundedSender<Url>>> = Mutex::new(None);
+}
 
 // TODO: This is approaching an MVC-like design. We should fully embrace this in terms of naming
 //        to make code more easily understandable in that it's a commonly understood pattern.
@@ -90,7 +100,7 @@ pub struct Client<Ui: ClientUi> {
 }
 
 impl<Ui: ClientUi> Client<Ui> {
-    pub async fn start(ws: net::AuthenticatedWs, ui: Ui) -> Result<Client<Ui>> {
+    pub async fn start(ws: net::AuthenticatedWs, ui: Ui, https: bool) -> Result<Client<Ui>> {
         let (sender, receiver) = net::from_ws(ws.stream);
 
         let req_manager = net::RequestManager::new();
@@ -143,6 +153,7 @@ impl<Ui: ClientUi> Client<Ui> {
 
         scheduler::spawn(ClientLoop {
             client: client.clone(),
+            https,
             event_receiver,
             abort_signal,
             _state: state,
@@ -458,6 +469,7 @@ impl<Ui: ClientUi> Client<Ui> {
 
 struct ClientLoop<Ui: ClientUi, S> {
     client: Client<Ui>,
+    https: bool,
     event_receiver: S,
     abort_signal: Abortable<futures::future::Pending<()>>,
     _state: SharedMut<ClientState<Ui>>,
@@ -467,33 +479,68 @@ impl<Ui: ClientUi, S> ClientLoop<Ui, S>
     where S: Stream<Item=tungstenite::Result<ServerEvent>> + Unpin
 {
     async fn run(self) {
-        let client = self.client;
+        let client = &self.client;
+        let https = self.https;
         let event_receiver = self.event_receiver;
 
         let request = client.request.clone();
 
-        let receiver = Box::pin(async move {
-            let mut event_receiver = event_receiver;
-            while let Some(result) = event_receiver.next().await {
-                let client = client.clone();
-                scheduler::spawn(async move {
-                    match result {
-                        Ok(event) => client.handle_event(event).await,
-                        Err(err) => client.handle_network_err(err).await,
+        let mut receiver = Box::pin(
+            async move {
+                let mut event_receiver = event_receiver;
+                while let Some(result) = event_receiver.next().await {
+                    let client = client.clone();
+                    scheduler::spawn(async move {
+                        match result {
+                            Ok(event) => client.handle_event(event).await,
+                            Err(err) => client.handle_network_err(err).await,
+                        }
+                    });
+                }
+            }.fuse()
+        );
+
+        let mut keep_alive = Box::pin(
+            async move {
+                let mut ticker = tokio::time::interval(HEARTBEAT_INTERVAL);
+                loop {
+                    request.net().ping().await;
+                    ticker.tick().await;
+                }
+            }.fuse()
+        );
+
+        let (invite_tx, mut invite_rx) = mpsc::unbounded();
+        *INVITE_SENDER.lock().unwrap() = Some(invite_tx);
+
+        let mut invite_listener = Box::pin(
+            async move {
+                while let Some(url) = invite_rx.next().await {
+                    // Workaround for local dev with http - users should never use http anyway...
+                    let scheme = if https {
+                        "https"
+                    } else {
+                        "http"
+                    };
+                    // https://github.com/servo/rust-url/issues/577#issuecomment-572756577
+                    let url = [scheme, &url[url::Position::AfterScheme..]].join("");
+                    let meta = get_link_metadata(&url).await.map(|m| m.invite);
+                    if let Ok(Some(inv)) = meta {
+                        if let Err(err) = client.clone().join_community(inv.code).await {
+                            show_generic_error(&err);
+                        }
+                    } else if let Err(e) = meta {
+                        println!("{:?}", e);
                     }
-                });
-            }
-        });
+                }
+            }.fuse()
+        );
 
-        let keep_alive = Box::pin(async move {
-            let mut ticker = tokio::time::interval(HEARTBEAT_INTERVAL);
-            loop {
-                request.net().ping().await;
-                ticker.tick().await;
-            }
-        });
-
-        let run = futures::future::select(receiver, keep_alive);
-        futures::future::select(self.abort_signal, run).await;
+        futures::select! {
+            _ = keep_alive => {},
+            _ = invite_listener => {},
+            _ = receiver => {},
+            _ = self.abort_signal.fuse() => {}
+        }
     }
 }

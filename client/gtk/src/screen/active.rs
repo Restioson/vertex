@@ -368,7 +368,7 @@ async fn try_start(parameters: AuthParameters) -> Result<Client<Ui>> {
     let auth = auth::Client::new(parameters.instance);
     let ws = auth.login(parameters.device, parameters.token).await?;
 
-    Ok(Client::start(ws, Ui::build()).await?)
+    Ok(Client::start(ws, Ui::build(), auth.server.url().scheme() == "https").await?)
 }
 
 fn describe_error(error: Error) -> String {

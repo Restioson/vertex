@@ -214,7 +214,6 @@ switch:checked slider {
 }
 
 checkbutton, #settings .search_list check {
-  margin: 2px;
   padding: 4px;
   min-height: 17px;
   min-width: 17px;

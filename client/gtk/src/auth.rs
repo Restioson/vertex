@@ -19,7 +19,7 @@ pub type AuthenticatedWsStream = WebSocketStream<hyper::upgrade::Upgraded>;
 type Connector = hyper_tls::HttpsConnector<hyper::client::HttpConnector>;
 
 pub struct Client {
-    server: Server,
+    pub server: Server,
     client: hyper::Client<Connector>,
 }
 

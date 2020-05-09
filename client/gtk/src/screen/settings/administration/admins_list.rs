@@ -45,6 +45,7 @@ impl AdminsList {
             .into_iter()
             .chain(Some(String::static_type()).into_iter())
             .chain(iter::repeat(bool::static_type()).take(4))
+            .chain(Some(String::static_type()).into_iter()) // Dummy
             .collect();
         gtk::ListStore::new(&types)
     }
@@ -63,6 +64,9 @@ impl AdminsList {
         for (i, header) in headers.iter().enumerate() {
             super::append_checkbutton_column(header, &self.list, &self.view, i as i32 + 2);
         }
+
+        // Dummy for alignment of checkbutton
+        super::append_text_column("", &self.view, 6);
 
         self.view.set_model(Some(&self.list));
     }
