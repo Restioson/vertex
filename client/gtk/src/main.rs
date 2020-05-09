@@ -199,6 +199,7 @@ fn main() {
 
     let application = gtk::Application::new(None, Default::default())
         .expect("failed to create application");
+    let conf = config::get();
 
     // use native windows decoration
     #[cfg(windows)]
@@ -210,15 +211,22 @@ fn main() {
         let mut window = gtk::ApplicationWindowBuilder::new()
             .application(application)
             .title(&format!("Vertex {}", crate::VERSION))
-            .default_width(1280)
-            .default_height(720)
+            .default_width(conf.resolution.0 as i32)
+            .default_height(conf.resolution.1 as i32)
             .decorated(true);
 
         if let Ok(icon) = gdk_pixbuf::Pixbuf::new_from_file(resource("icon.svg")) {
             window = window.icon(&icon);
         }
 
-        window::init(window.build());
+        let window = window.build();
+        if conf.maximized {
+            window.maximize();
+        }
+        if conf.full_screen {
+            window.fullscreen();
+        }
+        window::init(window);
 
         scheduler::spawn(async move {
             let screen = screen::loading::build();

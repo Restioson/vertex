@@ -7,12 +7,18 @@ use once_cell::sync::Lazy;
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
     pub narrate_new_messages: bool,
+    pub resolution: (i32, i32),
+    pub maximized: bool,
+    pub full_screen: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
             narrate_new_messages: false,
+            resolution: (1280, 720),
+            maximized: false,
+            full_screen: false,
         }
     }
 }
