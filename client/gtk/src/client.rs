@@ -386,6 +386,16 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
+    pub async fn list_all_admins(&self) -> Result<Vec<Admin>> {
+        let req = ClientRequest::AdminAction(AdminRequest::ListAllAdmins);
+        let req = self.request.send(req).await;
+
+        match req.response().await? {
+            OkResponse::Admin(AdminResponse::Admins(admins)) => Ok(admins),
+            _ => Err(Error::UnexpectedMessage)
+        }
+    }
+
     async fn do_to_many(
         &self,
         users: Vec<UserId>,

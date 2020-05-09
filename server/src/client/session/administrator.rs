@@ -38,6 +38,7 @@ impl ActiveSession {
             AdminRequest::Demote(user) => self.demote(user).await,
             AdminRequest::SearchUser { name } => self.search_user(name).await,
             AdminRequest::ListAllUsers => self.list_all_users().await,
+            AdminRequest::ListAllAdmins => self.list_all_admins().await,
             _ => Err(Error::Unimplemented),
         }
     }
@@ -165,6 +166,16 @@ impl ActiveSession {
         let stream = self.global.database.list_all_server_users().await?;
         let users: Vec<ServerUser> = stream.map_ok(Into::into).try_collect().await?;
         Ok(OkResponse::Admin(AdminResponse::SearchedUsers(users)))
+    }
+
+    async fn list_all_admins(&mut self) -> Result<OkResponse, Error> {
+        if self.admin_perms()?.is_empty() {
+            return Err(Error::AccessDenied);
+        }
+
+        let stream = self.global.database.list_all_admins().await?;
+        let admins: Vec<Admin> = stream.try_collect().await?;
+        Ok(OkResponse::Admin(AdminResponse::Admins(admins)))
     }
 }
 

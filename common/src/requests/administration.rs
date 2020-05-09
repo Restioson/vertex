@@ -34,6 +34,7 @@ pub enum AdminRequest {
         name: String,
     },
     ListAllUsers,
+    ListAllAdmins,
 }
 
 impl From<AdminRequest> for proto::requests::administration::AdminRequest {
@@ -61,6 +62,7 @@ impl From<AdminRequest> for proto::requests::administration::AdminRequest {
             }),
             SearchUser { name } => Request::SearchUser(request::SearchUser { name }),
             ListAllUsers => Request::ListAllUsers(proto::types::None {}),
+            ListAllAdmins => Request::ListAllAdmins(proto::types::None {}),
         };
 
         proto::requests::administration::AdminRequest {
@@ -88,6 +90,7 @@ impl TryFrom<proto::requests::administration::AdminRequest> for AdminRequest {
             UnlockUser(unlock) => AdminRequest::Unlock(unlock.user?.try_into()?),
             SearchUser(search) => AdminRequest::SearchUser { name: search.name },
             ListAllUsers(_) => AdminRequest::ListAllUsers,
+            ListAllAdmins(_) => AdminRequest::ListAllAdmins,
         };
 
         Ok(req)
@@ -98,6 +101,7 @@ impl TryFrom<proto::requests::administration::AdminRequest> for AdminRequest {
 #[non_exhaustive]
 pub enum AdminResponse {
     SearchedUsers(Vec<ServerUser>),
+    Admins(Vec<Admin>),
 }
 
 impl From<AdminResponse> for proto::requests::administration::AdminResponse {
@@ -110,6 +114,10 @@ impl From<AdminResponse> for proto::requests::administration::AdminResponse {
             SearchedUsers(users) => {
                 let users = users.into_iter().map(Into::into).collect();
                 Response::SearchedUsers(request::SearchedUsers { users })
+            }
+            Admins(users) => {
+                let admins = users.into_iter().map(Into::into).collect();
+                Response::Admins(request::Admins { admins })
             }
         };
 
@@ -132,6 +140,11 @@ impl TryFrom<proto::requests::administration::AdminResponse> for AdminResponse {
                 let res: Result<_, _> = results.users.into_iter().map(TryInto::try_into).collect();
                 let users: Vec<ServerUser> = res?;
                 AdminResponse::SearchedUsers(users)
+            }
+            Admins(results) => {
+                let res: Result<_, _> = results.admins.into_iter().map(TryInto::try_into).collect();
+                let admins: Vec<Admin> = res?;
+                AdminResponse::Admins(admins)
             }
         };
 
@@ -178,6 +191,37 @@ impl TryFrom<proto::requests::administration::ServerUser> for ServerUser {
             compromised: user.compromised,
             latest_hash_scheme: user.latest_hash_scheme,
             id: user.id?.try_into()?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Admin {
+    pub username: String,
+    pub id: UserId,
+    pub permissions: AdminPermissionFlags,
+}
+
+impl From<Admin> for proto::requests::administration::Admin {
+    fn from(admin: Admin) -> Self {
+        proto::requests::administration::Admin {
+            username: admin.username,
+            id: Some(admin.id.into()),
+            permissions_flags: admin.permissions.bits(),
+        }
+    }
+}
+
+impl TryFrom<proto::requests::administration::Admin> for Admin {
+    type Error = DeserializeError;
+
+    fn try_from(
+        admin: proto::requests::administration::Admin
+    ) -> Result<Self, DeserializeError> {
+        Ok(Admin {
+            username: admin.username,
+            id: admin.id?.try_into()?,
+            permissions: AdminPermissionFlags::from_bits_truncate(admin.permissions_flags),
         })
     }
 }

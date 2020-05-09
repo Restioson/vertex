@@ -80,19 +80,28 @@ impl Database {
         }
     }
 
-    pub async fn list_all_administrators(
+    pub async fn list_all_admins(
         &self,
-    ) -> DbResult<impl Stream<Item = DbResult<(UserId, AdminPermissionFlags)>>> {
-        const QUERY: &str = "SELECT * FROM administrators";
+    ) -> DbResult<impl Stream<Item = DbResult<Admin>>> {
+        const QUERY: &str = "
+            SELECT user_id, username, permission_flags
+            FROM administrators
+            INNER JOIN users ON administrators.user_id = users.user_id";
 
         let stream = self.query_stream(QUERY, &[]).await?;
         let stream = stream
             .and_then(|row| async move {
-                let user = UserId(row.try_get("user_id")?);
-                let flags = AdminPermissionFlags::from_bits_truncate(
+                let id = UserId(row.try_get("user_id")?);
+                let username = row.try_get("username")?;
+                let permissions = AdminPermissionFlags::from_bits_truncate(
                     row.try_get("permission_flags")?
                 );
-                Ok((user, flags))
+
+                Ok(Admin {
+                    username,
+                    id,
+                    permissions,
+                })
             })
             .map_err(|e| e.into());
 

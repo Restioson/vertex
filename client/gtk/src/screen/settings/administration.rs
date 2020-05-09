@@ -48,16 +48,16 @@ fn append_checkbutton_column(
 
     cell.connect_toggled(
         list.connector()
-            .do_sync(|store, (_cell, path): (gtk::CellRendererToggle, gtk::TreePath)| {
+            .do_sync(move |store, (_cell, path): (gtk::CellRendererToggle, gtk::TreePath)| {
                 let row = store.get_iter(&path).unwrap();
-                let toggled = store.get_value(&row, 0).get::<bool>().unwrap().unwrap();
-                store.set_value(&row, 0, &(!toggled).to_value())
+                let toggled = store.get_value(&row, id).get::<bool>().unwrap().unwrap();
+                store.set_value(&row, id as u32, &(!toggled).to_value())
             })
             .build_widget_and_owned_listener()
     );
 
     column.pack_start(&cell, true);
-    column.add_attribute(&cell, "active", 0);
+    column.add_attribute(&cell, "active", id);
     column.set_title(header);
     tree.append_column(&column);
 }

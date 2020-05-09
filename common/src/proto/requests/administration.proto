@@ -12,12 +12,14 @@ message AdminRequest {
         types.None list_all_users = 5;
         Unban unban_user = 6;
         Unlock unlock_user = 7;
+        types.None list_all_admins = 8;
     }
 }
 
 message AdminResponse {
     oneof response {
         SearchedUsers searched_users = 1;
+        Admins admins = 2;
     }
 }
 
@@ -58,4 +60,14 @@ message ServerUser {
     bool compromised = 5;
     bool latest_hash_scheme = 6;
     types.UserId id = 7;
+}
+
+message Admins {
+    repeated Admin admins = 1;
+}
+
+message Admin {
+    string username = 1;
+    types.UserId id = 2;
+    int64 permissions_flags = 3;
 }
