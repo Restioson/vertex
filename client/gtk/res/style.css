@@ -296,6 +296,10 @@ checkbutton {
   background: @sidebar_bg_color;
 }
 
+#communities #menu_button {
+  margin: 10px;
+}
+
 #active #add_community_button {
   background: transparent;
   border-style: solid;
