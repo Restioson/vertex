@@ -389,7 +389,7 @@ impl<Ui: ClientUi> Client<Ui> {
     async fn do_to_many(
         &self,
         users: Vec<UserId>,
-        req: fn(UserId) -> ClientRequest,
+        req: impl Fn(UserId) -> ClientRequest,
     ) -> Result<Vec<(UserId, Error)>> {
         let mut results = Vec::new();
         for user in users {
@@ -431,6 +431,17 @@ impl<Ui: ClientUi> Client<Ui> {
         self.do_to_many(
             users,
             |user| ClientRequest::AdminAction(AdminRequest::Demote(user))
+        ).await
+    }
+
+    pub async fn promote_users(
+        &self,
+        users: Vec<UserId>,
+        permissions: AdminPermissionFlags
+    ) -> Result<Vec<(UserId, Error)>> {
+        self.do_to_many(
+            users,
+            |user| ClientRequest::AdminAction(AdminRequest::Promote { user, permissions })
         ).await
     }
 }

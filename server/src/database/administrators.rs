@@ -1,8 +1,9 @@
-use crate::database::{Database, DbResult, InvalidUser};
+use crate::database::{Database, DbResult};
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
 use tokio_postgres::types::ToSql;
 use vertex::prelude::*;
+use futures::{Stream, TryStreamExt};
 
 pub(super) const CREATE_ADMINISTRATORS_TABLE: &str = r"
     CREATE TABLE IF NOT EXISTS administrators (
@@ -13,35 +14,35 @@ pub(super) const CREATE_ADMINISTRATORS_TABLE: &str = r"
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CreateAdminError {
     InvalidUser,
-    AlreadyAdmin, // In theory this shouldn't fire
 }
 
 impl Database {
-    pub async fn promote_to_admin(
+    pub async fn set_admin_permissions(
         &self,
         user: UserId,
         permissions: AdminPermissionFlags,
     ) -> DbResult<Result<(), CreateAdminError>> {
-        const STMT: &str = "
+        const UPDATE: &str = "
             INSERT INTO administrators (user_id, permission_flags) VALUES ($1, $2)
                 ON CONFLICT(user_id) DO UPDATE SET permission_flags = $2
         ";
+        const DELETE: &str = "DELETE FROM administrators WHERE user_id = $1";
 
         let conn = self.pool.connection().await?;
-        let args: &[&(dyn ToSql + Sync)] = &[&user.0, &permissions.bits()];
-        let res = conn.client.execute(STMT, args).await;
+        let res = if permissions == AdminPermissionFlags::from_bits_truncate(0) {
+            let args: &[&(dyn ToSql + Sync)] = &[&user.0, &permissions.bits()];
+            conn.client.execute(UPDATE, args).await
+        } else {
+            conn.client.execute(DELETE, &[&user.0]).await
+        };
 
         match res {
             Ok(1) => {
                 // 1 row modified = successfully added
                 Ok(Ok(()))
             }
-            Ok(0) => {
-                // 0 rows modified = failed to add
-                Ok(Err(CreateAdminError::AlreadyAdmin))
-            }
             Ok(_n) => {
-                panic!("db error: create admin query returned more than one row modified!");
+                panic!("db error: create admin query returned != 1 row modified!");
             }
             Err(err) => {
                 if err.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {
@@ -51,7 +52,10 @@ impl Database {
                         .and_then(|e| e.constraint());
 
                     match constraint {
-                        Some("administrators_user_fkey") => Ok(Err(CreateAdminError::InvalidUser)),
+                        Some("administrators_user_fkey") => {
+                            dbg!("haha no");
+                            Ok(Err(CreateAdminError::InvalidUser))
+                        },
                         Some(_) | None => Err(err.into()),
                     }
                 } else {
@@ -76,22 +80,22 @@ impl Database {
         }
     }
 
-    pub async fn set_admin_permissions(
+    pub async fn list_all_administrators(
         &self,
-        user: UserId,
-        permissions: AdminPermissionFlags,
-    ) -> DbResult<Result<(), InvalidUser>> {
-        const STMT: &str = "UPDATE administrators SET permission_flags = $1 WHERE user_id = $2";
+    ) -> DbResult<impl Stream<Item = DbResult<(UserId, AdminPermissionFlags)>>> {
+        const QUERY: &str = "SELECT * FROM administrators";
 
-        let conn = self.pool.connection().await?;
-        let args: &[&(dyn ToSql + Sync)] = &[&permissions.bits(), &user.0];
-        let ret = conn.client.execute(STMT, args).await?;
+        let stream = self.query_stream(QUERY, &[]).await?;
+        let stream = stream
+            .and_then(|row| async move {
+                let user = UserId(row.try_get("user_id")?);
+                let flags = AdminPermissionFlags::from_bits_truncate(
+                    row.try_get("permission_flags")?
+                );
+                Ok((user, flags))
+            })
+            .map_err(|e| e.into());
 
-        if ret == 1 {
-            // 1 row modified = user was admin
-            Ok(Ok(()))
-        } else {
-            Ok(Err(InvalidUser))
-        }
+        Ok(stream)
     }
 }

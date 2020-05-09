@@ -193,7 +193,7 @@ async fn main() {
             .id;
 
         database
-            .promote_to_admin(id, AdminPermissionFlags::ALL)
+            .set_admin_permissions(id, AdminPermissionFlags::ALL)
             .await
             .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e))
             .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e));

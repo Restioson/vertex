@@ -115,13 +115,13 @@ impl ActiveSession {
             .await?
             .map_err(|_| Error::InvalidUser)?;
 
-        notify_of_admin_perm_change(user, perms)?;
+        notify_of_admin_perm_change(user, perms);
 
         Ok(OkResponse::NoData)
     }
 
     async fn demote(&mut self, user: UserId) -> Result<OkResponse, Error> {
-        if !self.has_admin_perms(AdminPermissionFlags::DEMOTE)? {
+        if !self.has_admin_perms(AdminPermissionFlags::PROMOTE)? {
             return Err(Error::AccessDenied);
         }
 
@@ -142,7 +142,7 @@ impl ActiveSession {
             .await?
             .map_err(|_| Error::InvalidUser)?;
 
-        notify_of_admin_perm_change(user, no_perms)?;
+        notify_of_admin_perm_change(user, no_perms);
 
         Ok(OkResponse::NoData)
     }
@@ -168,8 +168,12 @@ impl ActiveSession {
     }
 }
 
-fn notify_of_admin_perm_change(user: UserId, new: AdminPermissionFlags) -> Result<(), Error> {
-    let mut active = manager::get_active_user_mut(user).map_err(|_| Error::InvalidUser)?;
+fn notify_of_admin_perm_change(user: UserId, new: AdminPermissionFlags) {
+    let mut active = match manager::get_active_user_mut(user) {
+        Ok(user) => user,
+        Err(_) => return, // Not logged in
+    };
+
     active.admin_perms = new;
 
     active
@@ -181,6 +185,4 @@ fn notify_of_admin_perm_change(user: UserId, new: AdminPermissionFlags) -> Resul
                 .do_send(AdminPermissionsChanged(new))
                 .map_err(handle_disconnected("ClientSession")); // Don't care
         });
-
-    Ok(())
 }

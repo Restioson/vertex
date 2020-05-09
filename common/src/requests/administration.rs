@@ -10,14 +10,12 @@ bitflags! {
         const ALL = 1;
         /// Ban and unban users.
         const BAN = 1 << 1;
-        /// Demote users.
-        const DEMOTE = 1 << 2;
-        /// Promote users.
-        const PROMOTE = 1 << 3;
+        /// Promote or demote users.
+        const PROMOTE = 1 << 2;
         /// Is an admin at all. Allows for searching users and viewing reports. Any other permission
         /// automatically grants this one - it is just used as a placeholder in case of not granting
         /// any other admin permissions.
-        const IS_ADMIN = 1 << 4;
+        const IS_ADMIN = 1 << 3;
     }
 }
 

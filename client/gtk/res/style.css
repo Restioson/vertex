@@ -213,6 +213,27 @@ switch:checked slider {
   background-color: shade(@accent_color, 0.6);
 }
 
+checkbutton, #settings .search_list check {
+  margin: 2px;
+  padding: 4px;
+  min-height: 17px;
+  min-width: 17px;
+}
+
+#settings .search_list check, checkbutton check {
+  background-color: #2D2D2D;
+}
+
+checkbutton check {
+  margin-right: 15px;
+  min-width: 20px;
+  min-height: 20px;
+}
+
+checkbutton {
+  font-size: 16px;
+}
+
 /*
   Dialog
 */
@@ -653,7 +674,7 @@ switch:checked slider {
   font-size: 16px;
 }
 
-#settings .search_list_scroll {
+#settings .list_scroll {
   min-height: 300px;
   padding: 10px;
 }
@@ -685,14 +706,6 @@ switch:checked slider {
 
 #settings .search_list:active {
   color: @error_color;
-}
-
-#settings .search_list check {
-  margin: 2px;
-  padding: 4px;
-  min-height: 17px;
-  min-width: 17px;
-  background-color: #2D2D2D;
 }
 
 #settings .setting_description {

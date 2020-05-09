@@ -292,7 +292,7 @@ impl client::ClientUi for Ui {
 
         self.message_entry.set_editable(true);
         self.message_entry.get_style_context().remove_class("disabled");
-        self.message_entry.get_buffer().unwrap().set_text("Send a message...");
+        self.message_entry.get_buffer().unwrap().set_text("");
 
         self.room_name.set_text(&room.name);
 
