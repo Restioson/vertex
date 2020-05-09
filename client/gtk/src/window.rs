@@ -1,6 +1,7 @@
 use gtk::prelude::*;
 use once_cell::unsync::OnceCell;
 use crate::connect::AsConnector;
+use crate::config;
 
 thread_local! {
     pub static WINDOW: OnceCell<Window> = OnceCell::new();
@@ -17,6 +18,24 @@ pub(super) fn init(window: gtk::ApplicationWindow) {
         let overlay = gtk::Overlay::new();
         window.add(&overlay);
         window.show();
+
+        window.connect_size_allocate(|window, _alloc| {
+            let config = config::get();
+            if !config.maximized && !config.full_screen {
+                config::modify(|conf| {
+                    conf.resolution = window.get_size();
+                })
+            }
+        });
+
+        window.connect_window_state_event(|_window, state| {
+            config::modify(|conf| {
+                let state = state.get_new_window_state();
+                conf.maximized = state.contains(gdk::WindowState::MAXIMIZED);
+                conf.full_screen = state.contains(gdk::WindowState::FULLSCREEN);
+            });
+            Inhibit(false)
+        });
 
         let window = Window { window, overlay };
 
