@@ -166,8 +166,13 @@ impl client::ClientUi for Ui {
         self.message_entry.connect_key_press_event(
             move |entry, key_event| {
                 let client = client_cloned.clone();
-                if key_event.get_keyval() != key::Return {
-                    return Inhibit(false);
+                match key_event.get_keyval() {
+                    key::Return => {},
+                    key::Escape => {
+                        entry.grab_remove();
+                        return Inhibit(true);
+                    },
+                    _ => return Inhibit(false),
                 }
 
                 if key_event.get_state().contains(gdk::ModifierType::SHIFT_MASK) {

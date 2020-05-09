@@ -660,6 +660,10 @@ checkbutton {
   color: @error_color;
 }
 
+#settings #settings_viewport {
+  margin-right: 15px;
+}
+
 #settings switch {
   margin-right: 10px;
 }
@@ -677,6 +681,10 @@ checkbutton {
 #settings .list_scroll {
   min-height: 300px;
   padding: 10px;
+}
+
+#settings #admins_scroll {
+  min-height: 150px;
 }
 
 #settings .search_entry, #settings button {

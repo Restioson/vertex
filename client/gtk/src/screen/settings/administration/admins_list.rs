@@ -30,23 +30,21 @@ impl AdminsList {
 
         demote_button.connect_clicked(
             this.connector()
-                .do_async(move |this, _| this.perform_action(Action::Demote))
+                .do_async(move |this, _| async move {
+                    this.clone().perform_action(Action::Demote).await;
+                    this.refresh().await;
+                })
                 .build_cloned_consumer()
         );
 
-        scheduler::spawn(async move {
-            match this.client.list_all_admins().await {
-                Ok(users) => this.insert_users(users),
-                Err(err) => dialog::show_generic_error(&err),
-            }
-        });
+        scheduler::spawn(this.refresh());
     }
 
     fn create_model() -> gtk::ListStore {
         let types: Vec<glib::Type> = Some(bool::static_type())
             .into_iter()
             .chain(Some(String::static_type()).into_iter())
-            .chain(iter::repeat(bool::static_type()).take(3))
+            .chain(iter::repeat(bool::static_type()).take(4))
             .collect();
         gtk::ListStore::new(&types)
     }
@@ -56,6 +54,7 @@ impl AdminsList {
         super::append_text_column("Username", &self.view, 1);
 
         let headers = [
+            "All Permissions",
             "Basic Permissions",
             "Ban/unban",
             "Promote/demote",
@@ -92,19 +91,27 @@ impl AdminsList {
     }
 
     fn insert_user(&self, user: Admin) {
-        // +----------+----------+-------------------+-----------+----------------+
-        // | Selected | Username | Basic Permissions | Ban/unban | Promote/demote |
-        // +----------+----------+-------------------+-----------+----------------+
+        // +----------+----------+-----+--------+-----+---------+
+        // | Selected | Username | All | Basic  | Ban | Promote |
+        // +----------+----------+-----+--------+-----+---------+
 
         let arr: &[&dyn glib::ToValue] = &[
             &false,
             &user.username,
+            &user.permissions.contains(AdminPermissionFlags::ALL),
             &user.permissions.contains(AdminPermissionFlags::IS_ADMIN),
             &user.permissions.contains(AdminPermissionFlags::BAN),
             &user.permissions.contains(AdminPermissionFlags::PROMOTE),
         ];
 
-        let cols: Vec<_> = (0..5).collect();
+        let cols: Vec<_> = (0..6).collect();
         self.list.insert_with_values(None, &cols, arr);
+    }
+
+    async fn refresh(self: Rc<Self>) {
+        match self.client.list_all_admins().await {
+            Ok(users) => self.insert_users(users),
+            Err(err) => dialog::show_generic_error(&err),
+        }
     }
 }

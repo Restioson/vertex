@@ -30,10 +30,10 @@ impl Database {
 
         let conn = self.pool.connection().await?;
         let res = if permissions == AdminPermissionFlags::from_bits_truncate(0) {
+            conn.client.execute(DELETE, &[&user.0]).await
+        } else {
             let args: &[&(dyn ToSql + Sync)] = &[&user.0, &permissions.bits()];
             conn.client.execute(UPDATE, args).await
-        } else {
-            conn.client.execute(DELETE, &[&user.0]).await
         };
 
         match res {
@@ -86,7 +86,7 @@ impl Database {
         const QUERY: &str = "
             SELECT user_id, username, permission_flags
             FROM administrators
-            INNER JOIN users ON administrators.user_id = users.user_id";
+            INNER JOIN users ON administrators.user_id = users.id";
 
         let stream = self.query_stream(QUERY, &[]).await?;
         let stream = stream

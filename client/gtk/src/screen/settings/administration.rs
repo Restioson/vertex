@@ -40,7 +40,7 @@ fn append_checkbutton_column(
     header: &str,
     list: &gtk::ListStore,
     tree: &gtk::TreeView,
-    id: i32
+    id: i32,
 ) {
     let column = gtk::TreeViewColumn::new();
     let cell = gtk::CellRendererToggle::new();

@@ -165,6 +165,14 @@ async fn main() {
                 .help("Adds an admin with all permissions")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("remove-admin")
+                .short("R")
+                .long("remove-admin")
+                .value_name("USERNAME")
+                .help("Removes a user as admin")
+                .takes_value(true),
+        )
         .get_matches();
 
     println!("Vertex server starting...");
@@ -184,25 +192,7 @@ async fn main() {
             .sweep_invite_codes_loop(Duration::from_secs(config.invite_codes_sweep_interval_secs)),
     );
 
-    for name in args.values_of("add-admin").into_iter().flatten() {
-        let id = database
-            .get_user_by_name(name.to_string())
-            .await
-            .expect("Error promoting user to admin")
-            .unwrap_or_else(|| panic!("Invalid username {} to add as admin", name))
-            .id;
-
-        database
-            .set_admin_permissions(id, AdminPermissionFlags::ALL)
-            .await
-            .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e))
-            .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e));
-
-        info!(
-            "User {} successfully promoted to admin with all permissions!",
-            name
-        );
-    }
+    promote_and_demote(args, &database).await;
 
     load_communities(database.clone()).await;
 
@@ -285,6 +275,48 @@ async fn main() {
             .await;
     } else {
         warp::serve(routes).run(config.ip).await;
+    }
+}
+
+async fn promote_and_demote(args: clap::ArgMatches<'_>, database: &Database) {
+    for name in args.values_of("add-admin").into_iter().flatten() {
+        let id = database
+            .get_user_by_name(name.to_string())
+            .await
+            .expect("Error promoting user to admin")
+            .unwrap_or_else(|| panic!("Invalid username {} to add as admin", name))
+            .id;
+
+        database
+            .set_admin_permissions(id, AdminPermissionFlags::ALL)
+            .await
+            .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e))
+            .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e));
+
+        info!(
+            "User {} successfully promoted to admin with all permissions!",
+            name
+        );
+    }
+
+    for name in args.values_of("remove-admin").into_iter().flatten() {
+        let id = database
+            .get_user_by_name(name.to_string())
+            .await
+            .expect("Error removing user as admin")
+            .unwrap_or_else(|| panic!("Invalid username {} to demote", name))
+            .id;
+
+        database
+            .set_admin_permissions(id, AdminPermissionFlags::from_bits_truncate(0))
+            .await
+            .unwrap_or_else(|e| panic!("Error demoting user {}: {:?}", name, e))
+            .unwrap_or_else(|e| panic!("Error demoting user {}: {:?}", name, e));
+
+        info!(
+            "User {} successfully demoted!",
+            name
+        );
     }
 }
 
