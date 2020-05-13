@@ -360,6 +360,25 @@ checkbutton {
   color: shade(@widget_color, 0.5);
 }
 
+#active #message #message_settings {
+  opacity: 0;
+  margin: 1px;
+  margin-right: 2px;
+  margin-left: 2px;
+}
+
+#active #message #message_settings.active {
+  opacity: 1
+}
+
+#active #messages #entry_list row:hover #message_settings {
+  opacity: 1;
+}
+
+#message_menu {
+  padding: 0px;
+}
+
 #active #message .embed {
   background: @sidebar_bg_color;
   min-width: 320px;

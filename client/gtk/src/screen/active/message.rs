@@ -4,11 +4,12 @@ use gtk::prelude::*;
 use vertex::prelude::*;
 
 use crate::client::{self, ChatSide, InviteEmbed, MessageEmbed, MessageStatus, OpenGraphEmbed};
-use crate::Glade;
+use crate::{Glade, resource};
 
 use super::*;
 use pango::WrapMode;
 use ordinal::Ordinal;
+use atk::AtkObjectExt;
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct MessageGroupWidget {
@@ -78,24 +79,99 @@ struct MessageContentWidget {
 
 impl MessageContentWidget {
     pub fn build(text: Option<String>) -> MessageContentWidget {
-        let widget = gtk::BoxBuilder::new()
+        thread_local! {
+            static ICON: gdk_pixbuf::Pixbuf = gdk_pixbuf::Pixbuf::new_from_file_at_size(
+                &resource("feather/more-horizontal.svg"),
+                15,
+                15,
+            ).expect("Error loading more-horizontal.svg!");
+        }
+
+        let hbox = gtk::BoxBuilder::new()
             .name("message")
-            .orientation(gtk::Orientation::Vertical)
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
             .build();
 
         let text = gtk::LabelBuilder::new()
             .name("message_text")
             .label(text.unwrap_or_else(|| "<Deleted>".to_string()).trim()) // TODO deletion
             .halign(gtk::Align::Start)
+            .hexpand(true)
             .selectable(true)
             .can_focus(false)
             .wrap_mode(WrapMode::WordChar)
             .wrap(true)
             .build();
 
-        widget.add(&text);
+        let settings_vbox = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Vertical)
+            .halign(gtk::Align::End)
+            .build();
 
-        MessageContentWidget { widget, text }
+        let icon = ICON.with(|icon| gtk::Image::new_from_pixbuf(Some(&icon)));
+
+        let settings_button = gtk::ButtonBuilder::new()
+            .child(&icon)
+            .name("message_settings")
+            .valign(gtk::Align::Start)
+            .build();
+
+        settings_button.get_accessible().unwrap().set_name("Message menu");
+
+        settings_vbox.add(&settings_button);
+        hbox.add(&text);
+        hbox.add(&settings_vbox);
+
+        settings_button.connect_clicked(
+            ().connector()
+                .do_sync(|(), button: gtk::Button| {
+                    button.get_style_context().add_class("active");
+                    let menu = Self::build_menu();
+                    menu.set_relative_to(Some(&button));
+                    menu.show();
+
+                    menu.connect_hide(move |popover| {
+                        // weird gtk behavior: if we don't do this, it messes with dialog rendering order
+                        popover.set_relative_to::<gtk::Widget>(None);
+                        button.get_style_context().remove_class("active");
+                    });
+                })
+                .inhibit(true)
+                .build_cloned_consumer()
+        );
+
+        MessageContentWidget { widget: hbox, text }
+    }
+
+    fn build_menu() -> gtk::Popover {
+        lazy_static! {
+            static ref GLADE: Glade = Glade::open("active/message_menu.glade").unwrap();
+        }
+        thread_local! {
+            static ICON: gdk_pixbuf::Pixbuf = gdk_pixbuf::Pixbuf::new_from_file_at_size(
+                &resource("feather/flag.svg"),
+                18,
+                18,
+            ).expect("Error loading flag.svg!");
+        }
+
+        let builder: gtk::Builder = GLADE.builder();
+        let menu: gtk::Popover = builder.get_object("message_menu").unwrap();
+        let report_button: gtk::Button = builder.get_object("report_button").unwrap();
+        let img: gtk::Image = builder.get_object("report_icon").unwrap();
+
+        ICON.with(|icon| img.set_from_pixbuf(Some(&icon)));
+
+        report_button.connect_clicked(
+            (menu.clone(), ).connector()
+                .do_async(move |(menu,), _| async move {
+                    menu.hide();
+                })
+                .build_cloned_consumer()
+        );
+
+        menu
     }
 }
 
