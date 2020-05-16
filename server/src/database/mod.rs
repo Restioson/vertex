@@ -29,6 +29,7 @@ pub use rooms::*;
 pub use token::*;
 pub use user::*;
 pub use user_room_states::*;
+pub use reports::*;
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 
@@ -132,6 +133,7 @@ impl Database {
             CREATE_MESSAGES_TABLE,
             CREATE_USER_ROOM_STATES_TABLE,
             CREATE_ADMINISTRATORS_TABLE,
+            CREATE_REPORTS_TABLE,
             "CREATE EXTENSION IF NOT EXISTS pg_trgm;", // Allow fuzzy searching
         ];
 

@@ -1,13 +1,15 @@
 use vertex::prelude::*;
 use tokio_postgres::Row;
 use std::convert::{TryFrom, TryInto};
+use crate::database::{Database, DbResult};
+use futures::{Stream, TryStreamExt};
 
 // No ON CASCADE DELETE here sometimes because we want reports to stick around...
 // also, message *text*, not only ID is kept, so deletion can't be circumvented
 pub(super) const CREATE_REPORTS_TABLE: &str = r#"
     CREATE TABLE IF NOT EXISTS reports (
         id             SERIAL PRIMARY KEY,
-        reported_user  UUID NOT NULL REFERENCES users(id) ON DELETE CASCDE,
+        reported_user  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         reporter_user  UUID REFERENCES users(id) ON DELETE SET NULL,
         community      UUID REFERENCES communities(id) ON DELETE SET NULL,
         message_id     UUID REFERENCES messages(id) ON DELETE SET NULL,
@@ -15,7 +17,7 @@ pub(super) const CREATE_REPORTS_TABLE: &str = r#"
         message_text   VARCHAR NOT NULL,
         short_desc     VARCHAR NOT NULL,
         extended_desc  VARCHAR NOT NULL,
-        status         "char" NOT NULL,
+        status         "char" NOT NULL
     )"#;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -44,6 +46,11 @@ impl TryFrom<i8> for ReportStatus {
 #[derive(Debug, Clone)]
 pub struct ReportRecord {
     pub id: u32,
+    pub report: Report,
+}
+
+#[derive(Debug, Clone)]
+pub struct Report {
     pub reported_user: UserId,
     pub reporter_user: Option<UserId>,
     pub community: Option<CommunityId>,
@@ -62,15 +69,59 @@ impl TryFrom<Row> for ReportRecord {
         let status: i8 = row.try_get("status")?;
         Ok(ReportRecord {
             id: row.try_get("id")?,
-            reported_user: UserId(row.try_get("reported_user")?),
-            reporter_user: row.try_get::<_, Option<_>>("reporter_user")?.map(UserId),
-            community: row.try_get::<_, Option<_>>("community")?.map(CommunityId),
-            message_id: row.try_get::<_, Option<_>>("message_id")?.map(MessageId),
-            room: row.try_get::<_, Option<_>>("room")?.map(RoomId),
-            message_text: row.try_get("message_text")?,
-            short_desc: row.try_get("short_desc")?,
-            extended_desc: row.try_get("extended_desc")?,
-            status: status.try_into().unwrap_or(ReportStatus::Opened),
+            report: Report {
+                reported_user: UserId(row.try_get("reported_user")?),
+                reporter_user: row.try_get::<_, Option<_>>("reporter_user")?.map(UserId),
+                community: row.try_get::<_, Option<_>>("community")?.map(CommunityId),
+                message_id: row.try_get::<_, Option<_>>("message_id")?.map(MessageId),
+                room: row.try_get::<_, Option<_>>("room")?.map(RoomId),
+                message_text: row.try_get("message_text")?,
+                short_desc: row.try_get("short_desc")?,
+                extended_desc: row.try_get("extended_desc")?,
+                status: status.try_into().unwrap_or(ReportStatus::Opened),
+            }
         })
+    }
+}
+
+macro_rules! queries {
+    ($($name:ident($($argname:ident: $argty:ty$(,)?)*) -> { $sql:expr; $($argdef:expr$(,)?)* })*) => {
+        $(pub async fn $name(
+            &self,
+            $($argname: $argty,)*
+        ) -> DbResult<impl Stream<Item = DbResult<ReportRecord>>> {
+            const QUERY: &str = $sql;
+
+            let stream = self.query_stream(QUERY, &[$(&$argdef,)*]).await?;
+            let stream = stream
+                .and_then(|row| async move { Ok(ReportRecord::try_from(row)?) })
+                .map_err(|e| e.into());
+
+            Ok(stream)
+        })*
+    }
+}
+
+impl Database {
+    queries! {
+        get_reports_by_user(user: UserId) -> {
+            "SELECT * from reports WHERE reporter_user = $1";
+            (Some(user.0))
+        }
+
+        get_reports_of_user(user: UserId) -> {
+            "SELECT * from reports WHERE reported_user = $1";
+            (Some(user.0))
+        }
+
+        get_reports_in_community(community: CommunityId) -> {
+            "SELECT * from reports WHERE community = $1";
+            (Some(community.0))
+        }
+
+        get_reports_in_room(room: RoomId, community: CommunityId) -> {
+             "SELECT * from reports WHERE room = $1 AND community = $1";
+             Some(room.0), Some(community.0)
+        }
     }
 }
