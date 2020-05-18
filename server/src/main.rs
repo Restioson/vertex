@@ -313,10 +313,7 @@ async fn promote_and_demote(args: clap::ArgMatches<'_>, database: &Database) {
             .unwrap_or_else(|e| panic!("Error demoting user {}: {:?}", name, e))
             .unwrap_or_else(|e| panic!("Error demoting user {}: {:?}", name, e));
 
-        info!(
-            "User {} successfully demoted!",
-            name
-        );
+        info!("User {} successfully demoted!", name);
     }
 }
 

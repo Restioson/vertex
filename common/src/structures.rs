@@ -462,6 +462,8 @@ bitflags! {
         const CREATE_INVITES = 1 << 11;
         /// Perform administrator actions
         const ADMINISTER = 1 << 12;
+        /// Report users to server administrators
+        const REPORT_USERS = 1 << 13;
     }
 }
 

@@ -111,7 +111,7 @@ impl Database {
                         Some("community_membership_community_fkey") => {
                             Ok(Err(AddToCommunityError::InvalidCommunity))
                         }
-                        Some("community_membership_user_fkey") => {
+                        Some("community_membership_user_id_fkey") => {
                             Ok(Err(AddToCommunityError::InvalidUser))
                         }
                         Some(_) | None => Err(err.into()),

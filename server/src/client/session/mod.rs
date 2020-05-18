@@ -210,14 +210,7 @@ impl Handler<ForwardMessage> for ActiveSession {
                 },
                 // It was unread, so we don't need to tell the client about the new messages.
                 Ok((false, true)) => return,
-                Err(Error::InvalidUser) => {
-                    warn!(
-                        "Nonexistent user! Is this a timing anomaly? Client: {:#?}",
-                        self
-                    );
-                    ctx.stop(); // The user did not exist at the time of request
-                    ServerEvent::InternalError
-                }
+                Err(Error::InvalidUser) => own_user_nonexistent(self, ctx),
                 Err(_) => return, // It's *probably* a timing anomaly.
             };
 
@@ -235,11 +228,7 @@ impl Handler<AddRoom> for ActiveSession {
                 Ok(user) => user,
                 Err(_) => {
                     let _ = self.send(ServerMessage::Event(ServerEvent::SessionLoggedOut), ctx);
-                    warn!(
-                        "Nonexistent user! Is this a timing anomaly? Client: {:#?}",
-                        self
-                    );
-                    ctx.stop(); // The user did not exist at the time of request
+                    own_user_nonexistent(self, ctx);
                     return;
                 }
             };
@@ -320,6 +309,7 @@ impl ActiveSession {
             .contains_key(&id))
     }
 
+    // in future, this will change with permissioning
     fn in_room(&self, community: &CommunityId, room: &RoomId) -> Result<bool, Error> {
         let user = manager::get_active_user(self.user)?;
         Ok(if let Some(community) = user.communities.get(community) {
@@ -419,7 +409,8 @@ impl ActiveSession {
         } else if message.is_binary() {
             let msg = match ClientMessage::from_protobuf_bytes(message.as_bytes()) {
                 Ok(m) => m,
-                Err(_) => {
+                Err(e) => {
+                    log::debug!("Malformed message: {:#?}", e);
                     self.try_send(ServerMessage::MalformedMessage).await?;
                     return Ok(());
                 }
@@ -436,11 +427,7 @@ impl ActiveSession {
             let result = handler.handle_request(msg.request).await;
 
             if let Err(Error::LoggedOut) = result {
-                warn!(
-                    "Nonexistent user! Is this a timing anomaly? Client: {:#?}",
-                    self
-                );
-                ctx.stop();
+                own_user_nonexistent(self, ctx);
             }
 
             self.try_send(ServerMessage::Response { id: msg.id, result })
@@ -448,9 +435,22 @@ impl ActiveSession {
         } else if message.is_close() {
             ctx.stop();
         } else {
+            log::debug!("Malformed message: {:#?}", message);
             self.try_send(ServerMessage::MalformedMessage).await?;
         }
 
         Ok(())
     }
+}
+
+fn own_user_nonexistent<T: Debug, S: xtra::Actor>(
+    client: &T,
+    ctx: &mut Context<S>
+) -> ServerEvent {
+    warn!(
+        "Nonexistent user! Is this a timing anomaly? Client: {:#?}",
+        client
+    );
+    ctx.stop(); // The user did not exist at the time of request
+    ServerEvent::InternalError
 }

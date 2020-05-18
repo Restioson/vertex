@@ -57,5 +57,5 @@ enum Error {
     MessageTooLong = 16;
     Unimplemented = 17;
     TooLong = 18;
+    InvalidMessage = 19;
 }
-

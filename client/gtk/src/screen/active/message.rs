@@ -46,10 +46,16 @@ impl MessageGroupWidget {
         self.author == user && (time - self.origin_time).num_minutes().abs() < 10
     }
 
-    pub fn add_message(&self, content: Option<String>, side: ChatSide) -> MessageEntryWidget {
+    pub fn add_message(
+        &self,
+        content: Option<String>,
+        id: MessageId,
+        side: ChatSide,
+        client: Client<Ui>,
+    ) -> MessageEntryWidget {
         let entry = MessageEntryWidget {
             group: self.clone(),
-            content: MessageContentWidget::build(content),
+            content: MessageContentWidget::build(client, content, id),
         };
 
         match side {
@@ -78,13 +84,13 @@ struct MessageContentWidget {
 }
 
 impl MessageContentWidget {
-    pub fn build(text: Option<String>) -> MessageContentWidget {
+    pub fn build(client: Client<Ui>, text: Option<String>, id: MessageId) -> MessageContentWidget {
         thread_local! {
             static ICON: gdk_pixbuf::Pixbuf = gdk_pixbuf::Pixbuf::new_from_file_at_size(
-                &resource("feather/more-horizontal.svg"),
+                &resource("feather/more-horizontal-cropped.svg"),
                 15,
-                15,
-            ).expect("Error loading more-horizontal.svg!");
+                10,
+            ).expect("Error loading more-horizontal-cropped.svg!");
         }
 
         let hbox = gtk::BoxBuilder::new()
@@ -124,27 +130,27 @@ impl MessageContentWidget {
         hbox.add(&settings_vbox);
 
         settings_button.connect_clicked(
-            ().connector()
-                .do_sync(|(), button: gtk::Button| {
+            client.connector()
+                .do_sync(move |client, button: gtk::Button| {
                     button.get_style_context().add_class("active");
-                    let menu = Self::build_menu();
+                    let menu = Self::build_menu(client, id);
                     menu.set_relative_to(Some(&button));
                     menu.show();
 
+                    let button = button.clone();
                     menu.connect_hide(move |popover| {
                         // weird gtk behavior: if we don't do this, it messes with dialog rendering order
                         popover.set_relative_to::<gtk::Widget>(None);
                         button.get_style_context().remove_class("active");
                     });
                 })
-                .inhibit(true)
                 .build_cloned_consumer()
         );
 
         MessageContentWidget { widget: hbox, text }
     }
 
-    fn build_menu() -> gtk::Popover {
+    fn build_menu(client: Client<Ui>, msg: MessageId) -> gtk::Popover {
         lazy_static! {
             static ref GLADE: Glade = Glade::open("active/message_menu.glade").unwrap();
         }
@@ -164,8 +170,9 @@ impl MessageContentWidget {
         ICON.with(|icon| img.set_from_pixbuf(Some(&icon)));
 
         report_button.connect_clicked(
-            (menu.clone(), ).connector()
-                .do_async(move |(menu,), _| async move {
+            (menu.clone(), client).connector()
+                .do_sync(move |(menu, client), _| {
+                    dialog::show_report_message(client, msg);
                     menu.hide();
                 })
                 .build_cloned_consumer()

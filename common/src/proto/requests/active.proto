@@ -32,6 +32,7 @@ message ClientRequest {
         ChangeCommunityName change_community_name = 18;
         ChangeCommunityDescription change_community_description = 19;
         administration.AdminRequest admin_action = 20;
+        ReportUser report_user = 21;
     }
 }
 
@@ -122,4 +123,10 @@ message ChangeCommunityName {
 message ChangeCommunityDescription {
     string new = 1;
     types.CommunityId community = 2;
+}
+
+message ReportUser {
+    types.MessageId message = 1;
+    string short_desc = 2;
+    string extended_desc = 3;
 }

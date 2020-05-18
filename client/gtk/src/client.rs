@@ -465,6 +465,25 @@ impl<Ui: ClientUi> Client<Ui> {
             |user| ClientRequest::AdminAction(AdminRequest::Promote { user, permissions })
         ).await
     }
+
+    pub async fn report_message(
+        &self,
+        message: MessageId,
+        short_desc: &str,
+        extended_desc: &str,
+    ) -> Result<()> {
+        let request = ClientRequest::ReportUser {
+            message,
+            short_desc: short_desc.to_string(),
+            extended_desc: extended_desc.to_string(),
+        };
+        let request = self.request.send(request).await;
+
+        match request.response().await? {
+            OkResponse::NoData => Ok(()),
+            _ => Err(Error::UnexpectedMessage),
+        }
+    }
 }
 
 struct ClientLoop<Ui: ClientUi, S> {

@@ -1,9 +1,9 @@
 use crate::database::{Database, DbResult};
+use futures::{Stream, TryStreamExt};
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
 use tokio_postgres::types::ToSql;
 use vertex::prelude::*;
-use futures::{Stream, TryStreamExt};
 
 pub(super) const CREATE_ADMINISTRATORS_TABLE: &str = r"
     CREATE TABLE IF NOT EXISTS administrators (
@@ -37,10 +37,7 @@ impl Database {
         };
 
         match res {
-            Ok(1) => {
-                // 1 row modified = successfully added
-                Ok(Ok(()))
-            }
+            Ok(1) => Ok(Ok(())), // 1 row modified = successfully added
             Ok(_n) => {
                 panic!("db error: create admin query returned != 1 row modified!");
             }
@@ -52,10 +49,9 @@ impl Database {
                         .and_then(|e| e.constraint());
 
                     match constraint {
-                        Some("administrators_user_fkey") => {
-                            dbg!("haha no");
+                        Some("administrators_user_id_fkey") => {
                             Ok(Err(CreateAdminError::InvalidUser))
-                        },
+                        }
                         Some(_) | None => Err(err.into()),
                     }
                 } else {
@@ -80,9 +76,7 @@ impl Database {
         }
     }
 
-    pub async fn list_all_admins(
-        &self,
-    ) -> DbResult<impl Stream<Item = DbResult<Admin>>> {
+    pub async fn list_all_admins(&self) -> DbResult<impl Stream<Item = DbResult<Admin>>> {
         const QUERY: &str = "
             SELECT user_id, username, permission_flags
             FROM administrators
@@ -93,9 +87,8 @@ impl Database {
             .and_then(|row| async move {
                 let id = UserId(row.try_get("user_id")?);
                 let username = row.try_get("username")?;
-                let permissions = AdminPermissionFlags::from_bits_truncate(
-                    row.try_get("permission_flags")?
-                );
+                let permissions =
+                    AdminPermissionFlags::from_bits_truncate(row.try_get("permission_flags")?);
 
                 Ok(Admin {
                     username,

@@ -9,6 +9,7 @@ use crate::client::RoomEntry;
 
 use super::ClientUi;
 use super::message::*;
+use uuid::Uuid;
 
 pub const MESSAGE_DROP_THRESHOLD: usize = MESSAGE_PAGE_SIZE * 4;
 pub const MESSAGE_DROP_COUNT: usize = MESSAGE_PAGE_SIZE * 2;
@@ -16,7 +17,13 @@ pub const MESSAGE_DROP_COUNT: usize = MESSAGE_PAGE_SIZE * 2;
 pub trait ChatWidget<Ui: ClientUi> {
     fn clear(&mut self);
 
-    fn add_message(&mut self, content: MessageContent, side: ChatSide) -> Ui::MessageEntryWidget;
+    fn add_message(
+        &mut self,
+        content: MessageContent,
+        side: ChatSide,
+        client: Client<Ui>,
+        id: MessageId,
+    ) -> Ui::MessageEntryWidget;
 
     fn remove_message(&mut self, widget: &Ui::MessageEntryWidget);
 
@@ -68,9 +75,14 @@ impl<Ui: ClientUi> ChatState<Ui> {
         }
     }
 
-    fn push_widget(&mut self, content: MessageContent, side: ChatSide) -> Ui::MessageEntryWidget {
+    fn push_widget(
+        &mut self,
+        content: MessageContent,
+        side: ChatSide,
+        id: MessageId,
+    ) -> Ui::MessageEntryWidget {
         let rich = RichMessage::parse(content.text.clone());
-        let widget = self.widget.add_message(content, side);
+        let widget = self.widget.add_message(content, side, self.client.clone(), id);
 
         if rich.has_embeds() {
             let client = self.client.clone();
@@ -88,7 +100,7 @@ impl<Ui: ClientUi> ChatState<Ui> {
     }
 
     fn push(&mut self, id: MessageId, content: MessageContent, side: ChatSide) -> Ui::MessageEntryWidget {
-        let widget = self.push_widget(content, side);
+        let widget = self.push_widget(content, side, id);
         let entry = ChatEntry { id, widget: widget.clone() };
 
         match side {
@@ -189,7 +201,7 @@ impl<Ui: ClientUi> Chat<Ui> {
     pub async fn push_pending(&self, content: MessageContent) -> PendingMessageHandle<'_, Ui> {
         let mut state = self.state.write().await;
 
-        let widget = state.push_widget(content, ChatSide::Front);
+        let widget = state.push_widget(content, ChatSide::Front, MessageId(Uuid::default()));
         state.flush();
 
         widget.set_status(MessageStatus::Pending);

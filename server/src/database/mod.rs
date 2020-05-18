@@ -14,22 +14,22 @@ mod communities;
 mod community_membership;
 mod invite_code;
 mod message;
+mod reports;
 mod rooms;
 mod token;
 mod user;
 mod user_room_states;
-mod reports;
 
 pub use administrators::*;
 pub use communities::*;
 pub use community_membership::*;
 pub use invite_code::*;
 pub use message::*;
+pub use reports::*;
 pub use rooms::*;
 pub use token::*;
 pub use user::*;
 pub use user_room_states::*;
-pub use reports::*;
 
 pub type DbResult<T> = Result<T, DatabaseError>;
 

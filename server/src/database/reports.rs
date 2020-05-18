@@ -1,14 +1,18 @@
-use vertex::prelude::*;
-use tokio_postgres::Row;
-use std::convert::{TryFrom, TryInto};
-use crate::database::{Database, DbResult};
+use crate::database::{Database, DbResult, MessageRecord};
+use chrono::{DateTime, Utc};
 use futures::{Stream, TryStreamExt};
+use std::convert::{TryFrom, TryInto};
+use std::error::Error;
+use tokio_postgres::error::{DbError, SqlState};
+use tokio_postgres::Row;
+use vertex::prelude::*;
 
-// No ON CASCADE DELETE here sometimes because we want reports to stick around...
+// Not much ON CASCADE DELETE here sometimes because we want reports to stick around...
 // also, message *text*, not only ID is kept, so deletion can't be circumvented
 pub(super) const CREATE_REPORTS_TABLE: &str = r#"
     CREATE TABLE IF NOT EXISTS reports (
         id             SERIAL PRIMARY KEY,
+        datetime       TIMESTAMP WITH TIME ZONE NOT NULL,
         reported_user  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         reporter_user  UUID REFERENCES users(id) ON DELETE SET NULL,
         community      UUID REFERENCES communities(id) ON DELETE SET NULL,
@@ -38,7 +42,7 @@ impl TryFrom<i8> for ReportStatus {
             0 => Ok(ReportStatus::Opened),
             1 => Ok(ReportStatus::Accepted),
             2 => Ok(ReportStatus::Denied),
-            _ => Err(InvalidReportStatus)
+            _ => Err(InvalidReportStatus),
         }
     }
 }
@@ -46,6 +50,7 @@ impl TryFrom<i8> for ReportStatus {
 #[derive(Debug, Clone)]
 pub struct ReportRecord {
     pub id: u32,
+    pub datetime: DateTime<Utc>,
     pub report: Report,
 }
 
@@ -69,6 +74,7 @@ impl TryFrom<Row> for ReportRecord {
         let status: i8 = row.try_get("status")?;
         Ok(ReportRecord {
             id: row.try_get("id")?,
+            datetime: row.try_get("datetime")?,
             report: Report {
                 reported_user: UserId(row.try_get("reported_user")?),
                 reporter_user: row.try_get::<_, Option<_>>("reporter_user")?.map(UserId),
@@ -79,9 +85,14 @@ impl TryFrom<Row> for ReportRecord {
                 short_desc: row.try_get("short_desc")?,
                 extended_desc: row.try_get("extended_desc")?,
                 status: status.try_into().unwrap_or(ReportStatus::Opened),
-            }
+            },
         })
     }
+}
+
+pub enum ReportUserError {
+    InvalidMessage,
+    InvalidReporter,
 }
 
 macro_rules! queries {
@@ -103,24 +114,88 @@ macro_rules! queries {
 }
 
 impl Database {
+    pub async fn report_message(
+        &self,
+        reporter: UserId,
+        msg: MessageRecord,
+        short_desc: &str,
+        extended_desc: &str,
+    ) -> DbResult<Result<(), ReportUserError>> {
+        const STMT: &str = "
+            INSERT INTO reports
+            (
+                datetime, reported_user, reporter_user, community, message_id, room, message_text,
+                short_desc, extended_desc, status
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
+
+        let conn = self.pool.connection().await?;
+
+        let stmt = conn.client.prepare(STMT).await?;
+        let res = conn
+            .client
+            .execute(
+                &stmt,
+                &[
+                    &msg.date,
+                    &msg.author.0,
+                    &reporter.0,
+                    &msg.community.0,
+                    &msg.id.0,
+                    &msg.room.0,
+                    &msg.content,
+                    &short_desc,
+                    &extended_desc,
+                    &(ReportStatus::Opened as i8),
+                ],
+            )
+            .await;
+
+        match res {
+            Ok(1) => Ok(Ok(())), // 1 row modified = successfully added
+            Ok(_n) => {
+                panic!("db error: report user query returned more than one row modified!");
+            }
+            Err(err) => {
+                if err.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {
+                    let constraint = err
+                        .source()
+                        .and_then(|e| e.downcast_ref::<DbError>())
+                        .and_then(|e| e.constraint());
+
+                    match constraint {
+                        Some("reports_reporter_user_fkey")
+                        | Some("reports_reported_user_fkey")
+                        | Some("reports_message_id_fkey")
+                        | Some("reports_community_fkey")
+                        | Some("reports_room_fkey") => Ok(Err(ReportUserError::InvalidReporter)),
+                        Some(_) | None => Err(err.into()),
+                    }
+                } else {
+                    Err(err.into())
+                }
+            }
+        }
+    }
+
     queries! {
         get_reports_by_user(user: UserId) -> {
-            "SELECT * from reports WHERE reporter_user = $1";
+            "SELECT * from reports WHERE reporter_user = $1 ORDER BY id DESC";
             (Some(user.0))
         }
 
         get_reports_of_user(user: UserId) -> {
-            "SELECT * from reports WHERE reported_user = $1";
+            "SELECT * from reports WHERE reported_user = $1 ORDER BY id DESC";
             (Some(user.0))
         }
 
         get_reports_in_community(community: CommunityId) -> {
-            "SELECT * from reports WHERE community = $1";
+            "SELECT * from reports WHERE community = $1 ORDER BY id DESC";
             (Some(community.0))
         }
 
         get_reports_in_room(room: RoomId, community: CommunityId) -> {
-             "SELECT * from reports WHERE room = $1 AND community = $1";
+             "SELECT * from reports WHERE room = $1 AND community = $1 ORDER BY id DESC";
              Some(room.0), Some(community.0)
         }
     }

@@ -192,7 +192,12 @@ impl UsersSearch {
 
             let label = gtk::Label::new(Some("Select Permissions"));
             label.get_style_context().add_class("title");
-            content.add(&label);
+            let title_box = gtk::BoxBuilder::new()
+                .orientation(gtk::Orientation::Horizontal)
+                .hexpand(true)
+                .child(&label)
+                .build();
+            content.add(&title_box);
 
             for permission in &permissions {
                 content.add(permission);
@@ -206,13 +211,15 @@ impl UsersSearch {
                             if response == gtk::ResponseType::Ok {
                                 let action = Action::Promote { permissions: *flags.borrow() };
                                 this.perform_action(action).await;
+                            } else {
+                                dialog.emit_close();
                             }
                         }
                     })
                     .build_widget_and_owned_listener()
             );
 
-            dialog
+            (dialog, title_box)
         });
     }
 }

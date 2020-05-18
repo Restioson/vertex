@@ -250,6 +250,17 @@ checkbutton {
   box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0);
 }
 
+.dialog #close_button {
+  background: transparent;
+  opacity: 0.5;
+  padding: 0px;
+  margin: 0px;
+}
+
+.dialog #close_button:hover {
+  opacity: 1;
+}
+
 .dialog .title {
   font-size: 20px;
 }
@@ -263,11 +274,24 @@ checkbutton {
   font-size: 16px;
 }
 
-.dialog .invite_code_text {
-  background: @widget_bg_color;
+.dialog entry {
   padding: 8px;
   border-radius: 8px;
-  margin: 4px;
+  margin-bottom: 6px;
+}
+
+.dialog textview {
+  background: @widget_bg_color;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.dialog extended_desc_scroll {
+  border-radius: 8px;
+}
+
+.dialog extended_desc_box {
+  margin: 6px;
 }
 
 .dialog .error_description {

@@ -129,6 +129,11 @@ pub enum ClientRequest {
         new: String,
     },
     AdminAction(AdminRequest),
+    ReportUser {
+        message: MessageId,
+        short_desc: String,
+        extended_desc: String,
+    }
 }
 
 impl From<ClientRequest> for proto::requests::active::ClientRequest {
@@ -222,6 +227,13 @@ impl From<ClientRequest> for proto::requests::active::ClientRequest {
                 })
             }
             AdminAction(req) => Request::AdminAction(req.into()),
+            ReportUser { message, short_desc, extended_desc } => {
+                Request::ReportUser(request::ReportUser {
+                    message: Some(message.into()),
+                    short_desc,
+                    extended_desc,
+                })
+            }
         };
 
         request::ClientRequest {
@@ -306,6 +318,11 @@ impl TryFrom<proto::requests::active::ClientRequest> for ClientRequest {
                 community: change.community?.try_into()?,
             },
             AdminAction(action) => ClientRequest::AdminAction(action.try_into()?),
+            ReportUser(report) => ClientRequest::ReportUser {
+                message: report.message?.try_into()?,
+                short_desc: report.short_desc,
+                extended_desc: report.extended_desc,
+            },
         };
 
         Ok(val)

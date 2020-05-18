@@ -79,6 +79,11 @@ impl<'a> RequestHandler<'a> {
 
                 self.session.handle_admin_request(req).await
             }
+            ClientRequest::ReportUser {
+                message,
+                short_desc,
+                extended_desc,
+            } => self.report_user(message, short_desc, extended_desc).await,
             _ => Err(Error::Unimplemented),
         }
     }
@@ -573,6 +578,39 @@ impl<'a> RequestHandler<'a> {
             Ok(OkResponse::NoData)
         } else {
             Err(Error::InvalidCommunity)
+        }
+    }
+
+    async fn report_user(
+        self,
+        message: MessageId,
+        short_desc: String,
+        extended_desc: String,
+    ) -> Result<OkResponse, Error> {
+        if !self.perms.has_perms(TokenPermissionFlags::REPORT_USERS) {
+            return Err(Error::AccessDenied);
+        }
+
+        let db = &self.session.global.database;
+        let msg = match db.get_message_by_id(message).await? {
+            Some(m) => m,
+            None => {
+                return Err(Error::InvalidMessage)
+            },
+        };
+
+        if !self.session.in_room(&msg.community, &msg.room)? {
+            return Err(Error::InvalidMessage);
+        }
+
+        let res = db
+            .report_message(self.user, msg, &short_desc, &extended_desc)
+            .await?;
+
+        match res {
+            Ok(_) => Ok(OkResponse::NoData),
+            Err(ReportUserError::InvalidReporter) => Err(Error::LoggedOut),
+            Err(ReportUserError::InvalidMessage) => Err(Error::InvalidMessage),
         }
     }
 }

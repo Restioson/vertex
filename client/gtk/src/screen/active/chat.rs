@@ -76,9 +76,15 @@ impl client::ChatWidget<Ui> for ChatWidget {
         self.groups.clear();
     }
 
-    fn add_message(&mut self, content: MessageContent, side: ChatSide) -> MessageEntryWidget {
+    fn add_message(
+        &mut self,
+        content: MessageContent,
+        side: ChatSide,
+        client: Client<Ui>,
+        id: MessageId,
+    ) -> MessageEntryWidget {
         let group = self.next_group(content.author, content.profile, content.time, side);
-        group.add_message(content.text, side)
+        group.add_message(content.text, id, side, client)
     }
 
     fn remove_message(&mut self, widget: &MessageEntryWidget) {

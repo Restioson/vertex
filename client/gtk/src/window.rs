@@ -1,7 +1,7 @@
 use gtk::prelude::*;
 use once_cell::unsync::OnceCell;
 use crate::connect::AsConnector;
-use crate::config;
+use crate::{config, resource};
 
 thread_local! {
     pub static WINDOW: OnceCell<Window> = OnceCell::new();
@@ -76,16 +76,37 @@ pub fn build_dialog_bg() -> gtk::Widget {
         .upcast()
 }
 
-pub fn show_dialog<F: FnOnce(&Window) -> gtk::Dialog>(f: F) -> gtk::Dialog {
+pub fn show_dialog<F: FnOnce(&Window) -> (gtk::Dialog, gtk::Box)>(f: F) -> gtk::Dialog {
     WINDOW.with(|window| {
         let window = window.get().expect("window not initialized on this thread");
 
         let background = build_dialog_bg();
         window.overlay.add_overlay(&background);
 
-        let dialog = f(window);
+        let (dialog, title_box) = f(window);
 
         dialog.get_content_area().get_style_context().add_class("dialog");
+
+        let close_button = gtk::ButtonBuilder::new()
+            .child(&gtk::Image::new_from_file(resource("feather/x.svg")))
+            .halign(gtk::Align::End)
+            .name("close_button")
+            .build();
+
+        close_button.connect_clicked(
+            dialog.connector()
+                .do_sync(|dialog, _| dialog.response(gtk::ResponseType::Close))
+                .build_cloned_consumer()
+        );
+
+        title_box.add(&close_button);
+        title_box.set_child_packing(
+            &close_button,
+            false,
+            false,
+            0,
+            gtk::PackType::End
+        );
 
         dialog.set_decorated(false);
         dialog.connect_close(
@@ -96,6 +117,8 @@ pub fn show_dialog<F: FnOnce(&Window) -> gtk::Dialog>(f: F) -> gtk::Dialog {
                 })
                 .build_cloned_consumer()
         );
+
+
 
         dialog.show_all();
         dialog
