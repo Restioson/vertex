@@ -68,8 +68,5 @@ message RevokeToken {
 
 message RegisterUser {
     structures.Credentials credentials = 1;
-    // Option<T>
-    oneof display_name {
-        string present = 2;
-    }
+    oneof display_name {string present = 2; } // Option<String>
 }

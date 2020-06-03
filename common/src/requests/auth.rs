@@ -165,11 +165,7 @@ impl From<RegisterUser> for proto::requests::auth::RegisterUser {
 
         proto::requests::auth::RegisterUser {
             credentials: Some(register.credentials.into()),
-            display_name: if let Some(name) = register.display_name {
-                Some(DisplayName::Present(name))
-            } else {
-                None
-            },
+            display_name: register.display_name.map(DisplayName::Present)
         }
     }
 }

@@ -355,6 +355,47 @@ pub fn show_report_message(client: Client<Ui>, msg: MessageId) {
     });
 }
 
+pub fn show_choose_report_action(client: Client<Ui>, user: UserId) {
+    window::show_dialog(|window| {
+        let dialog = gtk::Dialog::new_with_buttons(
+            None,
+            Some(&window.window),
+            DialogFlags::MODAL | DialogFlags::DESTROY_WITH_PARENT,
+            &[("None", ResponseType::Other(0)), ("Ban", ResponseType::Other(1))],
+        );
+
+        let heading = Label::new(Some("Choose an action"));
+        heading.get_style_context().add_class("title");
+        let title_box = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
+            .child(&heading)
+            .build();
+
+        let content = dialog.get_content_area();
+        content.add(&title_box);
+
+        dialog.connect_response(
+            client.connector()
+                .do_async(move |client, (dialog, response_type): (gtk::Dialog, ResponseType)| {
+                    async move {
+                        if let ResponseType::Other(1) = response_type {
+                            match client.ban_users(vec![user]).await.map(|mut v| v.pop()) {
+                                Err(ref e) | Ok(Some((_, ref e))) => show_generic_error(&e),
+                                _ => {}
+                            }
+                        }
+
+                        dialog.emit_close();
+                    }
+                })
+                .build_widget_and_owned_listener()
+        );
+        (dialog, title_box)
+    });
+}
+
+
 pub fn show_generic_error<E: std::fmt::Display>(error: &E) {
     window::show_dialog(|window| {
         let dialog = gtk::Dialog::new_with_buttons(

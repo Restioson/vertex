@@ -407,6 +407,16 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
+    pub async fn search_reports(&self, criteria: SearchCriteria) -> Result<Vec<Report>> {
+        let req = ClientRequest::AdminAction(AdminRequest::SearchForReports(criteria));
+        let req = self.request.send(req).await;
+
+        match req.response().await? {
+            OkResponse::Admin(AdminResponse::Reports(reports)) => Ok(reports),
+            _ => Err(Error::UnexpectedMessage)
+        }
+    }
+
     async fn do_to_many(
         &self,
         users: Vec<UserId>,
@@ -479,6 +489,18 @@ impl<Ui: ClientUi> Client<Ui> {
         };
         let request = self.request.send(request).await;
 
+        match request.response().await? {
+            OkResponse::NoData => Ok(()),
+            _ => Err(Error::UnexpectedMessage),
+        }
+    }
+
+    pub async fn set_report_status(&self, id: i32, status: ReportStatus) -> Result<()> {
+        let request = ClientRequest::AdminAction(AdminRequest::SetReportStatus {
+            id,
+            status,
+        });
+        let request = self.request.send(request).await;
         match request.response().await? {
             OkResponse::NoData => Ok(()),
             _ => Err(Error::UnexpectedMessage),

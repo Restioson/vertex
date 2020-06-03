@@ -28,10 +28,7 @@ message Message {
     uint32 author_profile_version = 3;
     // UTC unix timestamp
     int64 time_sent = 4;
-    // Option<T>
-    oneof content {
-        string present = 6;
-    }
+    oneof content { string present = 6; } // Option<String>
 }
 
 message Edit {
@@ -77,14 +74,7 @@ message Credentials {
 }
 
 message TokenCreationOptions {
-    // Option<T>
-    oneof device_name {
-        string device_name_present = 1;
-    }
-    // Option<T>
-    oneof expiration_datetime {
-        // UTC unix timestamp
-        int64 expiration_datetime_present = 2;
-    }
+    oneof device_name { string device_name_present = 1; }  // Option<String>
+    oneof expiration_datetime { int64 expiration_datetime_present = 2; } // Option<i64> - UTC unix timestamp
     int64 permission_flags = 3;
 }

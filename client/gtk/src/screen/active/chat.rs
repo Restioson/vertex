@@ -21,7 +21,7 @@ pub struct ChatWidget {
 
 impl ChatWidget {
     fn add_group(&mut self, author: UserId, profile: Profile, time: DateTime<Utc>, side: ChatSide) {
-        let group = MessageGroupWidget::build(author, profile, time);
+        let group = MessageGroupWidget::build(author, profile, time, true);
         group.widget.hide();
 
         match side {

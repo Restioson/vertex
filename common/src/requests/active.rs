@@ -151,11 +151,10 @@ impl From<ClientRequest> for proto::requests::active::ClientRequest {
                 last_received,
                 message_count,
             } => {
-                use request::get_room_update::LastReceived::Present;
                 Request::GetRoomUpdate(request::GetRoomUpdate {
                     community: Some(community.into()),
                     room: Some(room.into()),
-                    last_received: last_received.map(|x| Present(x.into())),
+                    last_received: last_received.map(|x| x.into()),
                     message_count,
                 })
             }
@@ -253,15 +252,10 @@ impl TryFrom<proto::requests::active::ClientRequest> for ClientRequest {
             SendMessage(msg) => ClientRequest::SendMessage(msg.try_into()?),
             Edit(edit) => ClientRequest::EditMessage(edit.try_into()?),
             GetRoomUpdate(get) => {
-                use request::get_room_update::LastReceived::Present;
                 ClientRequest::GetRoomUpdate {
                     community: get.community?.try_into()?,
                     room: get.room?.try_into()?,
-                    last_received: if let Some(Present(v)) = get.last_received {
-                        Some(v.try_into()?)
-                    } else {
-                        None
-                    },
+                    last_received: get.last_received.map(|x| x.try_into()).transpose()?,
                     message_count: get.message_count,
                 }
             }

@@ -39,6 +39,8 @@ impl ActiveSession {
             AdminRequest::SearchUser { name } => self.search_user(name).await,
             AdminRequest::ListAllUsers => self.list_all_users().await,
             AdminRequest::ListAllAdmins => self.list_all_admins().await,
+            AdminRequest::SearchForReports(criteria) => self.search_reports(criteria).await,
+            AdminRequest::SetReportStatus { id, status } => self.set_report_status(id, status).await,
             _ => Err(Error::Unimplemented),
         }
     }
@@ -149,33 +151,36 @@ impl ActiveSession {
     }
 
     async fn search_user(&mut self, name: String) -> Result<OkResponse, Error> {
-        if self.admin_perms()?.is_empty() {
-            return Err(Error::AccessDenied);
-        }
-
         let stream = self.global.database.search_user(name).await?;
         let users: Vec<ServerUser> = stream.map_ok(Into::into).try_collect().await?;
         Ok(OkResponse::Admin(AdminResponse::SearchedUsers(users)))
     }
 
     async fn list_all_users(&mut self) -> Result<OkResponse, Error> {
-        if self.admin_perms()?.is_empty() {
-            return Err(Error::AccessDenied);
-        }
-
         let stream = self.global.database.list_all_server_users().await?;
         let users: Vec<ServerUser> = stream.map_ok(Into::into).try_collect().await?;
         Ok(OkResponse::Admin(AdminResponse::SearchedUsers(users)))
     }
 
     async fn list_all_admins(&mut self) -> Result<OkResponse, Error> {
-        if self.admin_perms()?.is_empty() {
-            return Err(Error::AccessDenied);
-        }
-
         let stream = self.global.database.list_all_admins().await?;
         let admins: Vec<Admin> = stream.try_collect().await?;
         Ok(OkResponse::Admin(AdminResponse::Admins(admins)))
+    }
+
+    async fn search_reports(&mut self, criteria: SearchCriteria) -> Result<OkResponse, Error> {
+        let stream = self.global.database.search_reports(criteria).await?;
+        let reports: Vec<Report> = stream.try_collect().await?;
+        Ok(OkResponse::Admin(AdminResponse::Reports(reports)))
+    }
+
+    async fn set_report_status(
+        &mut self,
+        id: i32,
+        status: ReportStatus
+    ) -> Result<OkResponse, Error> {
+        self.global.database.set_report_status(id, status).await?;
+        Ok(OkResponse::NoData)
     }
 }
 

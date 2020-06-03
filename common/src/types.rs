@@ -26,16 +26,16 @@ macro_rules! impl_protobuf_conversions {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone)]
+#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Default)]
 pub struct UserId(pub Uuid);
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone)]
+#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Default)]
 pub struct CommunityId(pub Uuid);
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone)]
+#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Default)]
 pub struct RoomId(pub Uuid);
 
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone)]
+#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Copy, Clone, Default)]
 pub struct MessageId(pub Uuid);
 
 #[serde(transparent)]

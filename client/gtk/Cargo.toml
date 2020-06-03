@@ -81,6 +81,9 @@ arc-swap = "0.4"
 
 bimap = "0.4"
 
+nom = "^5"
+itertools = "^0.8"
+
 vertex = { path = "../../common" }
 
 [dependencies.system_uri]

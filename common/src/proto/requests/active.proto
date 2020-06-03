@@ -45,9 +45,7 @@ message ClientSentMessage {
 message GetRoomUpdate {
     types.CommunityId community = 1;
     types.RoomId room = 2;
-    oneof last_received { // Option<T>
-        types.MessageId present = 3;
-    }
+    types.MessageId last_received = 3; // nullable
     uint64 message_count = 4;
 }
 
@@ -89,9 +87,7 @@ message CreateRoom {
 
 message CreateInvite {
     types.CommunityId community = 1;
-    oneof expiration_datetime { // Option<T>
-        int64 present = 2; // Unix timestamp
-    }
+    oneof expiration_datetime {int64 present = 2; } // Option<i64> - Unix timestamp
 }
 
 message JoinCommunity {

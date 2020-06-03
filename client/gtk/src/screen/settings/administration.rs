@@ -10,10 +10,13 @@ use crate::{Glade, Client, screen};
 use crate::screen::active::dialog;
 use users_search::UsersSearch;
 use admins_list::AdminsList;
+use reports_list::ReportsList;
 use crate::connect::AsConnector;
 
 mod users_search;
 mod admins_list;
+mod parse_search;
+mod reports_list;
 
 lazy_static! {
     static ref GLADE: Glade = Glade::open("settings/administration.glade").unwrap();
@@ -23,7 +26,8 @@ pub fn build_administration(client: Client<screen::active::Ui>) -> gtk::Widget {
     let builder: gtk::Builder = GLADE.builder();
     let main: gtk::Box = builder.get_object("main").unwrap();
     UsersSearch::build(builder.clone(), client.clone());
-    AdminsList::build(builder, client);
+    AdminsList::build(builder.clone(), client.clone());
+    ReportsList::build(builder, client);
     main.upcast()
 }
 

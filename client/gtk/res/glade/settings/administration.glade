@@ -37,7 +37,7 @@
             <property name="baseline_position">top</property>
             <child>
               <object class="GtkButton" id="set_compromised_button">
-                <property name="label" translatable="yes">Set All Accounts Compromised</property>
+                <property name="label" translatable="yes">Set all accounts compromised</property>
                 <property name="name">set_compromised_button</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
@@ -52,7 +52,7 @@
             </child>
             <child>
               <object class="GtkButton">
-                <property name="label" translatable="yes">Set Accounts with Old Hashes Compromised</property>
+                <property name="label" translatable="yes">Set Accounts with old hashes compromised</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -341,7 +341,7 @@
             </child>
             <child>
               <object class="GtkButton" id="promote_button">
-                <property name="label" translatable="yes">Promote to Admin</property>
+                <property name="label" translatable="yes">Promote to admin</property>
                 <property name="name">promote_button</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
@@ -402,19 +402,44 @@
           </packing>
         </child>
         <child>
-          <object class="GtkSearchEntry" id="reports_search_entry">
-            <property name="name">reports_search_entry</property>
+          <object class="GtkBox">
             <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="halign">start</property>
-            <property name="max_width_chars">30</property>
-            <property name="primary_icon_name">edit-find-symbolic</property>
-            <property name="primary_icon_activatable">False</property>
-            <property name="primary_icon_sensitive">False</property>
-            <property name="placeholder_text" translatable="yes">Search reports by user...</property>
-            <style>
-              <class name="search_entry"/>
-            </style>
+            <property name="can_focus">False</property>
+            <child>
+              <object class="GtkSearchEntry" id="reports_search_entry">
+                <property name="name">reports_search_entry</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="halign">start</property>
+                <property name="max_width_chars">30</property>
+                <property name="primary_icon_name">edit-find-symbolic</property>
+                <property name="primary_icon_activatable">False</property>
+                <property name="primary_icon_sensitive">False</property>
+                <property name="placeholder_text" translatable="yes">Search reports...</property>
+                <style>
+                  <class name="search_entry"/>
+                </style>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="list_reports">
+                <property name="label" translatable="yes">List all reports</property>
+                <property name="name">list_reports</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -423,23 +448,25 @@
           </packing>
         </child>
         <child>
-          <object class="GtkScrolledWindow" id="reports_search_scroll">
-            <property name="name">reports_search_scroll</property>
+          <object class="GtkScrolledWindow" id="reports_scroll">
+            <property name="name">reports_scroll</property>
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="shadow_type">in</property>
+            <property name="propagate_natural_height">True</property>
             <child>
               <object class="GtkViewport">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <child>
-                  <object class="GtkListBox" id="reports_search_list">
-                    <property name="name">reports_search_list</property>
+                  <object class="GtkBox" id="reports_list">
+                    <property name="name">reports_list</property>
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <style>
-                      <class name="search_list"/>
-                    </style>
+                    <property name="orientation">vertical</property>
+                    <child>
+                      <placeholder/>
+                    </child>
                   </object>
                 </child>
               </object>

@@ -13,6 +13,8 @@ message AdminRequest {
         Unban unban_user = 6;
         Unlock unlock_user = 7;
         types.None list_all_admins = 8;
+        SearchCriteria search_for_reports = 9;
+        SetReportStatus set_report_status = 10;
     }
 }
 
@@ -20,6 +22,7 @@ message AdminResponse {
     oneof response {
         SearchedUsers searched_users = 1;
         Admins admins = 2;
+        Reports reports = 3;
     }
 }
 
@@ -70,4 +73,58 @@ message Admin {
     string username = 1;
     types.UserId id = 2;
     int64 permissions_flags = 3;
+}
+
+message ReportUser {
+    types.UserId id = 1;
+    string username = 2;
+}
+
+message ReportMessage {
+    types.MessageId id = 1; // Can be null
+    string text = 2;
+    int64 sent_at = 3;
+}
+
+message ReportRoom {
+    types.RoomId id = 1;
+    string name = 2;
+}
+
+message ReportCommunity {
+    types.CommunityId id = 1;
+    string name = 2;
+}
+
+message Report {
+    int32 id = 1;
+    ReportUser reporter = 2; // Nullable
+    ReportUser reported = 3;
+    ReportMessage message = 4;
+    ReportRoom room = 5; // Nullable
+    ReportCommunity community = 6; // Nullable
+    int64 datetime = 7;
+    string short_desc = 8;
+    string extended_desc = 9;
+    uint32 status = 10;
+}
+
+message Reports {
+    repeated Report reports = 1;
+}
+
+message SearchCriteria {
+    string words = 1;
+    oneof of_user { string of_user_present = 2; }; // Option<String>
+    oneof by_user { string by_user_present = 3; }; //      "
+    oneof before_date { int64 before_timestamp = 4; }; //  (etc) - Unix timestamp
+    oneof after_date { int64 after_timestamp = 5; };
+    oneof in_community { string in_community_present = 6; };
+    oneof in_room { string in_room_present = 7; };
+    oneof status { uint32 status_code = 8; };
+}
+
+message SetReportStatus {
+    int32 id = 1;
+    uint32 status = 2;
 }

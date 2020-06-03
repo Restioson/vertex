@@ -363,35 +363,35 @@ checkbutton {
   padding: 6px;
 }
 
-#active #messages row, #active #message row:hover {
+#messages row, #message row:hover {
   background: @content_bg_color;
 }
 
-#active #message_entry {
+#message_entry {
   background: @message_entry_color;
   color: shade(@widget_color, 0.7);
   margin: 7px 4px;
   border-radius: 10px;
 }
 
-#active #message_entry:focus {
+#message_entry:focus {
   background: shade(@message_entry_color, 1.2);
   color: @widget_color;
 }
 
-#active #message_entry.disabled {
+#message_entry.disabled {
   background: shade(@message_entry_color, 0.9);
   color: shade(@widget_color, 0.5);
 }
 
-#active #message #message_settings {
+#message #message_settings {
   opacity: 0;
   margin: 1px;
   margin-right: 2px;
   margin-left: 2px;
 }
 
-#active #message #message_settings.active {
+#message #message_settings.active {
   opacity: 1
 }
 
@@ -403,7 +403,7 @@ checkbutton {
   padding: 0px;
 }
 
-#active #message .embed {
+#message .embed {
   background: @sidebar_bg_color;
   min-width: 320px;
   padding: 6px;
@@ -411,16 +411,16 @@ checkbutton {
   border-radius: 10px;
 }
 
-#active #message #invite #community_header {
+#message #invite #community_header {
   padding: 4px;
 }
 
-#active #message #invite #label {
+#message #invite #label {
   color: @subtitle_color;
   font-size: 15px;
 }
 
-#active #message #invite #community_icon {
+#message #invite #community_icon {
   min-width: 40px;
   min-height: 40px;
 
@@ -430,23 +430,23 @@ checkbutton {
   border-radius: 20px;
 }
 
-#active #message #invite #community_icon border {
+#message #invite #community_icon border {
   border-style: none;
 }
 
-#active #message #invite #community_name {
+#message #invite #community_name {
   color: #d0d0d0;
   font-size: 15px;
   font-weight: 600;
 }
 
-#active #message #invite #community_description {
+#message #invite #community_description {
   color: @subtitle_color;
   font-size: 15px;
   font-style: italic;
 }
 
-#active #message #invite #join_button {
+#message #invite #join_button {
   min-width: 60px;
   min-height: 10px;
   background: transparent;
@@ -457,17 +457,17 @@ checkbutton {
   border-radius: 20px;
 }
 
-#active #message #invite #join_button:hover {
+#message #invite #join_button:hover {
   background: @widget_bg_color;
 }
 
-#active #message #opengraph #title {
+#message #opengraph #title {
   color: #d0d0d0;
   font-size: 15px;
   font-weight: 600;
 }
 
-#active #message #opengraph #description {
+#message #opengraph #description {
   color: @subtitle_color;
   font-size: 15px;
   font-style: italic;
@@ -559,24 +559,24 @@ checkbutton {
   margin-left: 8px;
 }
 
-#active #message_group {
+#message_group {
   font-size: 15px;
   padding: 7px;
 }
 
-#active #message_group #author_name {
+#message_group #author_name {
   font-weight: 600;
   padding-left: 2px;
 }
 
-#active #message_group #timestamp {
+#message_group #timestamp {
   font-size: 13px;
   font-style: italic;
   color: grey;
   padding-left: 7px;
 }
 
-#active #message_group #author_icon {
+#message_group #author_icon {
   min-width: 40px;
   min-height: 40px;
 
@@ -586,25 +586,29 @@ checkbutton {
   border-radius: 20px;
 }
 
-#active #entry_list row {
+#active #entry_list row, .report_message row {
   padding: 2px;
   border-radius: 6px;
 }
 
-#active #entry_list row:hover {
+#active #entry_list row:hover, .report_message row:hover {
   background: shade(@content_bg_color, 0.9);
 }
 
-#active #message #message_text {
+.report_message row {
+  background: @content_bg_color;
+}
+
+#message #message_text {
   color: #e0e0e0;
   font-size: 15px;
 }
 
-#active #message #message_text.pending {
+#message #message_text.pending {
   color: @subtitle_color;
 }
 
-#active #message #message_text.error {
+ #message #message_text.error {
   color: @error_color;
 }
 
@@ -832,4 +836,23 @@ checkbutton {
   min-height: 20px;
   padding: 8px;
   margin: 4px;
+}
+
+/* reports */
+#report label {
+  font-size: 16px;
+  margin-left: 10px;
+}
+
+#report button label {
+  margin-left: 0px;
+}
+
+.report_message row {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+#settings #reports_scroll {
+  min-height: 400px;
 }

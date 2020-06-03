@@ -37,6 +37,7 @@ pub enum DeserializeError {
     NullField,
     InvalidEnumVariant,
     ProtobufError(prost::DecodeError),
+    IntOutOfRange,
 }
 
 impl From<uuid::Error> for DeserializeError {
@@ -54,5 +55,11 @@ impl From<prost::DecodeError> for DeserializeError {
 impl From<std::option::NoneError> for DeserializeError {
     fn from(_err: std::option::NoneError) -> Self {
         DeserializeError::NullField
+    }
+}
+
+impl From<std::num::TryFromIntError> for DeserializeError {
+    fn from(_err: std::num::TryFromIntError) -> Self {
+        DeserializeError::IntOutOfRange
     }
 }

@@ -25,7 +25,7 @@ use vertex::requests::AuthError;
 
 mod community;
 pub mod dialog;
-mod message;
+pub mod message;
 mod room;
 mod chat;
 

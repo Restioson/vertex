@@ -158,11 +158,7 @@ impl TryFrom<proto::structures::RoomUpdate> for RoomUpdate {
 
     fn try_from(update: proto::structures::RoomUpdate) -> Result<Self, Self::Error> {
         Ok(RoomUpdate {
-            last_read: if let Some(last_read) = update.last_read {
-                Some(last_read.try_into()?)
-            } else {
-                None
-            },
+            last_read: update.last_read.map(|x| x.try_into()).transpose()?,
             new_messages: if let Some(new_messages) = update.new_messages {
                 new_messages.try_into()?
             } else {
@@ -391,18 +387,10 @@ impl From<TokenCreationOptions> for proto::structures::TokenCreationOptions {
         use proto::structures::token_creation_options::{DeviceName, ExpirationDatetime};
 
         proto::structures::TokenCreationOptions {
-            device_name: if let Some(name) = options.device_name {
-                Some(DeviceName::DeviceNamePresent(name))
-            } else {
-                None
-            },
-            expiration_datetime: if let Some(dt) = options.expiration_datetime {
-                Some(ExpirationDatetime::ExpirationDatetimePresent(
-                    dt.timestamp(),
-                ))
-            } else {
-                None
-            },
+            device_name: options.device_name.map(DeviceName::DeviceNamePresent),
+            expiration_datetime: options.expiration_datetime
+                .map(|dt| dt.timestamp())
+                .map(ExpirationDatetime::ExpirationDatetimePresent),
             permission_flags: options.permission_flags.bits,
         }
     }
