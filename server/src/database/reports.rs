@@ -263,7 +263,6 @@ impl Database {
             )
         };
         let query = query.replace("%order%", &order);
-        dbg!(&query);
         let stream = self.query_stream(&query, &args).await?;
         let stream = stream
             .map(|row| Ok(row_to_report(&row?)?))
