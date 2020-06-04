@@ -22,12 +22,47 @@ lazy_static! {
     static ref GLADE: Glade = Glade::open("settings/administration.glade").unwrap();
 }
 
-pub fn build_administration(client: Client<screen::active::Ui>) -> gtk::Widget {
+pub fn build_administration(
+    client: Client<screen::active::Ui>,
+    perms: AdminPermissionFlags,
+) -> gtk::Widget {
+    use vertex::requests::AdminPermissionFlags as Perms;
+
     let builder: gtk::Builder = GLADE.builder();
     let main: gtk::Box = builder.get_object("main").unwrap();
     UsersSearch::build(builder.clone(), client.clone());
     AdminsList::build(builder.clone(), client.clone());
-    ReportsList::build(builder, client);
+    ReportsList::build(builder.clone() , client.clone());
+
+    if perms.contains(Perms::SET_ACCOUNTS_COMPROMISED) || perms.contains(Perms::ALL) {
+        let buttons: gtk::Box = builder.get_object("set_compromised_buttons").unwrap();
+        let set_all_compromised = gtk::Button::new_with_label("Set all accounts compromised");
+        set_all_compromised.connect_clicked(
+            client.connector()
+                .do_async(|client, _| async move {
+                    if let Err(e) = client.set_compromised(SetCompromisedType::All).await {
+                        dialog::show_generic_error(&e)
+                    }
+                })
+                .build_cloned_consumer()
+        );
+        let set_old_compromised = gtk::Button::new_with_label(
+            "Set accounts with old hashes compromised"
+        );
+        set_old_compromised.connect_clicked(
+            client.connector()
+                .do_async(|client, _| async move {
+                    if let Err(e) = client.set_compromised(SetCompromisedType::OldHashes).await {
+                        dialog::show_generic_error(&e)
+                    }
+                })
+                .build_cloned_consumer()
+        );
+        buttons.add(&set_all_compromised);
+        buttons.add(&set_old_compromised);
+        buttons.show_all();
+    }
+
     main.upcast()
 }
 

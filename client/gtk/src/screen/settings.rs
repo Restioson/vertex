@@ -60,12 +60,12 @@ pub async fn build(client: Client<screen::active::Ui>) -> Screen {
         log_out,
     };
 
-    bind_events(&screen);
+    bind_events(&screen, perms);
 
     screen
 }
 
-fn bind_events(screen: &Screen) {
+fn bind_events(screen: &Screen, perms: vertex::requests::AdminPermissionFlags) {
     screen.close.connect_clicked(
         screen.connector()
             .do_sync(|screen, _| window::set_screen(&screen.client.ui.main))
@@ -83,7 +83,7 @@ fn bind_events(screen: &Screen) {
 
     screen.category_list.connect_row_selected(
         screen.connector()
-            .do_async(|screen, (_list, row)| async move {
+            .do_async(move |screen, (_list, row)| async move {
                 if let Some(row) = row {
                     let row: gtk::ListBoxRow = row;
                     let name = row.get_widget_name()
@@ -91,7 +91,7 @@ fn bind_events(screen: &Screen) {
                         .unwrap_or_default();
 
                     let widget = match name.as_str() {
-                        "admin" => Some(build_administration(screen.client)),
+                        "admin" => Some(build_administration(screen.client, perms)),
                         "a11y" => Some(build_accessibility()),
                         _ => None,
                     };

@@ -60,13 +60,6 @@ impl User {
         Ok(())
     }
 
-    pub async fn change_password(&self, old_password: String, new_password: String) -> Result<()> {
-        let request = ClientRequest::ChangePassword { old_password, new_password };
-        let request = self.request.send(request).await;
-        request.response().await?;
-        Ok(())
-    }
-
     pub async fn profile(&self) -> Profile {
         self.state.read().await.profile.clone()
     }

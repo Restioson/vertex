@@ -115,10 +115,6 @@ pub enum ClientRequest {
     ChangeDisplayName {
         new_display_name: String,
     },
-    ChangePassword {
-        old_password: String,
-        new_password: String,
-    },
     GetProfile(UserId),
     ChangeCommunityName {
         community: CommunityId,
@@ -203,13 +199,6 @@ impl From<ClientRequest> for proto::requests::active::ClientRequest {
             ChangeDisplayName { new_display_name } => {
                 Request::ChangeDisplayName(request::ChangeDisplayName { new_display_name })
             }
-            ChangePassword {
-                old_password,
-                new_password,
-            } => Request::ChangePassword(request::ChangePassword {
-                new_password,
-                old_password,
-            }),
             GetProfile(id) => Request::GetProfile(request::GetProfile {
                 user: Some(id.into()),
             }),
@@ -297,10 +286,6 @@ impl TryFrom<proto::requests::active::ClientRequest> for ClientRequest {
             },
             ChangeDisplayName(change) => ClientRequest::ChangeDisplayName {
                 new_display_name: change.new_display_name,
-            },
-            ChangePassword(change) => ClientRequest::ChangePassword {
-                old_password: change.old_password,
-                new_password: change.new_password,
             },
             GetProfile(get) => ClientRequest::GetProfile(get.user?.try_into()?),
             ChangeCommunityName(change) => ClientRequest::ChangeCommunityName {

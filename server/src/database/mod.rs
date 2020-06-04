@@ -155,7 +155,7 @@ impl Database {
                 .await
                 .expect("Database error while sweeping tokens")
                 .try_for_each(|(user, device)| async move {
-                    let _ = client::session::remove_and_notify(user, device); // Don't care
+                    let _ = client::session::remove_and_notify_device(user, device); // Don't care
                     Ok(())
                 })
                 .await

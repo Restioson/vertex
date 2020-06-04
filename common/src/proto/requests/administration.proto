@@ -15,6 +15,7 @@ message AdminRequest {
         types.None list_all_admins = 8;
         SearchCriteria search_for_reports = 9;
         SetReportStatus set_report_status = 10;
+        SetCompromisedType set_accounts_compromised = 11;
     }
 }
 
@@ -127,4 +128,9 @@ message SearchCriteria {
 message SetReportStatus {
     int32 id = 1;
     uint32 status = 2;
+}
+
+enum SetCompromisedType {
+    All = 0;
+    OldHashes = 1;
 }

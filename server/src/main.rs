@@ -254,13 +254,22 @@ async fn main() {
             reply_protobuf(self::refresh_token(global, bytes).await)
         });
 
+    let change_password = warp::path("change_password")
+        .and(global.clone())
+        .and(warp::post())
+        .and(warp::body::bytes())
+        .and_then(|global, bytes| async move {
+            reply_protobuf(self::change_password(global, bytes).await)
+        });
+
     let invite = warp::path!("invite" / String)
         //  .and(warp::header::<String>("host")) // https://github.com/seanmonstar/warp/issues/432
         .and(global.clone())
         .and_then(|invite, global| self::invite_reply(global, invite));
 
     let token = warp::path("token").and(create_token.or(revoke_token).or(refresh_token));
-    let client = warp::path("client").and(authenticate.or(register.or(token)));
+    let auth = authenticate.or(register.or(token.or(change_password)));
+    let client = warp::path("client").and(auth);
     let routes = invite.or(client);
     let routes = warp::path("vertex").and(routes);
 
@@ -337,9 +346,9 @@ async fn login(
     };
 
     let details = authenticator.login(login.device, login.token).await?;
-    let (user, device, perms) = details;
+    let (user, device, perms, hsv) = details;
 
-    match client::session::insert(global.database.clone(), user, device).await? {
+    match client::session::insert(global.database.clone(), user, device, hsv).await? {
         Ok(_) => {
             let upgrade = ws.on_upgrade(move |websocket| {
                 let (sink, stream) = websocket.split();
@@ -417,6 +426,21 @@ async fn revoke_token(global: Global, bytes: bytes::Bytes) -> AuthResponse {
     authenticator
         .revoke_token(revoke_token.credentials, revoke_token.device)
         .await
+}
+
+async fn change_password(global: Global, bytes: bytes::Bytes) -> AuthResponse {
+    let change = match AuthRequest::from_protobuf_bytes(&bytes)? {
+        AuthRequest::ChangePassword(change) => change,
+        _ => return AuthResponse::Err(AuthError::WrongEndpoint),
+    };
+
+    let credentials = Credentials {
+        username: change.username,
+        password: change.old_password,
+    };
+
+    let authenticator = Authenticator { global };
+    authenticator.change_password(credentials, change.new_password).await
 }
 
 async fn invite_reply(

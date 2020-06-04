@@ -506,6 +506,15 @@ impl<Ui: ClientUi> Client<Ui> {
             _ => Err(Error::UnexpectedMessage),
         }
     }
+
+    pub async fn set_compromised(&self, typ: SetCompromisedType) -> Result<()> {
+        let request = ClientRequest::AdminAction(AdminRequest::SetAccountsCompromised(typ));
+        let request = self.request.send(request).await;
+        match request.response().await? {
+            OkResponse::NoData => Ok(()),
+            _ => Err(Error::UnexpectedMessage),
+        }
+    }
 }
 
 struct ClientLoop<Ui: ClientUi, S> {

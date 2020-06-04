@@ -27,12 +27,11 @@ message ClientRequest {
         structures.Delete delete = 13;
         ChangeUsername change_username = 14;
         ChangeDisplayName change_display_name = 15;
-        ChangePassword change_password = 16;
-        GetProfile get_profile = 17;
-        ChangeCommunityName change_community_name = 18;
-        ChangeCommunityDescription change_community_description = 19;
-        administration.AdminRequest admin_action = 20;
-        ReportUser report_user = 21;
+        GetProfile get_profile = 16;
+        ChangeCommunityName change_community_name = 17;
+        ChangeCommunityDescription change_community_description = 18;
+        administration.AdminRequest admin_action = 19;
+        ReportUser report_user = 20;
     }
 }
 
@@ -100,11 +99,6 @@ message ChangeUsername {
 
 message ChangeDisplayName {
     string new_display_name = 2;
-}
-
-message ChangePassword {
-    string old_password = 1;
-    string new_password = 2;
 }
 
 message GetProfile {

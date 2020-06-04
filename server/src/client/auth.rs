@@ -6,6 +6,7 @@ use vertex::prelude::*;
 
 use crate::auth;
 use crate::database;
+use crate::auth::HashSchemeVersion;
 
 pub struct Authenticator {
     pub global: crate::Global,
@@ -16,7 +17,7 @@ impl Authenticator {
         &self,
         device: DeviceId,
         pass: AuthToken,
-    ) -> Result<(UserId, DeviceId, TokenPermissionFlags), AuthError> {
+    ) -> Result<(UserId, DeviceId, TokenPermissionFlags, HashSchemeVersion), AuthError> {
         let token = match self.global.database.get_token(device).await? {
             Some(token) => token,
             None => return Err(AuthError::InvalidToken),
@@ -47,7 +48,7 @@ impl Authenticator {
         let database::Token {
             token_hash,
             hash_scheme_version,
-            user,
+            user: user_id,
             permission_flags,
             ..
         } = token;
@@ -60,7 +61,7 @@ impl Authenticator {
             return Err(AuthError::InvalidToken);
         }
 
-        Ok((user, device, permission_flags))
+        Ok((user_id, device, permission_flags, user.hash_scheme_version))
     }
 
     pub async fn create_user(
@@ -157,6 +158,38 @@ impl Authenticator {
             Ok(_) => AuthResponse::Ok(AuthOk::NoData),
             Err(_) => AuthResponse::Err(AuthError::InvalidToken),
         }
+    }
+
+    pub async fn change_password(
+        &self,
+        old_credentials: Credentials,
+        new_password: String,
+    ) -> AuthResponse {
+        if !auth::valid_password(&new_password, &self.global.config) {
+            return AuthResponse::Err(AuthError::InvalidPassword);
+        }
+
+        let db = &self.global.database;
+        let user = db
+            .get_user_by_name(old_credentials.username)
+            .await?
+            .ok_or(AuthError::IncorrectCredentials)?;
+
+        let user_id = user.id;
+        if !auth::verify_user(user, old_credentials.password).await {
+            return AuthResponse::Err(AuthError::IncorrectCredentials);
+        }
+
+        let (new_password_hash, hash_version) = auth::hash(new_password).await;
+
+        let database = &self.global.database;
+        database
+            .change_password(user_id, new_password_hash, hash_version)
+            .await?
+            .map_err(|_| AuthError::IncorrectCredentials)?;
+
+        super::session::remove_and_notify_user(user_id);
+        AuthResponse::Ok(AuthOk::NoData)
     }
 
     async fn verify_credentials(&self, credentials: Credentials) -> AuthResponse {

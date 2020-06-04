@@ -120,6 +120,7 @@ pub struct AuthParameters {
     pub instance: Server,
     pub device: DeviceId,
     pub token: AuthToken,
+    pub username: String, // TODO(change_username): update
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]

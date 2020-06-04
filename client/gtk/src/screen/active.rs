@@ -347,12 +347,17 @@ pub async fn start(parameters: AuthParameters) {
 
             match error {
                 Error::AuthErrorResponse(e) => {
-                    if e != AuthError::TokenInUse {
+                    if e != AuthError::TokenInUse || e != AuthError::UserCompromised {
                         token_store::forget_token();
                     }
 
-                    let screen = screen::login::build().await;
-                    window::set_screen(&screen.main);
+                    if e == AuthError::UserCompromised {
+                        let screen = screen::compromised::build(parameters).await;
+                        window::set_screen(&screen.main);
+                    } else {
+                        let screen = screen::login::build().await;
+                        window::set_screen(&screen.main);
+                    }
                 }
                 _ => {
                     let error = describe_error(error);

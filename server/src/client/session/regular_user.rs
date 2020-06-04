@@ -35,10 +35,6 @@ impl<'a> RequestHandler<'a> {
             ClientRequest::ChangeDisplayName { new_display_name } => {
                 self.change_display_name(new_display_name).await
             }
-            ClientRequest::ChangePassword {
-                old_password,
-                new_password,
-            } => self.change_password(old_password, new_password).await,
             ClientRequest::CreateRoom { name, community } => {
                 self.create_room(name, community).await
             }
@@ -85,25 +81,6 @@ impl<'a> RequestHandler<'a> {
                 extended_desc,
             } => self.report_user(message, short_desc, extended_desc).await,
             _ => Err(Error::Unimplemented),
-        }
-    }
-
-    async fn verify_password(&mut self, password: String) -> Result<(), Error> {
-        let user = match self
-            .session
-            .global
-            .database
-            .get_user_by_id(self.user)
-            .await?
-        {
-            Some(user) => user,
-            None => return Err(Error::InvalidUser),
-        };
-
-        if auth::verify_user(user, password).await {
-            Ok(())
-        } else {
-            Err(Error::IncorrectUsernameOrPassword)
         }
     }
 
@@ -222,33 +199,6 @@ impl<'a> RequestHandler<'a> {
             .change_display_name(self.user, new_display_name)
             .await?
         {
-            Ok(()) => Ok(OkResponse::NoData),
-            Err(_) => {
-                self.ctx.stop(); // The user did not exist at the time of request
-                Err(Error::LoggedOut)
-            }
-        }
-    }
-
-    async fn change_password(
-        mut self,
-        old_password: String,
-        new_password: String,
-    ) -> Result<OkResponse, Error> {
-        if !auth::valid_password(&new_password, &self.session.global.config) {
-            return Err(Error::InvalidPassword);
-        }
-
-        self.verify_password(old_password).await?;
-
-        let (new_password_hash, hash_version) = auth::hash(new_password).await;
-
-        let database = &self.session.global.database;
-        let res = database
-            .change_password(self.user, new_password_hash, hash_version)
-            .await?;
-
-        match res {
             Ok(()) => Ok(OkResponse::NoData),
             Err(_) => {
                 self.ctx.stop(); // The user did not exist at the time of request

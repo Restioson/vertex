@@ -18,6 +18,8 @@ bitflags! {
         /// automatically grants this one - it is just used as a placeholder in case of not granting
         /// any other admin permissions.
         const IS_ADMIN = 1 << 3;
+        /// Whether the user can set accounts compromised
+        const SET_ACCOUNTS_COMPROMISED = 1 << 4;
     }
 }
 
@@ -42,6 +44,7 @@ pub enum AdminRequest {
         id: i32,
         status: ReportStatus,
     },
+    SetAccountsCompromised(SetCompromisedType),
 }
 
 impl From<AdminRequest> for proto::requests::administration::AdminRequest {
@@ -75,6 +78,9 @@ impl From<AdminRequest> for proto::requests::administration::AdminRequest {
                 id,
                 status: status as i8 as u32,
             }),
+            SetAccountsCompromised(typ) => Request::SetAccountsCompromised(
+                request::SetCompromisedType::from(typ) as i32
+            ),
         };
 
         proto::requests::administration::AdminRequest {
@@ -107,7 +113,12 @@ impl TryFrom<proto::requests::administration::AdminRequest> for AdminRequest {
             SetReportStatus(set) => AdminRequest::SetReportStatus {
                 id: set.id,
                 status: i8::try_from(set.status)?.try_into()?,
-            }
+            },
+            SetAccountsCompromised(typ) => {
+                let typ = proto::requests::administration::SetCompromisedType::from_i32(typ)
+                    .ok_or(DeserializeError::InvalidEnumVariant)?;
+                AdminRequest::SetAccountsCompromised(typ.try_into()?)
+            },
         };
 
         Ok(req)
@@ -482,6 +493,36 @@ impl From<SearchCriteria> for proto::requests::administration::SearchCriteria {
             in_community: c.in_community.map(InCommunity::InCommunityPresent),
             in_room: c.in_room.map(InRoom::InRoomPresent),
             status: c.status.map(|x| Status::StatusCode(x as i8 as u32))
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+pub enum SetCompromisedType {
+    All,
+    OldHashes,
+}
+
+impl TryFrom<proto::requests::administration::SetCompromisedType> for SetCompromisedType {
+    type Error = DeserializeError;
+
+    fn try_from(
+        o: proto::requests::administration::SetCompromisedType
+    ) -> Result<Self, Self::Error> {
+        use proto::requests::administration as proto;
+        Ok(match o {
+            proto::SetCompromisedType::All => SetCompromisedType::All,
+            proto::SetCompromisedType::OldHashes => SetCompromisedType::OldHashes
+        })
+    }
+}
+
+impl From<SetCompromisedType> for proto::requests::administration::SetCompromisedType {
+    fn from(o: SetCompromisedType) -> proto::requests::administration::SetCompromisedType {
+        use proto::requests::administration as proto;
+        match o {
+            SetCompromisedType::All => proto::SetCompromisedType::All,
+            SetCompromisedType::OldHashes => proto::SetCompromisedType::OldHashes,
         }
     }
 }

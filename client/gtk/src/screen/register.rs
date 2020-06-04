@@ -2,7 +2,7 @@ use gtk::prelude::*;
 
 use lazy_static::lazy_static;
 
-use crate::{auth, AuthParameters, Error, Result, Server, token_store, TryGetText, window};
+use crate::{AuthParameters, Error, Result, Server, token_store, TryGetText, window};
 use crate::connect::AsConnector;
 use crate::Glade;
 use crate::screen;
@@ -68,21 +68,19 @@ async fn bind_events(screen: &Screen) {
                 screen.error_label.set_text("");
 
                 let password = if password_1 == password_2 {
-                    Some(password_1)
+                    password_1
                 } else {
                     screen.error_label.set_text("Passwords do not match");
-                    None
+                    return;
                 };
 
-                if let Some(password) = password {
-                    match register(instance_ip, username, password).await {
-                        Ok(parameters) => {
-                            screen::active::start(parameters).await;
-                        }
-                        Err(err) => {
-                            println!("Encountered error during register: {:?}", err);
-                            screen.error_label.set_text(&describe_error(err));
-                        }
+                match register(instance_ip, username, password).await {
+                    Ok(parameters) => {
+                        screen::active::start(parameters).await;
+                    }
+                    Err(err) => {
+                        println!("Encountered error during register: {:?}", err);
+                        screen.error_label.set_text(&describe_error(err));
                     }
                 }
 
@@ -93,16 +91,16 @@ async fn bind_events(screen: &Screen) {
 }
 
 async fn register(
-    instance_: String,
+    instance: String,
     username: String,
     password: String,
 ) -> Result<AuthParameters> {
     use vertex::prelude::*;
 
-    let instance = Server::parse(instance_)?;
-    let credentials = Credentials::new(username, password);
+    let instance = Server::parse(instance)?;
+    let credentials = Credentials::new(username.clone(), password);
 
-    let auth = auth::Client::new(instance.clone());
+    let auth = crate::auth::Client::new(instance.clone());
 
     auth.register(credentials.clone(), None).await?;
 
@@ -115,6 +113,7 @@ async fn register(
         instance,
         device: token.device,
         token: token.token,
+        username,
     };
 
     token_store::store_token(&parameters);

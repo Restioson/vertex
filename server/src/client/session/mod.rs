@@ -300,7 +300,7 @@ impl ActiveSession {
 
     /// Remove the device from wherever it is referenced
     fn log_out(&mut self) {
-        manager::remove(self.user, self.device);
+        manager::remove_device(self.user, self.device);
     }
 
     fn in_community(&self, id: &CommunityId) -> Result<bool, Error> {

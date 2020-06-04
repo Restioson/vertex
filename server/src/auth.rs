@@ -9,7 +9,7 @@ use crate::database::UserRecord;
 pub const MAX_TOKEN_LENGTH: usize = 45;
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(u8)]
+#[repr(i16)]
 pub enum HashSchemeVersion {
     Argon2V1 = 1,
 }
@@ -91,3 +91,4 @@ pub fn verify(
 pub async fn verify_user(user: UserRecord, password: String) -> bool {
     verify(password, user.password_hash, user.hash_scheme_version).await
 }
+

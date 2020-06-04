@@ -5,6 +5,8 @@ use futures::TryStreamExt;
 use std::future::Future;
 use vertex::prelude::*;
 use xtra::prelude::*;
+use crate::auth::HashSchemeVersion;
+use crate::client::session::LogoutThisSession;
 
 struct AdminPermissionsChanged(AdminPermissionFlags);
 
@@ -41,6 +43,7 @@ impl ActiveSession {
             AdminRequest::ListAllAdmins => self.list_all_admins().await,
             AdminRequest::SearchForReports(criteria) => self.search_reports(criteria).await,
             AdminRequest::SetReportStatus { id, status } => self.set_report_status(id, status).await,
+            AdminRequest::SetAccountsCompromised(typ) => self.set_accounts_compromised(typ).await,
             _ => Err(Error::Unimplemented),
         }
     }
@@ -180,6 +183,42 @@ impl ActiveSession {
         status: ReportStatus
     ) -> Result<OkResponse, Error> {
         self.global.database.set_report_status(id, status).await?;
+        Ok(OkResponse::NoData)
+    }
+
+    async fn set_accounts_compromised(
+        &mut self,
+        typ: SetCompromisedType,
+    ) -> Result<OkResponse, Error> {
+        if !self.has_admin_perms(AdminPermissionFlags::SET_ACCOUNTS_COMPROMISED)? {
+            return Err(Error::AccessDenied)
+        }
+
+        let db = &self.global.database;
+        let all = typ == SetCompromisedType::All;
+        match typ {
+            SetCompromisedType::All => db.set_all_accounts_compromised().await?,
+            SetCompromisedType::OldHashes => db.set_accounts_with_old_hashes_compromised().await?,
+        }
+
+        // Log out logged-in users
+        super::manager::USERS
+            .retain(|_, user| {
+                if user.hash_scheme_version < HashSchemeVersion::LATEST || all {
+                    let sessions = &mut user.sessions;
+                    for (_, session) in sessions {
+                        if let Session::Active { actor, .. } = session {
+                            let _ = actor.do_send(LogoutThisSession)
+                                .map_err(handle_disconnected("ClientSession"));
+                        }
+                    }
+
+                    false
+                } else {
+                    true
+                }
+            });
+
         Ok(OkResponse::NoData)
     }
 }

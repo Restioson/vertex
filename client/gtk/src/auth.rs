@@ -146,6 +146,26 @@ impl Client {
         }
     }
 
+    pub async fn change_password(
+        &self,
+        old_credentials: Credentials,
+        new_password: String,
+    ) -> Result<()> {
+        let req = AuthRequest::ChangePassword(ChangePassword {
+            username: old_credentials.username,
+            old_password: old_credentials.password,
+            new_password,
+        });
+        let url = self.server.url().join("change_password")?;
+        let response = self.post_auth(req, url).await?;
+        dbg!(&response);
+
+        match response? {
+            AuthOk::NoData => Ok(()),
+            _ => Err(Error::UnexpectedMessage),
+        }
+    }
+
     async fn post_auth(&self, request: AuthRequest, url: Url) -> Result<AuthResponse> {
         let request = hyper::Request::builder()
             .uri(url.as_str().parse::<hyper::Uri>()?)
@@ -156,6 +176,7 @@ impl Client {
         let response = self.client.request(request).await?;
         let bytes = hyper::body::to_bytes(response.into_body()).await?;
 
+        dbg!(&bytes);
         Ok(AuthResponse::from_protobuf_bytes(&bytes)?)
     }
 }
