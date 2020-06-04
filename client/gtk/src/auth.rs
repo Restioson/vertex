@@ -158,7 +158,6 @@ impl Client {
         });
         let url = self.server.url().join("change_password")?;
         let response = self.post_auth(req, url).await?;
-        dbg!(&response);
 
         match response? {
             AuthOk::NoData => Ok(()),
@@ -176,7 +175,6 @@ impl Client {
         let response = self.client.request(request).await?;
         let bytes = hyper::body::to_bytes(response.into_body()).await?;
 
-        dbg!(&bytes);
         Ok(AuthResponse::from_protobuf_bytes(&bytes)?)
     }
 }
