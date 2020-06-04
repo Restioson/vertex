@@ -1,0 +1,9 @@
+#settings .search_list check, checkbutton check {
+  background: #7a7a7a;
+  color: black;
+}
+
+#settings .search_list check:hover {
+  background: #7a7a7a;
+  color: black;
+}

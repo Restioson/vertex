@@ -183,12 +183,20 @@ fn resource<P: AsRef<Path>>(rest: P) -> String {
     path.into_os_string().into_string().expect("tmp path is invalid utf-8!")
 }
 
-fn setup_gtk_style() {
+fn setup_gtk_style(config: &Config) {
     let screen = gdk::Screen::get_default().expect("unable to get screen");
     let css_provider = gtk::CssProvider::new();
     css_provider.load_from_path(&resource("style.css")).expect("unable to load css");
 
-    gtk::StyleContext::add_provider_for_screen(&screen, &css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    let priority = gtk::STYLE_PROVIDER_PRIORITY_APPLICATION;
+    gtk::StyleContext::add_provider_for_screen(&screen, &css_provider, priority);
+
+    if config.high_contrast_css {
+        let css_provider = gtk::CssProvider::new();
+        css_provider.load_from_path(&resource("high-contrast.css"))
+            .expect("unable to load css");
+        gtk::StyleContext::add_provider_for_screen(&screen, &css_provider, priority);
+    }
 }
 
 fn main() {
@@ -221,7 +229,7 @@ fn main() {
         // use native windows decoration
         #[cfg(windows)] std::env::set_var("GTK_CSD", "0");
 
-        setup_gtk_style();
+        setup_gtk_style(&conf);
 
         let mut window = gtk::ApplicationWindowBuilder::new()
             .application(application)

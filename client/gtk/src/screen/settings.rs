@@ -119,12 +119,21 @@ fn build_accessibility() -> gtk::Widget {
     let viewport: gtk::Box = builder.get_object("main").unwrap();
 
     let narrate_new: gtk::Switch = builder.get_object("narrate_new").unwrap();
+    let high_contrast: gtk::Switch = builder.get_object("high_contrast").unwrap();
 
     let config = config::get();
     narrate_new.set_state(config.narrate_new_messages);
+    high_contrast.set_state(config.high_contrast_css);
 
     narrate_new.connect_state_set(|_switch, state| {
         config::modify(|config| config.narrate_new_messages = state);
+        gtk::Inhibit(false)
+    });
+    high_contrast.connect_state_set(|_switch, state| {
+        config::modify(|config| {
+            config.high_contrast_css = state;
+            crate::setup_gtk_style(config);
+        });
         gtk::Inhibit(false)
     });
 

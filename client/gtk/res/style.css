@@ -220,9 +220,6 @@ checkbutton, #settings .search_list check {
   min-width: 17px;
 }
 
-#settings .search_list check, checkbutton check {
-  background-color: #2D2D2D;
-}
 
 checkbutton check {
   margin-right: 15px;
@@ -763,13 +760,16 @@ checkbutton {
   font-weight: 500;
 }
 
-#settings .search_list:hover {
-  color: #e0e0e0;
-  background: shade(@sidebar_bg_color, 1.1);
+#settings .search_list check, checkbutton check {
+  background: shade(@dark_widget_bg_color, 0.95);
 }
 
-#settings .search_list:active {
-  color: @error_color;
+#settings .search_list check:hover {
+  background: @dark_widget_bg_color;
+}
+
+#settings .search_list:hover {
+  background: shade(@sidebar_bg_color, 1.1);
 }
 
 #settings .setting_description {
