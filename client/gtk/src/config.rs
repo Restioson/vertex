@@ -10,7 +10,6 @@ pub struct Config {
     pub resolution: (i32, i32),
     pub maximized: bool,
     pub full_screen: bool,
-    pub uri_installed: bool,
 }
 
 impl Default for Config {
@@ -20,7 +19,6 @@ impl Default for Config {
             resolution: (1280, 720),
             maximized: false,
             full_screen: false,
-            uri_installed: false,
         }
     }
 }

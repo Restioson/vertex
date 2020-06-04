@@ -217,19 +217,6 @@ fn main() {
         RUNNING.store(true, Ordering::SeqCst);
 
         let conf = config::get();
-        if !conf.uri_installed {
-            let exec = String::from(std::env::current_exe().unwrap().to_str().unwrap());
-            let app = system_uri::App::new(
-                "cf.vertex.gtk".to_string(),
-                "Vertex Developers".to_string(),
-                "Vertex Client".to_string(),
-                exec,
-                None,
-            );
-            if let Err(e) = system_uri::install(&app, &["vertex".to_string()]) {
-                eprintln!("Error installing uri handler for \"vertex://\": {:?}", e);
-            }
-        }
 
         // use native windows decoration
         #[cfg(windows)] std::env::set_var("GTK_CSD", "0");
