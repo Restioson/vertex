@@ -544,9 +544,7 @@ impl<'a> RequestHandler<'a> {
         let db = &self.session.global.database;
         let msg = match db.get_message_by_id(message).await? {
             Some(m) => m,
-            None => {
-                return Err(Error::InvalidMessage)
-            },
+            None => return Err(Error::InvalidMessage),
         };
 
         if !self.session.in_room(&msg.community, &msg.room)? {

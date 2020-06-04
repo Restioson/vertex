@@ -91,4 +91,3 @@ pub fn verify(
 pub async fn verify_user(user: UserRecord, password: String) -> bool {
     verify(password, user.password_hash, user.hash_scheme_version).await
 }
-

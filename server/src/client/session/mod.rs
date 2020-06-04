@@ -443,10 +443,7 @@ impl ActiveSession {
     }
 }
 
-fn own_user_nonexistent<T: Debug, S: xtra::Actor>(
-    client: &T,
-    ctx: &mut Context<S>
-) -> ServerEvent {
+fn own_user_nonexistent<T: Debug, S: xtra::Actor>(client: &T, ctx: &mut Context<S>) -> ServerEvent {
     warn!(
         "Nonexistent user! Is this a timing anomaly? Client: {:#?}",
         client

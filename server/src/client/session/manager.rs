@@ -5,9 +5,9 @@ use lazy_static::lazy_static;
 use vertex::prelude::*;
 
 use super::*;
+use crate::auth::HashSchemeVersion;
 use futures::TryStreamExt;
 use std::collections::HashMap;
-use crate::auth::HashSchemeVersion;
 
 lazy_static! {
     pub static ref USERS: DashMap<UserId, ActiveUser> = DashMap::new();
@@ -143,8 +143,9 @@ pub async fn insert(
             user,
             device,
             hash_scheme_version,
-            Session::Upgrading
-        ).await?;
+            Session::Upgrading,
+        )
+        .await?;
         USERS.insert(user, active_user);
     }
 
@@ -174,16 +175,14 @@ pub fn remove_and_notify_user(user: UserId) {
     let mut lock = USERS.get_mut(&user);
     if let Some(ref mut active_user) = lock {
         let sessions = &mut active_user.sessions;
-        sessions.retain(|_, session| {
-            match session {
-                Session::Active { actor, .. } => {
-                    let _ = actor
-                        .do_send(LogoutThisSession)
-                        .map_err(handle_disconnected("ClientSession"));
-                    false
-                },
-                _ => true,
+        sessions.retain(|_, session| match session {
+            Session::Active { actor, .. } => {
+                let _ = actor
+                    .do_send(LogoutThisSession)
+                    .map_err(handle_disconnected("ClientSession"));
+                false
             }
+            _ => true,
         });
 
         if sessions.is_empty() {

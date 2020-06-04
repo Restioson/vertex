@@ -5,8 +5,8 @@ use uuid::Uuid;
 use vertex::prelude::*;
 
 use crate::auth;
-use crate::database;
 use crate::auth::HashSchemeVersion;
+use crate::database;
 
 pub struct Authenticator {
     pub global: crate::Global,

@@ -85,7 +85,8 @@ fn append_checkbutton_column(header: &str, list: &gtk::ListStore, tree: &gtk::Tr
             .do_sync(move |store, (_cell, path): (gtk::CellRendererToggle, gtk::TreePath)| {
                 let row = store.get_iter(&path).unwrap();
                 let toggled = store.get_value(&row, id).get::<bool>().unwrap().unwrap();
-                store.set_value(&row, id as u32, &(!toggled).to_value())
+                let toggled = !toggled;
+                store.set_value(&row, id as u32, &toggled.to_value())
             })
             .build_widget_and_owned_listener()
     );

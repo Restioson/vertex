@@ -1,6 +1,6 @@
 use crate::database::{Database, DbResult, MessageRecord};
 use chrono::{DateTime, Utc};
-use futures::{Stream, TryStreamExt, StreamExt};
+use futures::{Stream, StreamExt, TryStreamExt};
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
@@ -113,10 +113,15 @@ fn row_to_report(row: &Row) -> Result<VertexReport, tokio_postgres::Error> {
 
     Ok(VertexReport {
         id: record.id,
-        reporter: report.reporter_user.map(|id| Ok(ReportUser {
-            id,
-            username: row.try_get("reporter_username")?,
-        })).transpose()?,
+        reporter: report
+            .reporter_user
+            .map(|id| {
+                Ok(ReportUser {
+                    id,
+                    username: row.try_get("reporter_username")?,
+                })
+            })
+            .transpose()?,
         reported: ReportUser {
             id: report.reported_user,
             username: row.try_get("reported_username")?,
@@ -126,14 +131,24 @@ fn row_to_report(row: &Row) -> Result<VertexReport, tokio_postgres::Error> {
             text: report.message_text,
             sent_at: row.try_get("msg_sent_at")?,
         },
-        room: report.room.map(|id| Ok(ReportRoom {
-            id,
-            name: row.try_get("room_name")?
-        })).transpose()?,
-        community: report.community.map(|id| Ok(ReportCommunity {
-            id,
-            name: row.try_get("community_name")?
-        })).transpose()?,
+        room: report
+            .room
+            .map(|id| {
+                Ok(ReportRoom {
+                    id,
+                    name: row.try_get("room_name")?,
+                })
+            })
+            .transpose()?,
+        community: report
+            .community
+            .map(|id| {
+                Ok(ReportCommunity {
+                    id,
+                    name: row.try_get("community_name")?,
+                })
+            })
+            .transpose()?,
         datetime: record.datetime,
         short_desc: report.short_desc,
         extended_desc: report.extended_desc,

@@ -1,12 +1,12 @@
 use super::manager;
+use crate::auth::HashSchemeVersion;
+use crate::client::session::LogoutThisSession;
 use crate::client::{ActiveSession, Session};
 use crate::handle_disconnected;
 use futures::TryStreamExt;
 use std::future::Future;
 use vertex::prelude::*;
 use xtra::prelude::*;
-use crate::auth::HashSchemeVersion;
-use crate::client::session::LogoutThisSession;
 
 struct AdminPermissionsChanged(AdminPermissionFlags);
 
@@ -42,7 +42,9 @@ impl ActiveSession {
             AdminRequest::ListAllUsers => self.list_all_users().await,
             AdminRequest::ListAllAdmins => self.list_all_admins().await,
             AdminRequest::SearchForReports(criteria) => self.search_reports(criteria).await,
-            AdminRequest::SetReportStatus { id, status } => self.set_report_status(id, status).await,
+            AdminRequest::SetReportStatus { id, status } => {
+                self.set_report_status(id, status).await
+            }
             AdminRequest::SetAccountsCompromised(typ) => self.set_accounts_compromised(typ).await,
             _ => Err(Error::Unimplemented),
         }
@@ -116,6 +118,19 @@ impl ActiveSession {
         }
 
         let db = &self.global.database;
+        let their_perms = db
+            .get_admin_permissions(user)
+            .await
+            .map_err(|_| Error::InvalidUser)?; // Error assumes that we are getting own user
+
+        // Don't allow demoting more privileged users
+        let all = AdminPermissionFlags::ALL;
+        if user != self.user &&
+            (their_perms.contains(self.admin_perms()?) || their_perms.contains(all)) {
+            return Err(Error::AccessDenied);
+        }
+
+        let db = &self.global.database;
 
         db.set_admin_permissions(user, perms)
             .await?
@@ -140,7 +155,9 @@ impl ActiveSession {
             .map_err(|_| Error::InvalidUser)?; // Error assumes that we are getting own user
 
         // Don't allow demoting more privileged users but allow demoting self
-        if user != self.user && their_perms.contains(self.admin_perms()?) {
+        let all = AdminPermissionFlags::ALL;
+        if user != self.user &&
+            (their_perms.contains(self.admin_perms()?) || their_perms.contains(all)) {
             return Err(Error::AccessDenied);
         }
 
@@ -180,7 +197,7 @@ impl ActiveSession {
     async fn set_report_status(
         &mut self,
         id: i32,
-        status: ReportStatus
+        status: ReportStatus,
     ) -> Result<OkResponse, Error> {
         self.global.database.set_report_status(id, status).await?;
         Ok(OkResponse::NoData)
@@ -191,7 +208,7 @@ impl ActiveSession {
         typ: SetCompromisedType,
     ) -> Result<OkResponse, Error> {
         if !self.has_admin_perms(AdminPermissionFlags::SET_ACCOUNTS_COMPROMISED)? {
-            return Err(Error::AccessDenied)
+            return Err(Error::AccessDenied);
         }
 
         let db = &self.global.database;
@@ -202,22 +219,22 @@ impl ActiveSession {
         }
 
         // Log out logged-in users
-        super::manager::USERS
-            .retain(|_, user| {
-                if user.hash_scheme_version < HashSchemeVersion::LATEST || all {
-                    let sessions = &mut user.sessions;
-                    for (_, session) in sessions {
-                        if let Session::Active { actor, .. } = session {
-                            let _ = actor.do_send(LogoutThisSession)
-                                .map_err(handle_disconnected("ClientSession"));
-                        }
+        super::manager::USERS.retain(|_, user| {
+            if user.hash_scheme_version < HashSchemeVersion::LATEST || all {
+                let sessions = &mut user.sessions;
+                for (_, session) in sessions {
+                    if let Session::Active { actor, .. } = session {
+                        let _ = actor
+                            .do_send(LogoutThisSession)
+                            .map_err(handle_disconnected("ClientSession"));
                     }
-
-                    false
-                } else {
-                    true
                 }
-            });
+
+                false
+            } else {
+                true
+            }
+        });
 
         Ok(OkResponse::NoData)
     }

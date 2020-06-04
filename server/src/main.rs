@@ -440,7 +440,9 @@ async fn change_password(global: Global, bytes: bytes::Bytes) -> AuthResponse {
     };
 
     let authenticator = Authenticator { global };
-    authenticator.change_password(credentials, change.new_password).await
+    authenticator
+        .change_password(credentials, change.new_password)
+        .await
 }
 
 async fn invite_reply(

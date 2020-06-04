@@ -342,7 +342,8 @@ impl Database {
     }
 
     pub async fn set_accounts_with_old_hashes_compromised(&self) -> DbResult<()> {
-        const SET_COMPROMISED: &str = "UPDATE users SET compromised = $1 WHERE hash_scheme_version < $2";
+        const SET_COMPROMISED: &str =
+            "UPDATE users SET compromised = $1 WHERE hash_scheme_version < $2";
         const DELETE_TOKENS: &str = "
             DELETE FROM login_tokens
                 USING users
@@ -351,7 +352,9 @@ impl Database {
 
         let conn = self.pool.connection().await?;
         let stmt = conn.client.prepare(SET_COMPROMISED).await?;
-        conn.client.execute(&stmt, &[&true, &(HashSchemeVersion::LATEST as i16)]).await?;
+        conn.client
+            .execute(&stmt, &[&true, &(HashSchemeVersion::LATEST as i16)])
+            .await?;
 
         let stmt = conn.client.prepare(DELETE_TOKENS).await?;
         conn.client.execute(&stmt, &[]).await?;
