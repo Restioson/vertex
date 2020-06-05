@@ -239,6 +239,10 @@ checkbutton {
   background-color: rgba(0, 0, 0, 0.4);
 }
 
+.dialog label {
+  font-size: 15px;
+}
+
 .dialog {
   background: @dialog_bg_color;
   min-width: 100px;

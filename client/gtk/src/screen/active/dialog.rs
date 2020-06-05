@@ -9,6 +9,7 @@ use crate::window;
 use super::Ui;
 use gtk::{DialogFlags, ResponseType, Label, EntryBuilder, WidgetExt, TextBufferBuilder, ScrolledWindowBuilder};
 use atk::{RelationType, AtkObjectExt, RelationSetExt};
+use futures::Future;
 
 pub fn show_add_community(client: Client<Ui>) {
     window::show_dialog(|window| {
@@ -395,6 +396,53 @@ pub fn show_choose_report_action(client: Client<Ui>, user: UserId) {
     });
 }
 
+pub fn show_confirm<C, F, D>(
+    heading: &str,
+    body: &str,
+    connector: D,
+    if_yes: C,
+) where C: FnMut(D) -> F + Clone + 'static,
+        F: Future<Output = ()> + 'static,
+        D: Clone + 'static,
+{
+    window::show_dialog(|window| {
+        let dialog = gtk::Dialog::new_with_buttons(
+            None,
+            Some(&window.window),
+            DialogFlags::MODAL | DialogFlags::DESTROY_WITH_PARENT,
+            &[("Ok", ResponseType::Ok), ("Cancel", ResponseType::Cancel)],
+        );
+
+        let heading = Label::new(Some(heading));
+        heading.get_style_context().add_class("title");
+        let title_box = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
+            .child(&heading)
+            .build();
+
+        let description: gtk::Label = gtk::Label::new(Some(body));
+
+        let content = dialog.get_content_area();
+        content.add(&title_box);
+        content.add(&description);
+
+        dialog.connect_response(
+            (if_yes, connector).connector()
+                .do_async(|(mut c, d), (dialog, response): (gtk::Dialog, gtk::ResponseType)| {
+                    async move {
+                        if response == ResponseType::Ok {
+                            c(d).await;
+                        }
+                        dialog.emit_close()
+                    }
+                })
+                .build_widget_and_owned_listener()
+        );
+
+        (dialog, title_box)
+    });
+}
 
 pub fn show_generic_error<E: std::fmt::Display>(error: &E) {
     window::show_dialog(|window| {

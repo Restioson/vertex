@@ -39,27 +39,24 @@ pub fn build_administration(
         let set_all_compromised = gtk::Button::new_with_label("Set all accounts compromised");
         set_all_compromised.connect_clicked(
             client.connector()
-                .do_async(|client, _| async move {
-                    if let Err(e) = client.set_compromised(SetCompromisedType::All).await {
-                        dialog::show_generic_error(&e)
-                    }
+                .do_sync(|client, _| {
+                    dialog::show_confirm(
+                        "Confirm Action",
+                        "Are you sure you want to mark all\naccounts as compromised? \
+                        This will\nlog out all users and require them\nto change their passwords.",
+                        client,
+                        |client| async move {
+                            if let Err(e) = client.set_compromised(SetCompromisedType::All).await {
+                                dialog::show_generic_error(&e)
+                            }
+                        },
+                    );
+
                 })
                 .build_cloned_consumer()
         );
-        let set_old_compromised = gtk::Button::new_with_label(
-            "Set accounts with old hashes compromised"
-        );
-        set_old_compromised.connect_clicked(
-            client.connector()
-                .do_async(|client, _| async move {
-                    if let Err(e) = client.set_compromised(SetCompromisedType::OldHashes).await {
-                        dialog::show_generic_error(&e)
-                    }
-                })
-                .build_cloned_consumer()
-        );
+
         buttons.add(&set_all_compromised);
-        buttons.add(&set_old_compromised);
         buttons.show_all();
     }
 
