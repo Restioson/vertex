@@ -22,7 +22,7 @@
             <property name="selectable">True</property>
             <property name="xalign">0</property>
             <style>
-              <class name="setting_heading"/>
+              <class name="admin_setting_heading"/>
             </style>
           </object>
           <packing>
@@ -72,7 +72,7 @@
             <property name="selectable">True</property>
             <property name="xalign">0</property>
             <style>
-              <class name="setting_heading"/>
+              <class name="admin_setting_heading"/>
             </style>
           </object>
           <packing>
@@ -175,7 +175,7 @@
             <property name="selectable">True</property>
             <property name="xalign">0</property>
             <style>
-              <class name="setting_heading"/>
+              <class name="admin_setting_heading"/>
             </style>
           </object>
           <packing>
@@ -375,7 +375,7 @@
             <property name="selectable">True</property>
             <property name="xalign">0</property>
             <style>
-              <class name="setting_heading"/>
+              <class name="admin_setting_heading"/>
             </style>
           </object>
           <packing>

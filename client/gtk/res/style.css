@@ -265,10 +265,10 @@ checkbutton {
 
 .dialog .title {
   font-size: 20px;
+  padding: 8px 0px;
 }
 
 .dialog .title, .dialog entry, .dialog button {
-  padding: 8px;
   margin: 4px;
 }
 
@@ -725,9 +725,13 @@ checkbutton {
   margin-right: 10px;
 }
 
-#settings .setting_heading {
+#settings .setting_heading, #settings .admin_setting_heading {
   font-weight: 600;
   font-size: 18px;
+  padding: 8px 0px;
+}
+
+#settings .admin_setting_heading {
   padding: 8px;
 }
 

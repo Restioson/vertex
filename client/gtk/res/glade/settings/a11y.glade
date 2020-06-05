@@ -38,6 +38,7 @@
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>
                 <property name="label" translatable="yes">Narrate New Messages</property>
+                <property name="xalign">0</property>
                 <style>
                   <class name="setting_heading"/>
                 </style>
@@ -111,6 +112,7 @@
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>
                 <property name="label" translatable="yes">High Contrast Colours</property>
+                <property name="xalign">0</property>
                 <style>
                   <class name="setting_heading"/>
                 </style>
@@ -126,8 +128,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>
-                <property name="label" translatable="yes">Alters the colour scheme to so that certain elements are
-more highly contrasted with their backgrounds.</property>
+                <property name="label" translatable="yes">Alters the colour scheme to so that certain elements are more highly contrasted with their backgrounds.</property>
                 <property name="wrap">True</property>
                 <property name="xalign">0</property>
                 <style>
