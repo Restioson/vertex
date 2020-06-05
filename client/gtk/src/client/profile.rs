@@ -35,7 +35,7 @@ impl ProfileCache {
         match self.get(id, version).await {
             Ok(profile) => profile,
             Err(err) => {
-                println!("failed to get profile for {:?}: {:?}", id, err);
+                log::warn!("failed to get profile for {:?}: {:?}", id, err);
                 let existing = self.get_existing(id, None).await;
                 existing.unwrap_or_else(|| create_default_profile(id))
             }

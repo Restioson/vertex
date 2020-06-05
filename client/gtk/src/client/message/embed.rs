@@ -51,7 +51,7 @@ impl EmbedCache {
         match get_link_metadata(&url).await {
             Ok(metadata) => build_embed(url, metadata),
             Err(err) => {
-                println!("error trying to load embed from {}: {:?}", url, err);
+                log::warn!("error trying to load embed from {}: {:?}", url, err);
                 let embed = ErrorEmbed {
                     url: url.clone(),
                     title: url,

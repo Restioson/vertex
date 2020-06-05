@@ -79,7 +79,7 @@ async fn bind_events(screen: &Screen) {
                         screen::active::start(parameters).await;
                     }
                     Err(err) => {
-                        println!("Encountered error during register: {:?}", err);
+                        log::error!("Encountered error during register: {:?}", err);
                         screen.error_label.set_text(&describe_error(err));
                     }
                 }

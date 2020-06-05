@@ -39,7 +39,6 @@ directories = "^2"
 toml = "^0.5"
 unicode-normalization = "^0.1"
 log = "^0.4"
-fern = "^0.5"
 dashmap = "^3"
 backtrace = "^0.3"
 governor = { version = "^0.2", default-features = false, features = ["std", "dashmap"] }

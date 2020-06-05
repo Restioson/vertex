@@ -223,6 +223,7 @@ fn main() {
             return;
         }
         RUNNING.store(true, Ordering::SeqCst);
+        vertex::setup_logging("vertex_client_gtk", log::LevelFilter::Info);
 
         let conf = config::get();
 

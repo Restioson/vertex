@@ -343,7 +343,7 @@ pub async fn start(parameters: AuthParameters) {
             window::set_screen(&client.ui.main);
         }
         Err(error) => {
-            println!("encountered error connecting client: {:?}", error);
+            log::error!("encountered error connecting client: {:?}", error);
 
             match error {
                 Error::AuthErrorResponse(e) => {

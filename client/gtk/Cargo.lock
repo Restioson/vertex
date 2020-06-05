@@ -470,6 +470,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
 
 [[package]]
+name = "fern"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e69ab0d5aca163e388c3a49d284fed6c3d0810700e77c5ae2756a50ec1a4daaa"
+dependencies = [
+ "chrono",
+ "log",
+]
+
+[[package]]
 name = "fixedbitset"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2502,6 +2512,9 @@ version = "0.1.0"
 dependencies = [
  "bitflags 1.2.1",
  "chrono",
+ "directories",
+ "fern",
+ "log",
  "prost",
  "prost-build",
  "serde",
@@ -2532,6 +2545,7 @@ dependencies = [
  "keyring",
  "lazy_static 1.4.0",
  "linkify",
+ "log",
  "native-tls",
  "nom",
  "notify-rust",

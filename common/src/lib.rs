@@ -3,6 +3,8 @@
 #![feature(try_trait)]
 
 use std::time::Duration;
+use std::fs;
+use std::fs::OpenOptions;
 
 pub mod events;
 pub mod proto;
@@ -21,3 +23,45 @@ pub mod prelude {
 }
 
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
+
+pub fn setup_logging(
+    name: &str,
+    log_level: log::LevelFilter,
+) {
+    let dirs = directories::ProjectDirs::from("", "vertex_chat", name)
+        .expect("Error getting project directories");
+    let dir = dirs.data_dir().join("logs");
+
+    fs::create_dir_all(&dir)
+        .unwrap_or_else(|_| panic!("Error creating log dirs ({})", dir.to_string_lossy()));
+
+    fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{}] [{}] [{}] {}",
+                chrono::Local::now().to_rfc3339(),
+                record.level(),
+                record.target(),
+                message
+            ))
+        })
+        .level(log_level)
+        .chain(std::io::stdout())
+        .chain(
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(
+                    dir.join(
+                        chrono::Local::now()
+                            .format(&format!("{}_%Y-%m-%d_%H-%M-%S.log", name))
+                            .to_string(),
+                    ),
+                )
+                .expect("Error opening log file"),
+        )
+        .apply()
+        .expect("Error setting logger settings");
+
+    log::info!("Logging set up");
+}

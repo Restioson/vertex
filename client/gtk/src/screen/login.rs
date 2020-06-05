@@ -58,7 +58,7 @@ async fn bind_events(screen: &Screen) {
                 let instance = match Server::parse(instance_ip) {
                     Ok(instance) => instance,
                     Err(err) => {
-                        println!("Encountered error during login: {:?}", err);
+                        log::error!("Encountered error during login: {:?}", err);
                         screen.error_label.set_text(&describe_error(err));
                         screen.status_stack.set_visible_child(&screen.error_label);
                         return;
@@ -70,7 +70,7 @@ async fn bind_events(screen: &Screen) {
                         screen::active::start(parameters).await;
                     }
                     Err(err) => {
-                        println!("Encountered error during login: {:?}", err);
+                        log::error!("Encountered error during login: {:?}", err);
                         screen.error_label.set_text(&describe_error(err));
                     }
                 }

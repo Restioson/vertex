@@ -182,12 +182,12 @@ impl<Ui: ClientUi> Client<Ui> {
                 let state = self.state.upgrade().unwrap();
                 state.write().await.admin_perms = new_perms;
             }
-            unexpected => println!("unhandled server event: {:?}", unexpected),
+            unexpected => log::warn!("unhandled server event: {:?}", unexpected),
         }
     }
 
     async fn handle_network_err(&self, err: tungstenite::Error) {
-        println!("network error: {:?}", err);
+        log::warn!("network error: {:?}", err);
 
         let error = format!("{}", err);
         let screen = screen::loading::build_error(error, crate::start);
@@ -200,7 +200,7 @@ impl<Ui: ClientUi> Client<Ui> {
         if let Some(community) = self.community_by_id(community).await {
             community.add_room(room).await;
         } else {
-            println!("received AddRoom for invalid community: {:?}", community);
+            log::warn!("received AddRoom for invalid community: {:?}", community);
         }
     }
 
@@ -234,7 +234,7 @@ impl<Ui: ClientUi> Client<Ui> {
             }
         }
 
-        println!("received message for invalid room: {:?}#{:?}", community, room);
+        log::warn!("received message for invalid room: {:?}#{:?}", community, room);
     }
 
     pub async fn create_community(&self, name: &str) -> Result<CommunityEntry<Ui>> {
@@ -310,7 +310,7 @@ impl<Ui: ClientUi> Client<Ui> {
         match room.get_updates().await {
             Ok(update) => chat.update(update).await,
             Err(err) => {
-                println!("failed to get updates for room: {:?}", err);
+                log::warn!("failed to get updates for room: {:?}", err);
             }
         }
 
@@ -580,7 +580,7 @@ impl<Ui: ClientUi, S> ClientLoop<Ui, S>
                             show_generic_error(&err);
                         }
                     } else if let Err(e) = meta {
-                        println!("{:?}", e);
+                        log::warn!("{:?}", e);
                     }
                 }
             }.fuse()

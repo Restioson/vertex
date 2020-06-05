@@ -38,7 +38,7 @@ pub fn modify<F: FnOnce(&mut Config)>(f: F) {
 pub fn commit(config: Config) {
     CONFIG.store(Some(Arc::new(config.clone())));
     if let Err(err) = confy::store(CONFIG_NAME, config) {
-        eprintln!("failed to commit config: {:?}", err);
+        log::error!("failed to commit config: {:?}", err);
     }
 }
 
@@ -55,7 +55,7 @@ pub fn get() -> Arc<Config> {
             config
         }
         Err(err) => {
-            eprintln!("failed to load config: {:?}", err);
+            log::error!("failed to load config: {:?}", err);
             Arc::new(Config::default())
         }
     }

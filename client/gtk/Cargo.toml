@@ -84,6 +84,8 @@ bimap = "0.4"
 nom = "^5"
 itertools = "^0.8"
 
+log = "^0.4"
+
 vertex = { path = "../../common" }
 
 [build-dependencies]

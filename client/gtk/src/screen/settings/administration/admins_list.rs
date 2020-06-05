@@ -89,7 +89,10 @@ impl AdminsList {
                                 2 => AdminPermissionFlags::BAN,
                                 3 => AdminPermissionFlags::PROMOTE,
                                 4 => AdminPermissionFlags::SET_ACCOUNTS_COMPROMISED,
-                                _ => panic!("Invalid col #"),
+                                e => {
+                                    log::error!("Invalid column # {} in admin permissions table!", e);
+                                    panic!("Invalid col # {}", e);
+                                },
                             };
                             let name = store.get_value(&row, 1).get::<String>().unwrap().unwrap();
                             let name_to_id = name_to_id.lock().unwrap();

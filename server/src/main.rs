@@ -1,15 +1,12 @@
 #![feature(type_alias_impl_trait, generic_associated_types, type_ascription)]
 
 use std::convert::Infallible;
-use std::fs;
-use std::fs::OpenOptions;
 use std::num::NonZeroU32;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
-use directories::ProjectDirs;
 use futures::StreamExt;
 use governor::clock::DefaultClock;
 use governor::state::keyed::DashMapStateStore;
@@ -97,45 +94,6 @@ fn handle_disconnected(actor_name: &'static str) -> impl Fn(Disconnected) -> Err
     }
 }
 
-fn setup_logging(config: &Config) {
-    let dirs = ProjectDirs::from("", "vertex_chat", "vertex_server")
-        .expect("Error getting project directories");
-    let dir = dirs.data_dir().join("logs");
-
-    fs::create_dir_all(&dir)
-        .unwrap_or_else(|_| panic!("Error creating log dirs ({})", dir.to_string_lossy()));
-
-    fern::Dispatch::new()
-        .format(|out, message, record| {
-            out.finish(format_args!(
-                "[{}] [{}] [{}] {}",
-                chrono::Local::now().to_rfc3339(),
-                record.level(),
-                record.target(),
-                message
-            ))
-        })
-        .level(LevelFilter::from_str(&config.log_level).unwrap())
-        .chain(std::io::stdout())
-        .chain(
-            OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(
-                    dir.join(
-                        chrono::Local::now()
-                            .format("vertex_server_%Y-%m-%d_%H-%M-%S.log")
-                            .to_string(),
-                    ),
-                )
-                .expect("Error opening log file"),
-        )
-        .apply()
-        .expect("Error setting logger settings");
-
-    info!("Logging set up");
-}
-
 async fn load_communities(db: Database) {
     let stream = db
         .get_all_communities()
@@ -178,7 +136,10 @@ async fn main() {
     println!("Vertex server starting...");
 
     let config = config::load_config();
-    setup_logging(&config);
+    vertex::setup_logging(
+        "vertex_server",
+        LevelFilter::from_str(&config.log_level).unwrap(),
+    );
 
     let (cert_path, key_path) = config::ssl_config();
     let database = Database::new().await.expect("Error in database setup");

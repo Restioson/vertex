@@ -108,8 +108,16 @@ impl RequestManager {
                     }
                     None
                 }
-                Ok(ServerMessage::MalformedMessage) => panic!("Malformed message"),
-                Ok(e) => unimplemented!("{:#?}", e),
+                Ok(ServerMessage::MalformedMessage) => {
+                    log::error!(
+                        "Server has informed us that we have sent a malformed message! Out of date?"
+                    );
+                    panic!("Malformed message")
+                },
+                Ok(e) => {
+                    log::error!("Unimplemented server message {:#?}", e);
+                    unimplemented!("{:#?}", e)
+                },
                 Err(e) => Some(Err(e)),
             })
         })

@@ -67,7 +67,7 @@ async fn bind_events(screen: &Screen, params: AuthParameters) {
                 let instance = params.instance;
                 let res = change_password(username.clone(), old, new.clone(), instance.clone()).await;
                 if let Err(err) = res {
-                    println!("Encountered error changing password: {:?}", err);
+                    log::error!("Encountered error changing password: {:?}", err);
                     screen.error_label.set_text(&login::describe_error(err));
                     screen.status_stack.set_visible_child(&screen.error_label);
                     return;
@@ -78,7 +78,7 @@ async fn bind_events(screen: &Screen, params: AuthParameters) {
                         screen::active::start(parameters).await;
                     }
                     Err(err) => {
-                        println!("Encountered error logging in: {:?}", err);
+                        log::error!("Encountered error logging in: {:?}", err);
                         screen.error_label.set_text(&login::describe_error(err));
                         screen.status_stack.set_visible_child(&screen.error_label);
                     }
