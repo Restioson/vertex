@@ -2,6 +2,7 @@ use gtk::prelude::*;
 use once_cell::unsync::OnceCell;
 use crate::connect::AsConnector;
 use crate::{config, resource};
+use atk::AtkObjectExt;
 
 thread_local! {
     pub static WINDOW: OnceCell<Window> = OnceCell::new();
@@ -92,6 +93,7 @@ pub fn show_dialog<F: FnOnce(&Window) -> (gtk::Dialog, gtk::Box)>(f: F) -> gtk::
             .halign(gtk::Align::End)
             .name("close_button")
             .build();
+        close_button.get_accessible().unwrap().set_name("Close");
 
         close_button.connect_clicked(
             dialog.connector()

@@ -100,6 +100,11 @@
                     <child internal-child="selection">
                       <object class="GtkTreeSelection"/>
                     </child>
+                    <child internal-child="accessible">
+                      <object class="AtkObject" id="admins_list-atkobject">
+                        <property name="AtkObject::accessible-name" translatable="yes">Administrators</property>
+                      </object>
+                    </child>
                     <style>
                       <class name="search_list"/>
                     </style>
@@ -248,6 +253,11 @@
                     <property name="enable_grid_lines">both</property>
                     <child internal-child="selection">
                       <object class="GtkTreeSelection"/>
+                    </child>
+                    <child internal-child="accessible">
+                      <object class="AtkObject" id="users_search_list-atkobject">
+                        <property name="AtkObject::accessible-name" translatable="yes">Users</property>
+                      </object>
                     </child>
                     <style>
                       <class name="search_list"/>
@@ -449,6 +459,11 @@
                     <property name="orientation">vertical</property>
                     <child>
                       <placeholder/>
+                    </child>
+                    <child internal-child="accessible">
+                      <object class="AtkObject" id="reports_list-atkobject">
+                        <property name="AtkObject::accessible-name" translatable="yes">Reports</property>
+                      </object>
                     </child>
                   </object>
                 </child>

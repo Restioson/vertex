@@ -541,6 +541,11 @@ impl<'a> RequestHandler<'a> {
             return Err(Error::AccessDenied);
         }
 
+        let msg_len = self.session.global.config.max_message_len as usize;
+        if short_desc.len() > 100 || extended_desc.len() > msg_len {
+            return Err(Error::TooLong)
+        }
+
         let db = &self.session.global.database;
         let msg = match db.get_message_by_id(message).await? {
             Some(m) => m,
