@@ -147,7 +147,7 @@ impl AdminsList {
             action,
             self.list.clone(),
             self.username_to_id.clone(),
-            self.client.clone()
+            &self.client,
         ).await
     }
 

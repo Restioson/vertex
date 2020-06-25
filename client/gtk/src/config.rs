@@ -11,6 +11,8 @@ pub struct Config {
     pub maximized: bool,
     pub full_screen: bool,
     pub high_contrast_css: bool,
+    pub screen_reader_message_list: bool,
+    pub message_editor_tweaks: bool,
 }
 
 impl Default for Config {
@@ -21,6 +23,8 @@ impl Default for Config {
             maximized: false,
             full_screen: false,
             high_contrast_css: false,
+            screen_reader_message_list: false,
+            message_editor_tweaks: true,
         }
     }
 }

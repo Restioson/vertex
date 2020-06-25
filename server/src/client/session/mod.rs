@@ -2,20 +2,22 @@ use std::fmt::Debug;
 use std::time::Instant;
 
 use futures::stream::SplitSink;
-use futures::{Future, SinkExt};
+use futures::SinkExt;
 use log::{debug, error, warn};
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
+use async_trait::async_trait;
 
 pub use manager::*;
 use vertex::prelude::*;
 
 use crate::community::{self, Connect, CreateRoom, GetRoomInfo, Join, COMMUNITIES};
 use crate::database::*;
-use crate::handle_disconnected;
+use crate::{handle_disconnected, Global};
 use regular_user::*;
 use std::fmt;
+use xtra::KeepRunning;
 
 mod administrator;
 mod manager;
@@ -25,12 +27,6 @@ mod regular_user;
 pub struct LogoutThisSession;
 
 impl xtra::Message for LogoutThisSession {
-    type Result = ();
-}
-
-pub struct WebSocketMessage(pub(crate) Result<ws::Message, warp::Error>);
-
-impl xtra::Message for WebSocketMessage {
     type Result = ();
 }
 
@@ -60,20 +56,38 @@ pub struct ForwardMessage {
     pub message: vertex::structures::Message,
 }
 
-impl xtra::Message for ForwardMessage {
-    type Result = ();
-}
-
 #[derive(Debug, Clone)]
 pub struct AddRoom {
     pub community: CommunityId,
     pub structure: RoomStructure,
 }
 
-impl xtra::Message for AddRoom {
-    type Result = ();
+#[derive(Debug)]
+pub struct WsMessage(pub Result<ws::Message, warp::Error>);
+
+impl xtra::Message for WsMessage {
+    type Result = KeepRunning;
 }
 
+#[spaad::entangled]
+#[async_trait]
+impl Handler<WsMessage> for ActiveSession {
+    async fn handle(&mut self, m: WsMessage, ctx: &mut Context<Self>) -> KeepRunning {
+        match self.handle_ws_message(m.0, ctx).await {
+            Ok(_) => KeepRunning::Yes,
+            Err(e) => {
+                debug!(
+                    "Error handling websocket message. Error: {:?}\nClient: {:#?}",
+                    e, self
+                );
+                ctx.stop();
+                KeepRunning::No
+            },
+        }
+    }
+}
+
+#[spaad::entangled]
 pub struct ActiveSession {
     pub ws: SplitSink<WebSocket, ws::Message>,
     pub global: crate::Global,
@@ -83,6 +97,7 @@ pub struct ActiveSession {
     pub perms: TokenPermissionFlags,
 }
 
+#[spaad::entangled]
 impl fmt::Debug for ActiveSession {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ActiveSession")
@@ -94,34 +109,7 @@ impl fmt::Debug for ActiveSession {
     }
 }
 
-impl ActiveSession {
-    /// Returns whether the client should be notified and whether the room had unread messages. It
-    /// also sets the room to unread.
-    fn should_notify_client(
-        &self,
-        community: CommunityId,
-        room: RoomId,
-    ) -> Result<(bool, bool), Error> {
-        let mut active_user = manager::get_active_user_mut(self.user)?;
-        let session = &active_user.sessions[&self.device];
-        let looking_at = session.as_active_looking_at().unwrap();
-
-        if let Some(user_community) = active_user.communities.get_mut(&community) {
-            if let Some(user_room) = user_community.rooms.get_mut(&room) {
-                let notify = looking_at == Some((community, room))
-                    || user_room.watch_level == WatchLevel::Watching;
-                let was_unread = user_room.unread;
-                user_room.unread = true;
-                Ok((notify, was_unread))
-            } else {
-                Err(Error::InvalidRoom)
-            }
-        } else {
-            Err(Error::InvalidCommunity)
-        }
-    }
-}
-
+#[spaad::entangled]
 impl Actor for ActiveSession {
     fn started(&mut self, ctx: &mut Context<Self>) {
         ctx.notify_immediately(NotifyClientReady);
@@ -133,162 +121,69 @@ impl Actor for ActiveSession {
     }
 }
 
-impl Handler<CheckHeartbeat> for ActiveSession {
-    type Responder<'a> = impl Future<Output = ()> + 'a;
-
-    fn handle(&mut self, _: CheckHeartbeat, ctx: &mut Context<Self>) -> Self::Responder<'_> {
+#[spaad::entangled]
+impl SyncHandler<CheckHeartbeat> for ActiveSession {
+    fn handle(&mut self, _: CheckHeartbeat, ctx: &mut Context<Self>) {
         if Instant::now().duration_since(self.heartbeat) > HEARTBEAT_TIMEOUT {
+            dbg!("heartbeat timeout");
             ctx.stop();
         }
-
-        async {}
     }
 }
 
-impl Handler<WebSocketMessage> for ActiveSession {
-    type Responder<'a> = impl Future<Output = ()> + 'a;
-
-    fn handle<'a>(
-        &'a mut self,
-        message: WebSocketMessage,
-        ctx: &'a mut Context<Self>,
-    ) -> Self::Responder<'a> {
-        async move {
-            if let Err(e) = self.handle_ws_message(message, ctx).await {
-                debug!(
-                    "Error handling websocket message. Error: {:?}\nClient: {:#?}",
-                    e, self
-                );
-                ctx.stop();
-            }
-        }
-    }
-}
-
+#[spaad::entangled]
+#[async_trait]
 impl Handler<NotifyClientReady> for ActiveSession {
-    type Responder<'a> = impl Future<Output = ()> + 'a;
-
-    fn handle<'a>(
-        &'a mut self,
-        _: NotifyClientReady,
-        ctx: &'a mut Context<Self>,
-    ) -> Self::Responder<'a> {
-        async move {
-            if let Err(e) = self.ready(ctx).await {
-                // Probably non-recoverable
-                let _ = self
-                    .try_send(ServerMessage::Event(ServerEvent::InternalError))
-                    .await;
-                error!("Error in client ready. Error: {:?}\nClient: {:#?}", e, self);
-                ctx.stop();
-            }
-        }
-    }
-}
-
-impl Handler<ForwardMessage> for ActiveSession {
-    type Responder<'a> = impl Future<Output = ()> + 'a;
-
-    fn handle<'a>(
-        &'a mut self,
-        fwd: ForwardMessage,
-        ctx: &'a mut Context<Self>,
-    ) -> Self::Responder<'a> {
-        async move {
-            // Ok path is (notify, unread messages)
-            let msg = match self.should_notify_client(fwd.community, fwd.room) {
-                // If the user is watching the room, always forward the message
-                Ok((true, _)) => ServerEvent::AddMessage {
-                    community: fwd.community,
-                    room: fwd.room,
-                    message: fwd.message,
-                },
-                // If the user is not watching but it wasn't unread, tell the client that there are new msgs
-                Ok((false, false)) => ServerEvent::NotifyMessageReady {
-                    room: fwd.room,
-                    community: fwd.community,
-                },
-                // It was unread, so we don't need to tell the client about the new messages.
-                Ok((false, true)) => return,
-                Err(Error::InvalidUser) => own_user_nonexistent(self, ctx),
-                Err(_) => return, // It's *probably* a timing anomaly.
-            };
-
-            self.send(ServerMessage::Event(msg), ctx).await;
-        }
-    }
-}
-
-impl Handler<AddRoom> for ActiveSession {
-    type Responder<'a> = impl Future<Output = ()> + 'a;
-
-    fn handle<'a>(&'a mut self, add: AddRoom, ctx: &'a mut Context<Self>) -> Self::Responder<'a> {
-        async move {
-            let mut user = match manager::get_active_user_mut(self.user) {
-                Ok(user) => user,
-                Err(_) => {
-                    let _ = self.send(ServerMessage::Event(ServerEvent::SessionLoggedOut), ctx);
-                    own_user_nonexistent(self, ctx);
-                    return;
-                }
-            };
-
-            if let Some(community) = user.communities.get_mut(&add.community) {
-                community.rooms.insert(
-                    add.structure.id,
-                    UserRoom {
-                        watch_level: WatchLevel::default(),
-                        unread: true,
-                    },
-                );
-
-                let msg = ServerMessage::Event(ServerEvent::AddRoom {
-                    community: add.community,
-                    structure: add.structure,
-                });
-
-                drop(user); // Drop lock
-                self.send(msg, ctx).await;
-            } // Else case is *probably* a timing anomaly
-        }
-    }
-}
-
-impl Handler<SendMessage<ServerMessage>> for ActiveSession {
-    type Responder<'a> = impl Future<Output = ()> + 'a;
-
-    fn handle<'a>(
-        &'a mut self,
-        msg: SendMessage<ServerMessage>,
-        ctx: &'a mut Context<Self>,
-    ) -> Self::Responder<'a> {
-        self.send(msg.0, ctx)
-    }
-}
-
-impl Handler<LogoutThisSession> for ActiveSession {
-    type Responder<'a> = impl Future<Output = ()> + 'a;
-
-    fn handle<'a>(
-        &'a mut self,
-        _: LogoutThisSession,
-        ctx: &'a mut Context<Self>,
-    ) -> Self::Responder<'a> {
-        async move {
-            self.send(ServerMessage::Event(ServerEvent::SessionLoggedOut), ctx)
+    async fn handle(&mut self, _: NotifyClientReady, ctx: &mut Context<Self>) {
+        if let Err(e) = self.ready(ctx).await {
+            // Probably non-recoverable
+            let _ = self
+                .try_send(ServerMessage::Event(ServerEvent::InternalError))
                 .await;
-            self.log_out();
+            error!("Error in client ready. Error: {:?}\nClient: {:#?}", e, self);
+            ctx.stop();
         }
     }
 }
 
+#[spaad::entangled]
+#[async_trait]
+impl Handler<LogoutThisSession> for ActiveSession {
+    async fn handle(&mut self, _: LogoutThisSession, ctx: &mut Context<Self>) {
+        self.send(ServerMessage::Event(ServerEvent::SessionLoggedOut), ctx)
+            .await;
+        self.log_out();
+    }
+}
+
+#[spaad::entangled]
 impl ActiveSession {
+    #[spaad::spawn]
+    pub fn new(
+        ws: SplitSink<WebSocket, ws::Message>,
+        global: Global,
+        user: UserId,
+        device: DeviceId,
+        perms: TokenPermissionFlags,
+    ) -> Self {
+        ActiveSession {
+            ws,
+            global,
+            heartbeat: Instant::now(),
+            user,
+            device,
+            perms,
+        }
+    }
+
     async fn try_send<M: Into<Vec<u8>>>(&mut self, msg: M) -> Result<(), warp::Error> {
         self.ws.send(ws::Message::binary(msg)).await
     }
 
-    #[inline]
-    async fn send<M: Into<Vec<u8>>>(&mut self, msg: M, ctx: &mut Context<Self>) {
+    #[spaad::handler]
+    pub async fn send<M>(&mut self, msg: M, ctx: &mut Context<Self>)
+        where M: Into<Vec<u8>> + Send + 'static
+    {
         if let Err(e) = self.try_send(msg).await {
             error!(
                 "Error sending websocket message. Error: {:?}\nClient: {:#?}",
@@ -317,6 +212,32 @@ impl ActiveSession {
         } else {
             false
         })
+    }
+
+    /// Returns whether the client should be notified and whether the room had unread messages. It
+    /// also sets the room to unread.
+    fn should_notify_client(
+        &self,
+        community: CommunityId,
+        room: RoomId,
+    ) -> Result<(bool, bool), Error> {
+        let mut active_user = manager::get_active_user_mut(self.user)?;
+        let session = &active_user.sessions[&self.device];
+        let looking_at = session.as_active_looking_at().unwrap();
+
+        if let Some(user_community) = active_user.communities.get_mut(&community) {
+            if let Some(user_room) = user_community.rooms.get_mut(&room) {
+                let notify = looking_at == Some((community, room))
+                    || user_room.watch_level == WatchLevel::Watching;
+                let was_unread = user_room.unread;
+                user_room.unread = true;
+                Ok((notify, was_unread))
+            } else {
+                Err(Error::InvalidRoom)
+            }
+        } else {
+            Err(Error::InvalidCommunity)
+        }
     }
 
     async fn ready(&mut self, ctx: &mut Context<Self>) -> Result<(), Error> {
@@ -350,7 +271,7 @@ impl ActiveSession {
             addr.do_send(Connect {
                 user: self.user,
                 device: self.device,
-                session: ctx.address().unwrap(),
+                session: ctx.address().unwrap().into(),
             })
             .map_err(handle_disconnected("Community"))?;
 
@@ -385,11 +306,10 @@ impl ActiveSession {
 
     async fn handle_ws_message(
         &mut self,
-        message: WebSocketMessage,
+        message: Result<ws::Message, warp::Error>,
         ctx: &mut Context<Self>,
     ) -> Result<(), warp::Error> {
-        let message = message.0?;
-
+        let message = message?;
         {
             let ratelimiter = self.global.ratelimiter.load();
 
@@ -433,6 +353,7 @@ impl ActiveSession {
             self.try_send(ServerMessage::Response { id: msg.id, result })
                 .await?;
         } else if message.is_close() {
+            dbg!("asked for close");
             ctx.stop();
         } else {
             log::debug!("Malformed message: {:#?}", message);
@@ -440,6 +361,60 @@ impl ActiveSession {
         }
 
         Ok(())
+    }
+
+    #[spaad::handler]
+    pub async fn forward_message(&mut self, fwd: ForwardMessage, ctx: &mut Context<Self>) {
+        // Ok path is (notify, unread messages)
+        let msg = match self.should_notify_client(fwd.community, fwd.room) {
+            // If the user is watching the room, always forward the message
+            Ok((true, _)) => ServerEvent::AddMessage {
+                community: fwd.community,
+                room: fwd.room,
+                message: fwd.message,
+            },
+            // If the user is not watching but it wasn't unread, tell the client that there are new msgs
+            Ok((false, false)) => ServerEvent::NotifyMessageReady {
+                room: fwd.room,
+                community: fwd.community,
+            },
+            // It was unread, so we don't need to tell the client about the new messages.
+            Ok((false, true)) => return,
+            Err(Error::InvalidUser) => own_user_nonexistent(self, ctx),
+            Err(_) => return, // It's *probably* a timing anomaly.
+        };
+
+        self.send(ServerMessage::Event(msg), ctx).await;
+    }
+
+    #[spaad::handler]
+    pub async fn add_room(&mut self, add: AddRoom, ctx: &mut Context<Self>) {
+        let mut user = match manager::get_active_user_mut(self.user) {
+            Ok(user) => user,
+            Err(_) => {
+                let _ = self.send(ServerMessage::Event(ServerEvent::SessionLoggedOut), ctx);
+                own_user_nonexistent(self, ctx);
+                return;
+            }
+        };
+
+        if let Some(community) = user.communities.get_mut(&add.community) {
+            community.rooms.insert(
+                add.structure.id,
+                UserRoom {
+                    watch_level: WatchLevel::default(),
+                    unread: true,
+                },
+            );
+
+            let msg = ServerMessage::Event(ServerEvent::AddRoom {
+                community: add.community,
+                structure: add.structure,
+            });
+
+            drop(user); // Drop lock
+            self.send(msg, ctx).await;
+        } // Else case is *probably* a timing anomaly
     }
 }
 

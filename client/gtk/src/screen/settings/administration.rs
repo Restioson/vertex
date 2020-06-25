@@ -121,7 +121,7 @@ async fn perform_action(
     action: Action,
     list: gtk::ListStore,
     username_to_id: Rc<Mutex<BiMap<String, UserId>>>,
-    client: Client<screen::active::Ui>,
+    client: &Client<screen::active::Ui>,
 ) {
     let mut selected = Vec::new();
     let map = username_to_id.lock().unwrap();

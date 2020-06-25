@@ -1,4 +1,10 @@
-#![feature(type_alias_impl_trait, linked_list_cursors, type_ascription, move_ref_pattern)]
+#![feature(
+    type_alias_impl_trait,
+    linked_list_cursors,
+    type_ascription,
+    move_ref_pattern,
+    vec_remove_item
+)]
 #![windows_subsystem = "windows"]
 
 use std::fs::File;
@@ -200,6 +206,8 @@ fn setup_gtk_style(config: &Config) {
 }
 
 fn main() {
+    println!("{}", std::mem::size_of::<Client<screen::active::Ui>>());
+    println!("{}", std::mem::size_of::<net::RequestSender>());
     let application = gtk::Application::new(
             Some("cf.vertex.gtk"),
             gio::ApplicationFlags::HANDLES_OPEN,

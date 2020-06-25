@@ -25,7 +25,7 @@ pub trait ChatWidget<Ui: ClientUi> {
         id: MessageId,
     ) -> Ui::MessageEntryWidget;
 
-    fn remove_message(&mut self, widget: &Ui::MessageEntryWidget);
+    fn remove_message(&mut self, widget: &mut Ui::MessageEntryWidget);
 
     fn flush(&mut self);
 }
@@ -36,9 +36,9 @@ pub struct PendingMessageHandle<'a, Ui: ClientUi> {
 }
 
 impl<'a, Ui: ClientUi> PendingMessageHandle<'a, Ui> {
-    pub async fn upgrade(self, message: Message) {
+    pub async fn upgrade(mut self, message: Message) {
         let mut state = self.chat.state.write().await;
-        state.widget.remove_message(&self.widget);
+        state.widget.remove_message(&mut self.widget);
         drop(state);
 
         self.chat.push(message).await;
@@ -120,7 +120,7 @@ impl<Ui: ClientUi> ChatState<Ui> {
             return;
         }
 
-        let dropped = match side {
+        let mut dropped = match side {
             ChatSide::Front => {
                 self.entries.split_off(self.entries.len() - MESSAGE_DROP_COUNT)
             }
@@ -130,8 +130,8 @@ impl<Ui: ClientUi> ChatState<Ui> {
             }
         };
 
-        for dropped in dropped {
-            self.widget.remove_message(&dropped.widget);
+        for dropped in dropped.iter_mut() {
+            self.widget.remove_message(&mut dropped.widget);
         }
     }
 

@@ -11,14 +11,43 @@ use pango::WrapMode;
 use ordinal::Ordinal;
 use atk::AtkObjectExt;
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct MessageGroupWidget {
-    pub author: UserId,
-    pub origin_time: DateTime<Utc>,
-    pub widget: gtk::Box,
-    pub entry_list: gtk::ListBox,
+    author: UserId,
+    origin_time: DateTime<Utc>,
     interactable: bool,
+    flavour: MessageGroupFlavour,
 }
+
+#[derive(Clone)]
+enum MessageGroupFlavour {
+    Widget {
+        widget: gtk::Box,
+        entry_list: gtk::ListBox,
+    },
+    Inline {
+        title: gtk::Label,
+        messages: Vec<MessageEntryWidget>,
+    },
+}
+
+// To prevent recursion
+impl PartialEq for MessageGroupFlavour {
+    fn eq(&self, other: &Self) -> bool {
+        use MessageGroupFlavour::*;
+        match (other, self) {
+            (Widget { widget, .. }, Widget { widget: other, .. }) => {
+                widget == other
+            },
+            (Inline { title, .. }, Inline { title: other, .. }) => {
+                title == other
+            },
+            _ => false,
+        }
+    }
+}
+
+impl Eq for MessageGroupFlavour {}
 
 impl MessageGroupWidget {
     pub fn build(
@@ -26,26 +55,58 @@ impl MessageGroupWidget {
         profile: Profile,
         origin_time: DateTime<Utc>,
         interactable: bool,
+        is_inline: bool,
     ) -> MessageGroupWidget {
         lazy_static! {
             static ref GLADE: Glade = Glade::open("active/message_entry.glade").unwrap();
         }
 
-        let builder: gtk::Builder = GLADE.builder();
+        if is_inline {
+            let title = format!(
+                "{} at {} said",
+                profile.display_name,
+                pretty_date(origin_time),
+            );
+            let title = gtk::Label::new(Some(&title));
+            let flavour = MessageGroupFlavour::Inline {
+                title,
+                messages: Vec::with_capacity(1),
+            };
 
-        let widget: gtk::Box = builder.get_object("message_group").unwrap();
-        let entry_list: gtk::ListBox = builder.get_object("entry_list").unwrap();
+            MessageGroupWidget {
+                author,
+                origin_time,
+                flavour,
+                interactable
+            }
+        } else {
+            let builder: gtk::Builder = GLADE.builder();
 
-        let author_name: gtk::Label = builder.get_object("author_name").unwrap();
-        author_name.set_text(&profile.display_name);
-        author_name.set_can_focus(false);
+            let widget: gtk::Box = builder.get_object("message_group").unwrap();
+            let entry_list: gtk::ListBox = builder.get_object("entry_list").unwrap();
 
-        let timestamp: gtk::Label = builder.get_object("timestamp").unwrap();
+            let author_name: gtk::Label = builder.get_object("author_name").unwrap();
+            author_name.set_text(&profile.display_name);
+            author_name.set_can_focus(false);
 
-        let time_text = pretty_date(origin_time);
-        timestamp.set_text(&time_text);
+            let timestamp: gtk::Label = builder.get_object("timestamp").unwrap();
 
-        MessageGroupWidget { author, origin_time, widget, entry_list, interactable }
+            let time_text = pretty_date(origin_time);
+            timestamp.set_text(&time_text);
+            widget.hide();
+
+            let flavour = MessageGroupFlavour::Widget {
+                widget,
+                entry_list
+            };
+
+            MessageGroupWidget {
+                author,
+                origin_time,
+                flavour,
+                interactable,
+            }
+        }
     }
 
     pub fn can_combine(&self, user: UserId, time: DateTime<Utc>) -> bool {
@@ -53,10 +114,11 @@ impl MessageGroupWidget {
     }
 
     pub fn add_message(
-        &self,
+        &mut self,
         content: Option<String>,
         id: MessageId,
         side: ChatSide,
+        list: &gtk::ListBox,
         client: Client<Ui>,
     ) -> MessageEntryWidget {
         let entry = MessageEntryWidget {
@@ -64,26 +126,120 @@ impl MessageGroupWidget {
             content: MessageContentWidget::build(client, content, id, self.interactable),
         };
 
-        match side {
-            ChatSide::Front => self.entry_list.add(&entry.content.widget),
-            ChatSide::Back => self.entry_list.insert(&entry.content.widget, 0),
+        match &mut self.flavour {
+            MessageGroupFlavour::Inline { title, messages } => {
+                match side {
+                    ChatSide::Back => {
+                        if let Some(row) = title.get_parent() {
+                            list.remove(&row);
+                        }
+
+                        list.insert(&entry.content.widget, 0);
+                        list.insert(title, 0);
+                        messages.push(entry.clone());
+                    },
+                    ChatSide::Front => list.add(&entry.content.widget),
+                }
+            },
+            MessageGroupFlavour::Widget { entry_list, .. } => {
+                match side {
+                    ChatSide::Back => entry_list.insert(&entry.content.widget, 0),
+                    ChatSide::Front => entry_list.add(&entry.content.widget),
+                }
+            }
         }
+
         entry
     }
 
     fn is_empty(&self) -> bool {
-        // TODO: this is quite expensive to allocate a vec; is there another way?
-        self.entry_list.get_children().is_empty()
+        match &self.flavour {
+            MessageGroupFlavour::Inline { messages, .. } => messages.is_empty(),
+            MessageGroupFlavour::Widget { entry_list, .. } => {
+                entry_list.get_children().is_empty()
+            }
+        }
     }
 
     pub fn remove_from(&self, list: &gtk::ListBox) {
-        if let Some(row) = self.widget.get_parent() {
-            list.remove(&row);
+        match &self.flavour {
+            MessageGroupFlavour::Inline { title, messages } => {
+                messages
+                    .iter()
+                    .map(|w| w.content.widget.clone().upcast())
+                    .chain(title.get_parent())
+                    .filter_map(|widget| widget.get_parent())
+                    .for_each(|row| list.remove(&row));
+            },
+            MessageGroupFlavour::Widget { widget, .. } => {
+                if let Some(row) = widget.get_parent() {
+                    list.remove(&row);
+                }
+            }
         }
+    }
+    
+    pub fn add_to(&self, list: &gtk::ListBox, side: ChatSide) {
+        match &self.flavour {
+            MessageGroupFlavour::Inline { title, .. } => {
+                match side {
+                    ChatSide::Front => list.add(title),
+                    ChatSide::Back => list.insert(title, 0),
+                }
+            }
+            MessageGroupFlavour::Widget { widget, .. } => {
+                match side {
+                    ChatSide::Front => list.add(widget),
+                    ChatSide::Back => list.insert(widget, 0),
+                }
+            }
+        }
+    }
+
+    pub fn add_report_message(
+        &self,
+        b: &gtk::Box,
+        content: Option<String>,
+        id: MessageId,
+        client: Client<Ui>,
+    ) {
+        let entry = MessageEntryWidget {
+            group: self.clone(),
+            content: MessageContentWidget::build(client, content, id, self.interactable),
+        };
+
+        match &self.flavour {
+            MessageGroupFlavour::Inline { title, .. } => {
+                b.add(title);
+                b.add(&entry.content.widget);
+            }
+            MessageGroupFlavour::Widget { widget, .. } => {
+                b.add(widget);
+            }
+        }
+    }
+
+    fn remove_msg(&mut self, msg: &MessageContentWidget) -> Option<&MessageGroupWidget> {
+        if let Some(row) = msg.widget.get_parent() {
+            match &mut self.flavour {
+                MessageGroupFlavour::Inline { messages, .. } => {
+                    messages.retain(|i| i.content != *msg);
+                },
+                MessageGroupFlavour::Widget { entry_list, .. } => {
+                    entry_list.remove(&row);
+                }
+            }
+
+            if self.is_empty() {
+                return Some(self);
+            }
+        }
+
+        None
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 struct MessageContentWidget {
     widget: gtk::Box,
     text: gtk::Label,
@@ -104,8 +260,12 @@ impl MessageContentWidget {
             ).expect("Error loading more-horizontal-cropped.svg!");
         }
 
-        let hbox = gtk::BoxBuilder::new()
+        let vbox = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Vertical)
             .name("message")
+            .build();
+
+        let hbox = gtk::BoxBuilder::new()
             .orientation(gtk::Orientation::Horizontal)
             .hexpand(true)
             .build();
@@ -160,8 +320,9 @@ impl MessageContentWidget {
 
         hbox.add(&text);
         hbox.add(&settings_vbox);
+        vbox.add(&hbox);
 
-        MessageContentWidget { widget: hbox, text }
+        MessageContentWidget { widget: vbox, text }
     }
 
     fn build_menu(client: Client<Ui>, msg: MessageId) -> gtk::Popover {
@@ -196,23 +357,15 @@ impl MessageContentWidget {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct MessageEntryWidget {
     group: MessageGroupWidget,
     content: MessageContentWidget,
 }
 
 impl MessageEntryWidget {
-    pub fn remove(&self) -> Option<&MessageGroupWidget> {
-        if let Some(row) = self.content.widget.get_parent() {
-            self.group.entry_list.remove(&row);
-
-            if self.group.is_empty() {
-                return Some(&self.group);
-            }
-        }
-
-        None
+    pub fn remove(&mut self) -> Option<&MessageGroupWidget> {
+        self.group.remove_msg(&self.content.clone())
     }
 }
 

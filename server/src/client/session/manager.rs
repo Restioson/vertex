@@ -1,5 +1,4 @@
 use dashmap::DashMap;
-use xtra::Address;
 
 use lazy_static::lazy_static;
 use vertex::prelude::*;
@@ -58,7 +57,7 @@ impl ActiveUser {
 pub enum Session {
     Upgrading,
     Active {
-        actor: Address<ActiveSession>,
+        actor: ActiveSession,
         looking_at: Option<(CommunityId, RoomId)>,
     },
 }
@@ -72,7 +71,7 @@ impl Session {
         }
     }
 
-    pub fn as_active_actor(&self) -> Option<Address<ActiveSession>> {
+    pub fn as_active_actor(&self) -> Option<ActiveSession> {
         match self {
             Session::Upgrading => None,
             Session::Active { actor, .. } => Some(actor.clone()),
@@ -153,7 +152,7 @@ pub async fn insert(
 }
 
 // TODO handle errors better
-pub fn upgrade(user: UserId, device: DeviceId, addr: Address<ActiveSession>) -> Result<(), ()> {
+pub fn upgrade(user: UserId, device: DeviceId, addr: ActiveSession) -> Result<(), ()> {
     let mut user = match get_active_user_mut(user) {
         Ok(user) => user,
         Err(_) => return Err(()),
@@ -178,6 +177,7 @@ pub fn remove_and_notify_user(user: UserId) {
         sessions.retain(|_, session| match session {
             Session::Active { actor, .. } => {
                 let _ = actor
+                    .address()
                     .do_send(LogoutThisSession)
                     .map_err(handle_disconnected("ClientSession"));
                 false
@@ -196,6 +196,7 @@ pub fn remove_and_notify_user(user: UserId) {
 pub fn remove_and_notify_device(user: UserId, device: DeviceId) -> Result<(), Error> {
     match remove_device(user, device) {
         Some(Session::Active { actor, .. }) => actor
+            .address()
             .do_send(LogoutThisSession)
             .map_err(handle_disconnected("ClientSession")),
         _ => Ok(()),

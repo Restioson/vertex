@@ -1,11 +1,10 @@
 use gtk::prelude::*;
 use vertex::prelude::*;
-use crate::{screen, Glade, Client, scheduler, TryGetText};
+use crate::{screen, Glade, Client, scheduler, TryGetText, config};
 use std::rc::Rc;
 use crate::connect::AsConnector;
 use crate::screen::active::dialog;
 use crate::screen::active::message::MessageGroupWidget;
-use crate::client::ChatSide;
 use super::parse_search;
 
 pub struct ReportsList {
@@ -95,16 +94,14 @@ impl ReportsList {
                 profile,
                 report.message.sent_at,
                 false,
+                config::get().screen_reader_message_list,
             );
-            msg.add_message(
+            msg.add_report_message(
+                &main,
                 Some(report.message.text),
                 MessageId::default(), // doesn't matter
-                ChatSide::Front,
                 self.client.clone(),
             );
-            msg.entry_list.get_style_context().add_class("report_message");
-
-            main.add(&msg.widget);
 
             let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 0);
             main.add(&buttons);

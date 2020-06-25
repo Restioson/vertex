@@ -1,11 +1,10 @@
-use crate::client::session::{AddRoom, ForwardMessage, SendMessage};
+use crate::client::session::{AddRoom, ForwardMessage};
 use crate::client::{self, ActiveSession, Session};
 use crate::database::{AddToCommunityError, CommunityRecord, Database, DbResult};
 use crate::{handle_disconnected, IdentifiedMessage};
 use chrono::Utc;
 use dashmap::mapref::one::{Ref, RefMut};
 use dashmap::DashMap;
-use futures::Future;
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use std::collections::{BTreeSet, HashMap};
@@ -13,6 +12,7 @@ use uuid::Uuid;
 use vertex::prelude::*;
 use xtra::prelude::*;
 use xtra::Disconnected;
+use async_trait::async_trait;
 
 lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Community> = DashMap::new();
@@ -52,7 +52,7 @@ impl Community {
 pub struct Connect {
     pub user: UserId,
     pub device: DeviceId,
-    pub session: Address<ActiveSession>,
+    pub session: ActiveSession,
 }
 
 impl xtra::Message for Connect {
@@ -66,7 +66,7 @@ pub enum ConnectError {
 pub struct Join {
     pub user: UserId,
     pub device_id: DeviceId,
-    pub session: Address<ActiveSession>,
+    pub session: ActiveSession,
 }
 
 impl xtra::Message for Join {
@@ -157,7 +157,7 @@ impl CommunityActor {
 
     fn for_each_online_device_except<F>(&mut self, mut f: F, except: Option<DeviceId>)
     where
-        F: FnMut(&Address<ActiveSession>) -> Result<(), Disconnected>,
+        F: FnMut(&ActiveSession) -> Result<(), Disconnected>,
     {
         for member in self.online_members.iter() {
             let user = match client::session::get_active_user(*member) {
@@ -183,156 +183,165 @@ impl CommunityActor {
     }
 }
 
+#[async_trait]
 impl Handler<Connect> for CommunityActor {
-    type Responder<'a> = impl Future<Output = DbResult<Result<(), ConnectError>>>;
-    fn handle(&mut self, connect: Connect, _: &mut Context<Self>) -> Self::Responder<'_> {
-        async move {
-            let membership = self
-                .database
-                .get_community_membership(self.id, connect.user)
-                .await?;
-            if membership.is_some() {
-                // TODO(banning): check if user is not banned
-                self.online_members.insert(connect.user);
-                Ok(Ok(()))
-            } else {
-                Ok(Err(ConnectError::NotInCommunity))
-            }
+    async fn handle(
+        &mut self,
+        connect: Connect,
+        _: &mut Context<Self>
+    ) -> DbResult<Result<(), ConnectError>> {
+        let membership = self
+            .database
+            .get_community_membership(self.id, connect.user)
+            .await?;
+        if membership.is_some() {
+            // TODO(banning): check if user is not banned
+            self.online_members.insert(connect.user);
+            Ok(Ok(()))
+        } else {
+            Ok(Err(ConnectError::NotInCommunity))
         }
     }
 }
 
+#[async_trait]
 impl Handler<IdentifiedMessage<ClientSentMessage>> for CommunityActor {
-    type Responder<'a> = impl Future<Output = Result<MessageConfirmation, Error>> + 'a;
-    fn handle(
+    async fn handle(
         &mut self,
         identified: IdentifiedMessage<ClientSentMessage>,
         _: &mut Context<Self>,
-    ) -> Self::Responder<'_> {
-        async move {
-            let id = MessageId(Uuid::new_v4());
+    ) -> Result<MessageConfirmation, Error> {
+        let id = MessageId(Uuid::new_v4());
 
-            let message = identified.message;
-            let author = identified.user;
-            let time_sent = Utc::now();
+        let message = identified.message;
+        let author = identified.user;
+        let time_sent = Utc::now();
 
-            let (_ord, profile_version) = self
-                .database
-                .create_message(
-                    id,
-                    author,
-                    message.to_community,
-                    message.to_room,
-                    time_sent,
-                    message.content.clone(),
-                )
-                .await?;
+        let (_ord, profile_version) = self
+            .database
+            .create_message(
+                id,
+                author,
+                message.to_community,
+                message.to_room,
+                time_sent,
+                message.content.clone(),
+            )
+            .await?;
 
-            let from_device = identified.device;
-            let send = ForwardMessage {
-                community: message.to_community,
-                room: message.to_room,
-                message: vertex::structures::Message {
-                    id,
-                    author,
-                    author_profile_version: profile_version,
-                    time_sent,
-                    content: Some(message.content),
-                },
-            };
+        let from_device = identified.device;
+        let send = ForwardMessage {
+            community: message.to_community,
+            room: message.to_room,
+            message: vertex::structures::Message {
+                id,
+                author,
+                author_profile_version: profile_version,
+                time_sent,
+                content: Some(message.content),
+            },
+        };
 
-            self.for_each_online_device_except(
-                |addr| addr.do_send(send.clone()),
-                Some(from_device),
-            );
+        self.for_each_online_device_except(
+            |session| {
+                let _ = session.forward_message(send.clone());
+                Ok(())
+            },
+            Some(from_device),
+        );
 
-            Ok(MessageConfirmation { id, time_sent })
-        }
+        Ok(MessageConfirmation { id, time_sent })
     }
 }
 
 impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
     fn handle(&mut self, m: IdentifiedMessage<Edit>, _: &mut Context<Self>) -> Result<(), Error> {
         let from_device = m.device;
-        let send = SendMessage(ServerMessage::Event(ServerEvent::Edit(m.message)));
+        let send = ServerMessage::Event(ServerEvent::Edit(m.message));
 
-        self.for_each_online_device_except(|addr| addr.do_send(send.clone()), Some(from_device));
+        self.for_each_online_device_except(
+            |session| {
+                let _ = session.send(send.clone());
+                Ok(())
+            },
+            Some(from_device)
+        );
 
         Ok(())
     }
 }
 
+#[async_trait]
 impl Handler<Join> for CommunityActor {
-    type Responder<'a> =
-        impl Future<Output = DbResult<Result<CommunityStructure, AddToCommunityError>>>;
-
-    fn handle(&mut self, join: Join, _: &mut Context<Self>) -> Self::Responder<'_> {
-        async move {
-            if let Err(e) = self.database.add_to_community(self.id, join.user).await? {
-                return Ok(Err(e)); // TODO(banning): check if user is not banned
-            }
-
-            self.online_members.insert(join.user);
-
-            let info = match get_mut(self.id) {
-                Ok(i) => i,
-                Err(_) => return Ok(Err(AddToCommunityError::InvalidCommunity)),
-            };
-            let description = info.description();
-
-            Ok(Ok(CommunityStructure {
-                id: self.id,
-                name: info.name.clone(),
-                description,
-                rooms: self
-                    .rooms
-                    .iter()
-                    .map(|(id, room)| RoomStructure {
-                        id: *id,
-                        name: room.name.clone(),
-                        unread: true,
-                    })
-                    .collect(),
-            }))
+    async fn handle(
+        &mut self,
+        join: Join,
+        _: &mut Context<Self>
+    ) -> DbResult<Result<CommunityStructure, AddToCommunityError>> {
+        if let Err(e) = self.database.add_to_community(self.id, join.user).await? {
+            return Ok(Err(e)); // TODO(banning): check if user is not banned
         }
+
+        self.online_members.insert(join.user);
+
+        let info = match get_mut(self.id) {
+            Ok(i) => i,
+            Err(_) => return Ok(Err(AddToCommunityError::InvalidCommunity)),
+        };
+        let description = info.description();
+
+        Ok(Ok(CommunityStructure {
+            id: self.id,
+            name: info.name.clone(),
+            description,
+            rooms: self
+                .rooms
+                .iter()
+                .map(|(id, room)| RoomStructure {
+                    id: *id,
+                    name: room.name.clone(),
+                    unread: true,
+                })
+                .collect(),
+        }))
     }
 }
 
+#[async_trait]
 impl Handler<CreateRoom> for CommunityActor {
-    type Responder<'a> = impl Future<Output = DbResult<RoomId>> + 'a;
+    async fn handle(&mut self, create: CreateRoom, _: &mut Context<Self>) -> DbResult<RoomId> {
+        let db = &self.database;
+        let id = db.create_room(self.id, create.name.clone()).await?;
 
-    fn handle(&mut self, create: CreateRoom, _: &mut Context<Self>) -> Self::Responder<'_> {
-        async move {
-            let db = &self.database;
-            let id = db.create_room(self.id, create.name.clone()).await?;
+        db.create_default_user_room_states_for_room(self.id, id)
+            .await?
+            .expect("Error creating default user room states for new room");
 
-            db.create_default_user_room_states_for_room(self.id, id)
-                .await?
-                .expect("Error creating default user room states for new room");
+        self.rooms.insert(
+            id,
+            Room {
+                name: create.name.clone(),
+            },
+        );
 
-            self.rooms.insert(
+        let send = AddRoom {
+            community: self.id,
+            structure: RoomStructure {
                 id,
-                Room {
-                    name: create.name.clone(),
-                },
-            );
+                name: create.name.clone(),
+                unread: false,
+            },
+        };
 
-            let send = AddRoom {
-                community: self.id,
-                structure: RoomStructure {
-                    id,
-                    name: create.name.clone(),
-                    unread: false,
-                },
-            };
+        self.for_each_online_device_except(
+            |addr| {
+                let _ = addr.add_room(send.clone());
+                Ok(())
+            },
+            Some(create.creator),
+        );
 
-            self.for_each_online_device_except(
-                |addr| addr.do_send(send.clone()),
-                Some(create.creator),
-            );
-
-            Ok(id)
-        }
+        Ok(id)
     }
 }
 

@@ -120,10 +120,16 @@ fn build_accessibility() -> gtk::Widget {
 
     let narrate_new: gtk::Switch = builder.get_object("narrate_new").unwrap();
     let high_contrast: gtk::Switch = builder.get_object("high_contrast").unwrap();
+    let disable_tweaks: gtk::Switch = builder.get_object("disable_message_editor_tweaks")
+        .unwrap();
+    let screen_reader_messages: gtk::Switch = builder.get_object("screen_reader_message_list")
+        .unwrap();
 
     let config = config::get();
     narrate_new.set_state(config.narrate_new_messages);
     high_contrast.set_state(config.high_contrast_css);
+    disable_tweaks.set_state(!config.message_editor_tweaks);
+    screen_reader_messages.set_state(config.screen_reader_message_list);
 
     narrate_new.connect_state_set(|_switch, state| {
         config::modify(|config| config.narrate_new_messages = state);
@@ -134,6 +140,14 @@ fn build_accessibility() -> gtk::Widget {
             config.high_contrast_css = state;
             crate::setup_gtk_style(config);
         });
+        gtk::Inhibit(false)
+    });
+    disable_tweaks.connect_state_set(|_switch, state| {
+        config::modify(|config| config.message_editor_tweaks = !state);
+        gtk::Inhibit(false)
+    });
+    screen_reader_messages.connect_state_set(|_switch, state| {
+        config::modify(|config| config.screen_reader_message_list = state);
         gtk::Inhibit(false)
     });
 

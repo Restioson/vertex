@@ -1,33 +1,24 @@
 use super::manager;
 use crate::auth::HashSchemeVersion;
 use crate::client::session::LogoutThisSession;
-use crate::client::{ActiveSession, Session};
+use crate::client::Session;
 use crate::handle_disconnected;
 use futures::TryStreamExt;
-use std::future::Future;
 use vertex::prelude::*;
 use xtra::prelude::*;
 
-struct AdminPermissionsChanged(AdminPermissionFlags);
-
-impl xtra::Message for AdminPermissionsChanged {
-    type Result = ();
-}
-
-impl Handler<AdminPermissionsChanged> for ActiveSession {
-    type Responder<'a> = impl Future<Output = ()> + 'a;
-
-    fn handle<'a>(
-        &'a mut self,
-        message: AdminPermissionsChanged,
-        ctx: &'a mut Context<Self>,
-    ) -> Self::Responder<'a> {
-        let msg = ServerMessage::Event(ServerEvent::AdminPermissionsChanged(message.0));
-        self.send(msg, ctx)
+#[spaad::entangled]
+impl super::ActiveSession {
+    #[spaad::handler]
+    pub async fn admin_permissions_changed(
+        &mut self,
+        new: AdminPermissionFlags,
+        ctx: &mut Context<Self>
+    ) {
+        let msg = ServerMessage::Event(ServerEvent::AdminPermissionsChanged(new));
+        self.send(msg, ctx).await
     }
-}
 
-impl ActiveSession {
     pub async fn handle_admin_request(
         &mut self,
         request: AdminRequest,
@@ -225,6 +216,7 @@ impl ActiveSession {
                 for (_, session) in sessions {
                     if let Session::Active { actor, .. } = session {
                         let _ = actor
+                            .address()
                             .do_send(LogoutThisSession)
                             .map_err(handle_disconnected("ClientSession"));
                     }
@@ -253,8 +245,6 @@ fn notify_of_admin_perm_change(user: UserId, new: AdminPermissionFlags) {
         .values()
         .filter_map(Session::as_active_actor)
         .for_each(|a| {
-            let _ = a
-                .do_send(AdminPermissionsChanged(new))
-                .map_err(handle_disconnected("ClientSession")); // Don't care
+            let _ = a.admin_permissions_changed(new);
         });
 }

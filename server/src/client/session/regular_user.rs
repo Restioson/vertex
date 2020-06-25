@@ -5,7 +5,6 @@ use futures::TryStreamExt;
 use xtra::Context;
 
 use crate::client::session::{manager, UserCommunity, UserRoom};
-use crate::client::ActiveSession;
 use crate::community::CommunityActor;
 use crate::community::COMMUNITIES;
 use crate::{auth, community, handle_disconnected, IdentifiedMessage};
@@ -13,8 +12,8 @@ use crate::{auth, community, handle_disconnected, IdentifiedMessage};
 use super::*;
 
 pub struct RequestHandler<'a> {
-    pub session: &'a mut ActiveSession,
-    pub ctx: &'a mut Context<ActiveSession>,
+    pub session: &'a mut __ActiveSessionActor::ActiveSession,
+    pub ctx: &'a mut Context<__ActiveSessionActor::ActiveSession>,
     pub user: UserId,
     pub device: DeviceId,
     pub perms: TokenPermissionFlags,
@@ -176,6 +175,7 @@ impl<'a> RequestHandler<'a> {
             Ok(()) => Ok(OkResponse::NoData),
             Err(ChangeUsernameError::UsernameConflict) => Err(Error::UsernameAlreadyExists),
             Err(ChangeUsernameError::NonexistentUser) => {
+                dbg!("user didnt exist");
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(Error::LoggedOut)
             }
@@ -201,6 +201,7 @@ impl<'a> RequestHandler<'a> {
         {
             Ok(()) => Ok(OkResponse::NoData),
             Err(_) => {
+                dbg!("user didnt exist");
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(Error::LoggedOut)
             }
@@ -232,6 +233,7 @@ impl<'a> RequestHandler<'a> {
                 self.join_community_by_id(id).await
             }
             Err(_) => {
+                dbg!("user didnt exist");
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(Error::LoggedOut)
             }
@@ -262,7 +264,7 @@ impl<'a> RequestHandler<'a> {
         let join = Join {
             user: self.user,
             device_id: self.device,
-            session: self.ctx.address().unwrap(),
+            session: self.ctx.address().unwrap().into(),
         };
 
         let res = community
@@ -285,8 +287,8 @@ impl<'a> RequestHandler<'a> {
                     sessions
                         .filter(|(id, _)| **id != self.device)
                         .filter_map(|(_, session)| session.as_active_actor())
-                        .for_each(|addr| {
-                            let _ = addr.do_send(SendMessage(send.clone()));
+                        .for_each(|session| {
+                            let _ = session.send(send.clone());
                         });
                 }
 
@@ -485,6 +487,7 @@ impl<'a> RequestHandler<'a> {
             Ok(_) => Ok(OkResponse::NoData),
             Err(SetUserRoomStateError::InvalidRoom) => Err(Error::InvalidRoom),
             Err(SetUserRoomStateError::InvalidUser) => {
+                dbg!("user didnt exist");
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(Error::LoggedOut)
             }

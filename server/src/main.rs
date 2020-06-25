@@ -1,10 +1,10 @@
-#![feature(type_alias_impl_trait, generic_associated_types, type_ascription)]
+#![feature(type_ascription, type_alias_impl_trait)]
 
 use std::convert::Infallible;
 use std::num::NonZeroU32;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use futures::StreamExt;
@@ -21,11 +21,12 @@ use client::ActiveSession;
 use database::Database;
 use vertex::prelude::*;
 
-use crate::client::{session::WebSocketMessage, Authenticator};
+use crate::client::Authenticator;
 use crate::community::{Community, CommunityActor};
 use crate::config::Config;
 use crate::database::{DbResult, MalformedInviteCode};
 use clap::{App, Arg};
+use crate::client::session::WsMessage;
 
 mod auth;
 mod client;
@@ -314,17 +315,8 @@ async fn login(
             let upgrade = ws.on_upgrade(move |websocket| {
                 let (sink, stream) = websocket.split();
 
-                let session = ActiveSession {
-                    ws: sink,
-                    global,
-                    heartbeat: Instant::now(),
-                    user,
-                    device,
-                    perms,
-                };
-                let session = session.spawn();
-
-                session.clone().attach_stream(stream.map(WebSocketMessage));
+                let session = ActiveSession::new(sink, global, user, device, perms);
+                session.clone().into_address().attach_stream(stream.map(WsMessage));
 
                 // if the session fails to spawn, that means it has since been removed. we can ignore the error.
                 let _ = client::session::upgrade(user, device, session);

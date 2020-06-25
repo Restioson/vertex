@@ -5,7 +5,7 @@ use gtk::prelude::*;
 
 use vertex::prelude::*;
 
-use crate::client;
+use crate::{client, config};
 use crate::client::{ChatSide, MessageContent};
 
 use super::*;
@@ -21,38 +21,37 @@ pub struct ChatWidget {
 
 impl ChatWidget {
     fn add_group(&mut self, author: UserId, profile: Profile, time: DateTime<Utc>, side: ChatSide) {
-        let group = MessageGroupWidget::build(author, profile, time, true);
-        group.widget.hide();
+        let group = MessageGroupWidget::build(
+            author,
+            profile,
+            time,
+            true,
+            config::get().screen_reader_message_list,
+        );
 
+        group.add_to(&self.message_list, side);
         match side {
-            ChatSide::Front => {
-                self.message_list.add(&group.widget);
-                self.groups.push_front(group);
-            }
-            ChatSide::Back => {
-                self.message_list.insert(&group.widget, 0);
-                self.groups.push_back(group);
-            }
+            ChatSide::Front => self.groups.push_front(group),
+            ChatSide::Back => self.groups.push_back(group),
         }
     }
 
-    fn next_group(&mut self, author: UserId, profile: Profile, time: DateTime<Utc>, side: ChatSide) -> &MessageGroupWidget {
+    fn next_group(&mut self, author: UserId, profile: Profile, time: DateTime<Utc>, side: ChatSide) -> &mut MessageGroupWidget {
         match self.group_for(side) {
             Some(group) if group.can_combine(author, time) => {}
             _ => self.add_group(author, profile, time, side),
         }
 
-        self.group_for(side).as_ref().unwrap()
+        self.group_for(side).unwrap()
     }
 
-    fn group_for(&self, side: ChatSide) -> Option<&MessageGroupWidget> {
+    fn group_for(&mut self, side: ChatSide) -> Option<&mut MessageGroupWidget> {
         match side {
-            ChatSide::Front => self.groups.front(),
-            ChatSide::Back => self.groups.back(),
+            ChatSide::Front => self.groups.front_mut(),
+            ChatSide::Back => self.groups.front_mut(),
         }
     }
 
-    // TODO: not a great solution
     fn remove_group(&mut self, group: &MessageGroupWidget) {
         let mut cursor = self.groups.cursor_front_mut();
 
@@ -83,11 +82,12 @@ impl client::ChatWidget<Ui> for ChatWidget {
         client: Client<Ui>,
         id: MessageId,
     ) -> MessageEntryWidget {
+        let msg_list = self.message_list.clone();
         let group = self.next_group(content.author, content.profile, content.time, side);
-        group.add_message(content.text, id, side, client)
+        group.add_message(content.text, id, side, &msg_list, client)
     }
 
-    fn remove_message(&mut self, widget: &MessageEntryWidget) {
+    fn remove_message(&mut self, widget: &mut MessageEntryWidget) {
         if let Some(group) = widget.remove() {
             self.remove_group(group);
         }
