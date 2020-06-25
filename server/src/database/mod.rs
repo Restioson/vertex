@@ -14,6 +14,7 @@ mod communities;
 mod community_membership;
 mod invite_code;
 mod message;
+mod reports;
 mod rooms;
 mod token;
 mod user;
@@ -24,6 +25,7 @@ pub use communities::*;
 pub use community_membership::*;
 pub use invite_code::*;
 pub use message::*;
+pub use reports::*;
 pub use rooms::*;
 pub use token::*;
 pub use user::*;
@@ -131,6 +133,8 @@ impl Database {
             CREATE_MESSAGES_TABLE,
             CREATE_USER_ROOM_STATES_TABLE,
             CREATE_ADMINISTRATORS_TABLE,
+            CREATE_REPORTS_TABLE,
+            "CREATE EXTENSION IF NOT EXISTS pg_trgm;", // Allow fuzzy searching
         ];
 
         for cmd in &cmds {
@@ -151,7 +155,7 @@ impl Database {
                 .await
                 .expect("Database error while sweeping tokens")
                 .try_for_each(|(user, device)| async move {
-                    let _ = client::session::remove_and_notify(user, device); // Don't care
+                    let _ = client::session::remove_and_notify_device(user, device); // Don't care
                     Ok(())
                 })
                 .await

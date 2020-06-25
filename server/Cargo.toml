@@ -32,7 +32,6 @@ chrono = { version = "^0.4", features = ["serde"] }
 rust-argon2 = "^0.5"
 rand = "^0.7"
 lazy_static = "^1"
-bitflags = "^1"
 bytes = "^0.5"
 base64 = "^0.11"
 byteorder = "^1"
@@ -45,4 +44,5 @@ dashmap = "^3"
 backtrace = "^0.3"
 governor = { version = "^0.2", default-features = false, features = ["std", "dashmap"] }
 arc-swap = "^0.4"
+clap = "^2.33"
 vertex = { path = "../common/" }

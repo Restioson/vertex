@@ -35,10 +35,6 @@ impl<'a> RequestHandler<'a> {
             ClientRequest::ChangeDisplayName { new_display_name } => {
                 self.change_display_name(new_display_name).await
             }
-            ClientRequest::ChangePassword {
-                old_password,
-                new_password,
-            } => self.change_password(old_password, new_password).await,
             ClientRequest::CreateRoom { name, community } => {
                 self.create_room(name, community).await
             }
@@ -72,26 +68,19 @@ impl<'a> RequestHandler<'a> {
             ClientRequest::ChangeCommunityDescription { new, community } => {
                 self.change_community_description(new, community).await
             }
+            ClientRequest::AdminAction(req) => {
+                if !self.perms.has_perms(TokenPermissionFlags::ADMINISTER) {
+                    return Err(Error::AccessDenied);
+                }
+
+                self.session.handle_admin_request(req).await
+            }
+            ClientRequest::ReportUser {
+                message,
+                short_desc,
+                extended_desc,
+            } => self.report_user(message, short_desc, extended_desc).await,
             _ => Err(Error::Unimplemented),
-        }
-    }
-
-    async fn verify_password(&mut self, password: String) -> Result<(), Error> {
-        let user = match self
-            .session
-            .global
-            .database
-            .get_user_by_id(self.user)
-            .await?
-        {
-            Some(user) => user,
-            None => return Err(Error::InvalidUser),
-        };
-
-        if auth::verify_user(user, password).await {
-            Ok(())
-        } else {
-            Err(Error::IncorrectUsernameOrPassword)
         }
     }
 
@@ -218,33 +207,6 @@ impl<'a> RequestHandler<'a> {
         }
     }
 
-    async fn change_password(
-        mut self,
-        old_password: String,
-        new_password: String,
-    ) -> Result<OkResponse, Error> {
-        if !auth::valid_password(&new_password, &self.session.global.config) {
-            return Err(Error::InvalidPassword);
-        }
-
-        self.verify_password(old_password).await?;
-
-        let (new_password_hash, hash_version) = auth::hash(new_password).await;
-
-        let database = &self.session.global.database;
-        let res = database
-            .change_password(self.user, new_password_hash, hash_version)
-            .await?;
-
-        match res {
-            Ok(()) => Ok(OkResponse::NoData),
-            Err(_) => {
-                self.ctx.stop(); // The user did not exist at the time of request
-                Err(Error::LoggedOut)
-            }
-        }
-    }
-
     async fn create_community(self, name: String) -> Result<OkResponse, Error> {
         if !self
             .perms
@@ -254,8 +216,8 @@ impl<'a> RequestHandler<'a> {
         }
 
         let max = self.session.global.config.max_community_name_len as usize;
-        if name.len() < 1 || name.len() > max {
-            return Err(Error::TooLong)
+        if name.is_empty() || name.len() > max {
+            return Err(Error::TooLong);
         }
 
         let db = &self.session.global.database;
@@ -346,8 +308,8 @@ impl<'a> RequestHandler<'a> {
         }
 
         let max = self.session.global.config.max_channel_name_len as usize;
-        if name.len() < 1 || name.len() > max {
-            return Err(Error::TooLong)
+        if name.is_empty() || name.len() > max {
+            return Err(Error::TooLong);
         }
 
         let community_id = community;
@@ -566,6 +528,37 @@ impl<'a> RequestHandler<'a> {
             Ok(OkResponse::NoData)
         } else {
             Err(Error::InvalidCommunity)
+        }
+    }
+
+    async fn report_user(
+        self,
+        message: MessageId,
+        short_desc: String,
+        extended_desc: String,
+    ) -> Result<OkResponse, Error> {
+        if !self.perms.has_perms(TokenPermissionFlags::REPORT_USERS) {
+            return Err(Error::AccessDenied);
+        }
+
+        let db = &self.session.global.database;
+        let msg = match db.get_message_by_id(message).await? {
+            Some(m) => m,
+            None => return Err(Error::InvalidMessage),
+        };
+
+        if !self.session.in_room(&msg.community, &msg.room)? {
+            return Err(Error::InvalidMessage);
+        }
+
+        let res = db
+            .report_message(self.user, msg, &short_desc, &extended_desc)
+            .await?;
+
+        match res {
+            Ok(_) => Ok(OkResponse::NoData),
+            Err(ReportUserError::InvalidReporter) => Err(Error::LoggedOut),
+            Err(ReportUserError::InvalidMessage) => Err(Error::InvalidMessage),
         }
     }
 }

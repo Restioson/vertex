@@ -4,11 +4,12 @@ use gtk::prelude::*;
 use vertex::prelude::*;
 
 use crate::client::{self, ChatSide, InviteEmbed, MessageEmbed, MessageStatus, OpenGraphEmbed};
-use crate::Glade;
+use crate::{Glade, resource};
 
 use super::*;
 use pango::WrapMode;
 use ordinal::Ordinal;
+use atk::AtkObjectExt;
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct MessageGroupWidget {
@@ -16,10 +17,16 @@ pub struct MessageGroupWidget {
     pub origin_time: DateTime<Utc>,
     pub widget: gtk::Box,
     pub entry_list: gtk::ListBox,
+    interactable: bool,
 }
 
 impl MessageGroupWidget {
-    pub fn build(author: UserId, profile: Profile, origin_time: DateTime<Utc>) -> MessageGroupWidget {
+    pub fn build(
+        author: UserId,
+        profile: Profile,
+        origin_time: DateTime<Utc>,
+        interactable: bool,
+    ) -> MessageGroupWidget {
         lazy_static! {
             static ref GLADE: Glade = Glade::open("active/message_entry.glade").unwrap();
         }
@@ -38,17 +45,23 @@ impl MessageGroupWidget {
         let time_text = pretty_date(origin_time);
         timestamp.set_text(&time_text);
 
-        MessageGroupWidget { author, origin_time, widget, entry_list }
+        MessageGroupWidget { author, origin_time, widget, entry_list, interactable }
     }
 
     pub fn can_combine(&self, user: UserId, time: DateTime<Utc>) -> bool {
         self.author == user && (time - self.origin_time).num_minutes().abs() < 10
     }
 
-    pub fn add_message(&self, content: Option<String>, side: ChatSide) -> MessageEntryWidget {
+    pub fn add_message(
+        &self,
+        content: Option<String>,
+        id: MessageId,
+        side: ChatSide,
+        client: Client<Ui>,
+    ) -> MessageEntryWidget {
         let entry = MessageEntryWidget {
             group: self.clone(),
-            content: MessageContentWidget::build(content),
+            content: MessageContentWidget::build(client, content, id, self.interactable),
         };
 
         match side {
@@ -77,25 +90,109 @@ struct MessageContentWidget {
 }
 
 impl MessageContentWidget {
-    pub fn build(text: Option<String>) -> MessageContentWidget {
-        let widget = gtk::BoxBuilder::new()
+    pub fn build(
+        client: Client<Ui>,
+        text: Option<String>,
+        id: MessageId,
+        interactable: bool,
+    ) -> MessageContentWidget {
+        thread_local! {
+            static ICON: gdk_pixbuf::Pixbuf = gdk_pixbuf::Pixbuf::new_from_file_at_size(
+                &resource("feather/more-horizontal-cropped.svg"),
+                15,
+                10,
+            ).expect("Error loading more-horizontal-cropped.svg!");
+        }
+
+        let hbox = gtk::BoxBuilder::new()
             .name("message")
-            .orientation(gtk::Orientation::Vertical)
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
             .build();
 
         let text = gtk::LabelBuilder::new()
             .name("message_text")
             .label(text.unwrap_or_else(|| "<Deleted>".to_string()).trim()) // TODO deletion
             .halign(gtk::Align::Start)
+            .hexpand(true)
             .selectable(true)
             .can_focus(false)
             .wrap_mode(WrapMode::WordChar)
             .wrap(true)
             .build();
 
-        widget.add(&text);
+        let settings_vbox = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Vertical)
+            .halign(gtk::Align::End)
+            .build();
 
-        MessageContentWidget { widget, text }
+        let icon = ICON.with(|icon| gtk::Image::new_from_pixbuf(Some(&icon)));
+
+        if interactable {
+            let settings_button = gtk::ButtonBuilder::new()
+                .child(&icon)
+                .name("message_settings")
+                .valign(gtk::Align::Start)
+                .build();
+
+            settings_button.get_accessible().unwrap().set_name("Message menu");
+
+            settings_button.connect_clicked(
+                client.connector()
+                    .do_sync(move |client, button: gtk::Button| {
+                        button.get_style_context().add_class("active");
+                        let menu = Self::build_menu(client, id);
+                        menu.set_relative_to(Some(&button));
+                        menu.show();
+
+                        let button = button.clone();
+                        menu.connect_hide(move |popover| {
+                            // weird gtk behavior: if we don't do this, it messes with dialog rendering order
+                            popover.set_relative_to::<gtk::Widget>(None);
+                            button.get_style_context().remove_class("active");
+                        });
+                    })
+                    .build_cloned_consumer()
+            );
+
+            settings_vbox.add(&settings_button);
+        }
+
+        hbox.add(&text);
+        hbox.add(&settings_vbox);
+
+        MessageContentWidget { widget: hbox, text }
+    }
+
+    fn build_menu(client: Client<Ui>, msg: MessageId) -> gtk::Popover {
+        lazy_static! {
+            static ref GLADE: Glade = Glade::open("active/message_menu.glade").unwrap();
+        }
+        thread_local! {
+            static ICON: gdk_pixbuf::Pixbuf = gdk_pixbuf::Pixbuf::new_from_file_at_size(
+                &resource("feather/flag.svg"),
+                18,
+                18,
+            ).expect("Error loading flag.svg!");
+        }
+
+        let builder: gtk::Builder = GLADE.builder();
+        let menu: gtk::Popover = builder.get_object("message_menu").unwrap();
+        let report_button: gtk::Button = builder.get_object("report_button").unwrap();
+        let img: gtk::Image = builder.get_object("report_icon").unwrap();
+
+        ICON.with(|icon| img.set_from_pixbuf(Some(&icon)));
+
+        report_button.connect_clicked(
+            (menu.clone(), client).connector()
+                .do_sync(move |(menu, client), _| {
+                    dialog::show_report_message(client, msg);
+                    menu.hide();
+                })
+                .build_cloned_consumer()
+        );
+
+        menu
     }
 }
 
@@ -188,8 +285,9 @@ fn build_invite_embed(client: &Client<Ui>, embed: InviteEmbed) -> gtk::Widget {
             .do_async(move |client, _| {
                 let code = embed.code.clone();
                 async move {
-                    // TODO: report error
-                    let _ = client.join_community(code).await;
+                    if let Err(err) = client.join_community(code).await {
+                        show_generic_error(&err);
+                    }
                 }
             })
             .build_cloned_consumer()

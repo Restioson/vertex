@@ -10,6 +10,7 @@ message AuthRequest {
         RefreshToken refresh_token = 2;
         RevokeToken revoke_token = 3;
         RegisterUser register_user = 4;
+        ChangePassword change_password = 5;
     }
 }
 
@@ -68,8 +69,11 @@ message RevokeToken {
 
 message RegisterUser {
     structures.Credentials credentials = 1;
-    // Option<T>
-    oneof display_name {
-        string present = 2;
-    }
+    oneof display_name {string present = 2; } // Option<String>
+}
+
+message ChangePassword {
+    string username = 1;
+    string old_password = 2;
+    string new_password = 3;
 }

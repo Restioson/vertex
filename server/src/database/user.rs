@@ -70,6 +70,20 @@ impl TryFrom<Row> for UserRecord {
     }
 }
 
+impl Into<ServerUser> for UserRecord {
+    fn into(self) -> ServerUser {
+        ServerUser {
+            username: self.username,
+            display_name: self.display_name,
+            banned: self.banned,
+            locked: self.locked,
+            compromised: self.compromised,
+            latest_hash_scheme: self.hash_scheme_version == HashSchemeVersion::LATEST,
+            id: self.id,
+        }
+    }
+}
+
 pub struct UsernameConflict;
 pub struct NonexistentUser;
 
@@ -141,7 +155,7 @@ impl Database {
             &user.display_name,
             &(user.profile_version.0 as i32),
             &user.password_hash,
-            &(user.hash_scheme_version as u8 as i16),
+            &(user.hash_scheme_version as i16),
             &user.compromised,
             &user.locked,
             &user.banned,
@@ -233,7 +247,7 @@ impl Database {
         let stmt = conn.client.prepare(STMT).await?;
         let args: &[&(dyn ToSql + Sync)] = &[
             &new_password_hash,
-            &(hash_scheme_version as u8 as i16),
+            &(hash_scheme_version as i16),
             &false,
             &user.0,
         ];
@@ -244,5 +258,107 @@ impl Database {
         } else {
             Err(NonexistentUser)
         })
+    }
+
+    pub async fn set_banned(
+        &self,
+        user: UserId,
+        banned: bool,
+    ) -> DbResult<Result<(), NonexistentUser>> {
+        const STMT: &str = "UPDATE users SET banned = $1 WHERE id = $2";
+
+        let conn = self.pool.connection().await?;
+        let stmt = conn.client.prepare(STMT).await?;
+        let args: &[&(dyn ToSql + Sync)] = &[&banned, &user.0];
+
+        let res = conn.client.execute(&stmt, args).await?;
+        Ok(if res == 1 {
+            Ok(())
+        } else {
+            Err(NonexistentUser)
+        })
+    }
+
+    pub async fn set_locked(
+        &self,
+        user: UserId,
+        locked: bool,
+    ) -> DbResult<Result<(), NonexistentUser>> {
+        const STMT: &str = "UPDATE users SET locked = $1 WHERE id = $2";
+
+        let conn = self.pool.connection().await?;
+        let stmt = conn.client.prepare(STMT).await?;
+        let args: &[&(dyn ToSql + Sync)] = &[&locked, &user.0];
+
+        let res = conn.client.execute(&stmt, args).await?;
+        Ok(if res == 1 {
+            Ok(())
+        } else {
+            Err(NonexistentUser)
+        })
+    }
+
+    pub async fn search_user(
+        &self,
+        name: String,
+    ) -> DbResult<impl Stream<Item = DbResult<UserRecord>>> {
+        const QUERY: &str = "SELECT * FROM users
+                                WHERE $1 % username
+                                ORDER BY SIMILARITY($1, username) DESC";
+
+        let stream = self.query_stream(QUERY, &[&name]).await?;
+        let stream = stream
+            .and_then(|row| async move { Ok(UserRecord::try_from(row)?) })
+            .map_err(|e| e.into());
+
+        Ok(stream)
+    }
+
+    pub async fn list_all_server_users(
+        &self,
+    ) -> DbResult<impl Stream<Item = DbResult<UserRecord>>> {
+        const QUERY: &str = "SELECT * FROM users";
+
+        let stream = self.query_stream(QUERY, &[]).await?;
+        let stream = stream
+            .and_then(|row| async move { Ok(UserRecord::try_from(row)?) })
+            .map_err(|e| e.into());
+
+        Ok(stream)
+    }
+
+    pub async fn set_all_accounts_compromised(&self) -> DbResult<()> {
+        const SET_COMPROMISED: &str = "UPDATE users SET compromised = $1";
+        const DELETE_TOKENS: &str = "DELETE FROM login_tokens";
+
+        let conn = self.pool.connection().await?;
+        let stmt = conn.client.prepare(SET_COMPROMISED).await?;
+        conn.client.execute(&stmt, &[&true]).await?;
+
+        let stmt = conn.client.prepare(DELETE_TOKENS).await?;
+        conn.client.execute(&stmt, &[]).await?;
+
+        Ok(())
+    }
+
+    pub async fn set_accounts_with_old_hashes_compromised(&self) -> DbResult<()> {
+        const SET_COMPROMISED: &str =
+            "UPDATE users SET compromised = $1 WHERE hash_scheme_version < $2";
+        const DELETE_TOKENS: &str = "
+            DELETE FROM login_tokens
+                USING users
+                WHERE login_tokens.user_id = users.id
+                AND users.compromised;";
+
+        let conn = self.pool.connection().await?;
+        let stmt = conn.client.prepare(SET_COMPROMISED).await?;
+        conn.client
+            .execute(&stmt, &[&true, &(HashSchemeVersion::LATEST as i16)])
+            .await?;
+
+        let stmt = conn.client.prepare(DELETE_TOKENS).await?;
+        conn.client.execute(&stmt, &[]).await?;
+
+        Ok(())
     }
 }

@@ -1,7 +1,9 @@
 use std::rc::Rc;
+use std::sync::Mutex;
 
-use futures::{Stream, StreamExt};
+use futures::{FutureExt, Stream, StreamExt};
 use futures::future::{Abortable, AbortHandle};
+use futures::channel::mpsc::{self, UnboundedSender};
 
 pub use chat::*;
 pub use community::*;
@@ -14,6 +16,8 @@ use vertex::prelude::*;
 
 use crate::{config, net, scheduler, screen, SharedMut, WeakSharedMut, window};
 use crate::{Error, Result};
+use url::Url;
+use crate::screen::active::dialog::show_generic_error;
 
 mod community;
 mod room;
@@ -24,6 +28,12 @@ mod chat;
 mod notification;
 
 pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
+
+lazy_static::lazy_static! {
+    /// Channel through which messages to the invite-listener are sent, to allow for following invite
+    /// links from other apps through the `vertex://` protocol
+    pub static ref INVITE_SENDER: Mutex<Option<UnboundedSender<Url>>> = Mutex::new(None);
+}
 
 // TODO: This is approaching an MVC-like design. We should fully embrace this in terms of naming
 //        to make code more easily understandable in that it's a commonly understood pattern.
@@ -70,6 +80,7 @@ pub struct ClientState<Ui: ClientUi> {
     pub chat: Option<Chat<Ui>>,
     pub selected_room: Option<RoomEntry<Ui>>,
     pub message_entry_is_empty: bool,
+    pub admin_perms: AdminPermissionFlags,
 }
 
 #[derive(Clone)]
@@ -89,7 +100,7 @@ pub struct Client<Ui: ClientUi> {
 }
 
 impl<Ui: ClientUi> Client<Ui> {
-    pub async fn start(ws: net::AuthenticatedWs, ui: Ui) -> Result<Client<Ui>> {
+    pub async fn start(ws: net::AuthenticatedWs, ui: Ui, https: bool) -> Result<Client<Ui>> {
         let (sender, receiver) = net::from_ws(ws.stream);
 
         let req_manager = net::RequestManager::new();
@@ -117,6 +128,7 @@ impl<Ui: ClientUi> Client<Ui> {
             chat: None,
             selected_room: None,
             message_entry_is_empty: true,
+            admin_perms: ready.admin_permissions,
         });
 
         let (abort_signal, abort_handle) = futures::future::abortable(futures::future::pending());
@@ -141,6 +153,7 @@ impl<Ui: ClientUi> Client<Ui> {
 
         scheduler::spawn(ClientLoop {
             client: client.clone(),
+            https,
             event_receiver,
             abort_signal,
             _state: state,
@@ -163,8 +176,11 @@ impl<Ui: ClientUi> Client<Ui> {
             ServerEvent::SessionLoggedOut => {
                 let screen = screen::login::build().await;
                 window::set_screen(&screen.main);
-
                 self.abort_handle.abort();
+            }
+            ServerEvent::AdminPermissionsChanged(new_perms) => {
+                let state = self.state.upgrade().unwrap();
+                state.write().await.admin_perms = new_perms;
             }
             unexpected => println!("unhandled server event: {:?}", unexpected),
         }
@@ -360,10 +376,150 @@ impl<Ui: ClientUi> Client<Ui> {
     pub async fn log_out(&self) {
         self.request.send(ClientRequest::LogOut).await;
     }
+
+    pub async fn search_users(&self, name: String) -> Result<Vec<ServerUser>> {
+        let req = ClientRequest::AdminAction(AdminRequest::SearchUser { name });
+        let req = self.request.send(req).await;
+
+        match req.response().await? {
+            OkResponse::Admin(AdminResponse::SearchedUsers(users)) => Ok(users),
+            _ => Err(Error::UnexpectedMessage)
+        }
+    }
+
+    pub async fn list_all_server_users(&self) -> Result<Vec<ServerUser>> {
+        let req = ClientRequest::AdminAction(AdminRequest::ListAllUsers);
+        let req = self.request.send(req).await;
+
+        match req.response().await? {
+            OkResponse::Admin(AdminResponse::SearchedUsers(users)) => Ok(users),
+            _ => Err(Error::UnexpectedMessage)
+        }
+    }
+
+    pub async fn list_all_admins(&self) -> Result<Vec<Admin>> {
+        let req = ClientRequest::AdminAction(AdminRequest::ListAllAdmins);
+        let req = self.request.send(req).await;
+
+        match req.response().await? {
+            OkResponse::Admin(AdminResponse::Admins(admins)) => Ok(admins),
+            _ => Err(Error::UnexpectedMessage)
+        }
+    }
+
+    pub async fn search_reports(&self, criteria: SearchCriteria) -> Result<Vec<Report>> {
+        let req = ClientRequest::AdminAction(AdminRequest::SearchForReports(criteria));
+        let req = self.request.send(req).await;
+
+        match req.response().await? {
+            OkResponse::Admin(AdminResponse::Reports(reports)) => Ok(reports),
+            _ => Err(Error::UnexpectedMessage)
+        }
+    }
+
+    async fn do_to_many(
+        &self,
+        users: Vec<UserId>,
+        req: impl Fn(UserId) -> ClientRequest,
+    ) -> Result<Vec<(UserId, Error)>> {
+        let mut results = Vec::new();
+        for user in users {
+            let req = self.request.send(req(user)).await;
+
+             match req.response().await {
+                Ok(OkResponse::NoData) => {},
+                Ok(_) => results.push((user, Error::UnexpectedMessage)),
+                Err(e @ Error::ErrorResponse(_)) => results.push((user, e)),
+                Err(e) => return Err(e),
+            };
+        }
+
+        Ok(results)
+    }
+
+    pub async fn ban_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
+        self.do_to_many(
+            users,
+            |user| ClientRequest::AdminAction(AdminRequest::Ban(user))
+        ).await
+    }
+
+    pub async fn unban_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
+        self.do_to_many(
+            users,
+            |user| ClientRequest::AdminAction(AdminRequest::Unban(user))
+        ).await
+    }
+
+    pub async fn unlock_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
+        self.do_to_many(
+            users,
+            |user| ClientRequest::AdminAction(AdminRequest::Unlock(user))
+        ).await
+    }
+
+    pub async fn demote_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
+        self.do_to_many(
+            users,
+            |user| ClientRequest::AdminAction(AdminRequest::Demote(user))
+        ).await
+    }
+
+    pub async fn promote_users(
+        &self,
+        users: Vec<UserId>,
+        permissions: AdminPermissionFlags
+    ) -> Result<Vec<(UserId, Error)>> {
+        self.do_to_many(
+            users,
+            |user| ClientRequest::AdminAction(AdminRequest::Promote { user, permissions })
+        ).await
+    }
+
+    pub async fn report_message(
+        &self,
+        message: MessageId,
+        short_desc: &str,
+        extended_desc: &str,
+    ) -> Result<()> {
+        let request = ClientRequest::ReportUser {
+            message,
+            short_desc: short_desc.to_string(),
+            extended_desc: extended_desc.to_string(),
+        };
+        let request = self.request.send(request).await;
+
+        match request.response().await? {
+            OkResponse::NoData => Ok(()),
+            _ => Err(Error::UnexpectedMessage),
+        }
+    }
+
+    pub async fn set_report_status(&self, id: i32, status: ReportStatus) -> Result<()> {
+        let request = ClientRequest::AdminAction(AdminRequest::SetReportStatus {
+            id,
+            status,
+        });
+        let request = self.request.send(request).await;
+        match request.response().await? {
+            OkResponse::NoData => Ok(()),
+            _ => Err(Error::UnexpectedMessage),
+        }
+    }
+
+    pub async fn set_compromised(&self, typ: SetCompromisedType) -> Result<()> {
+        let request = ClientRequest::AdminAction(AdminRequest::SetAccountsCompromised(typ));
+        let request = self.request.send(request).await;
+        match request.response().await? {
+            OkResponse::NoData => Ok(()),
+            _ => Err(Error::UnexpectedMessage),
+        }
+    }
 }
 
 struct ClientLoop<Ui: ClientUi, S> {
     client: Client<Ui>,
+    https: bool,
     event_receiver: S,
     abort_signal: Abortable<futures::future::Pending<()>>,
     _state: SharedMut<ClientState<Ui>>,
@@ -373,33 +529,68 @@ impl<Ui: ClientUi, S> ClientLoop<Ui, S>
     where S: Stream<Item=tungstenite::Result<ServerEvent>> + Unpin
 {
     async fn run(self) {
-        let client = self.client;
+        let client = &self.client;
+        let https = self.https;
         let event_receiver = self.event_receiver;
 
         let request = client.request.clone();
 
-        let receiver = Box::pin(async move {
-            let mut event_receiver = event_receiver;
-            while let Some(result) = event_receiver.next().await {
-                let client = client.clone();
-                scheduler::spawn(async move {
-                    match result {
-                        Ok(event) => client.handle_event(event).await,
-                        Err(err) => client.handle_network_err(err).await,
+        let mut receiver = Box::pin(
+            async move {
+                let mut event_receiver = event_receiver;
+                while let Some(result) = event_receiver.next().await {
+                    let client = client.clone();
+                    scheduler::spawn(async move {
+                        match result {
+                            Ok(event) => client.handle_event(event).await,
+                            Err(err) => client.handle_network_err(err).await,
+                        }
+                    });
+                }
+            }.fuse()
+        );
+
+        let mut keep_alive = Box::pin(
+            async move {
+                let mut ticker = tokio::time::interval(HEARTBEAT_INTERVAL);
+                loop {
+                    request.net().ping().await;
+                    ticker.tick().await;
+                }
+            }.fuse()
+        );
+
+        let (invite_tx, mut invite_rx) = mpsc::unbounded();
+        *INVITE_SENDER.lock().unwrap() = Some(invite_tx);
+
+        let mut invite_listener = Box::pin(
+            async move {
+                while let Some(url) = invite_rx.next().await {
+                    // Workaround for local dev with http - users should never use http anyway...
+                    let scheme = if https {
+                        "https"
+                    } else {
+                        "http"
+                    };
+                    // https://github.com/servo/rust-url/issues/577#issuecomment-572756577
+                    let url = [scheme, &url[url::Position::AfterScheme..]].join("");
+                    let meta = get_link_metadata(&url).await.map(|m| m.invite);
+                    if let Ok(Some(inv)) = meta {
+                        if let Err(err) = client.clone().join_community(inv.code).await {
+                            show_generic_error(&err);
+                        }
+                    } else if let Err(e) = meta {
+                        println!("{:?}", e);
                     }
-                });
-            }
-        });
+                }
+            }.fuse()
+        );
 
-        let keep_alive = Box::pin(async move {
-            let mut ticker = tokio::time::interval(HEARTBEAT_INTERVAL);
-            loop {
-                request.net().ping().await;
-                ticker.tick().await;
-            }
-        });
-
-        let run = futures::future::select(receiver, keep_alive);
-        futures::future::select(self.abort_signal, run).await;
+        futures::select! {
+            _ = keep_alive => {},
+            _ = invite_listener => {},
+            _ = receiver => {},
+            _ = self.abort_signal.fuse() => {}
+        }
     }
 }

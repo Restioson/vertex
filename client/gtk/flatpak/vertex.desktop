@@ -2,9 +2,10 @@
 Name=Vertex
 Comment=GTK client for vertex
 Type=Application
-Exec=Vertex
+Exec=Vertex %u
 Terminal=false
 Categories=Chat;InstantMessaging;GTK;
 Keywords=Rust;GTK;Chat;
 Icon=cf.vertex.gtk
 StartupNotify=true
+MimeType=x-scheme-handler/vertex

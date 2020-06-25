@@ -24,8 +24,8 @@ use gdk::enums::key;
 use vertex::requests::AuthError;
 
 mod community;
-mod dialog;
-mod message;
+pub mod dialog;
+pub mod message;
 mod room;
 mod chat;
 
@@ -106,7 +106,7 @@ impl client::ClientUi for Ui {
         self.settings_button.connect_clicked(
             client.connector()
                 .do_async(|client, _| async move {
-                    let screen = screen::settings::build(client);
+                    let screen = screen::settings::build(client).await;
                     window::set_screen(&screen.main);
                 })
                 .build_cloned_consumer()
@@ -166,8 +166,13 @@ impl client::ClientUi for Ui {
         self.message_entry.connect_key_press_event(
             move |entry, key_event| {
                 let client = client_cloned.clone();
-                if key_event.get_keyval() != key::Return {
-                    return Inhibit(false);
+                match key_event.get_keyval() {
+                    key::Return => {},
+                    key::Escape => {
+                        entry.grab_remove();
+                        return Inhibit(true);
+                    },
+                    _ => return Inhibit(false),
                 }
 
                 if key_event.get_state().contains(gdk::ModifierType::SHIFT_MASK) {
@@ -290,11 +295,9 @@ impl client::ClientUi for Ui {
     fn select_room(&self, room: &RoomEntry<Self>) -> ChatWidget {
         self.clear_messages();
 
-        // TODO(a11y)
-        self.message_entry.set_can_focus(true);
-        //self.message_entry.set_editable(true);
+        self.message_entry.set_editable(true);
         self.message_entry.get_style_context().remove_class("disabled");
-        self.message_entry.get_buffer().unwrap().set_text("Send a message...");
+        self.message_entry.get_buffer().unwrap().set_text("");
 
         self.room_name.set_text(&room.name);
 
@@ -311,8 +314,6 @@ impl client::ClientUi for Ui {
     fn deselect_room(&self) {
         self.clear_messages();
 
-        // TODO(a11y)
-        //self.message_entry.set_can_focus(false);
         self.message_entry.set_editable(false);
         self.message_entry.get_style_context().add_class("disabled");
         self.message_entry.get_buffer().unwrap().set_text("Select a room to send a message...");
@@ -346,12 +347,17 @@ pub async fn start(parameters: AuthParameters) {
 
             match error {
                 Error::AuthErrorResponse(e) => {
-                    if e != AuthError::TokenInUse {
+                    if e != AuthError::TokenInUse || e != AuthError::UserCompromised {
                         token_store::forget_token();
                     }
 
-                    let screen = screen::login::build().await;
-                    window::set_screen(&screen.main);
+                    if e == AuthError::UserCompromised {
+                        let screen = screen::compromised::build(parameters).await;
+                        window::set_screen(&screen.main);
+                    } else {
+                        let screen = screen::login::build().await;
+                        window::set_screen(&screen.main);
+                    }
                 }
                 _ => {
                     let error = describe_error(error);
@@ -367,7 +373,7 @@ async fn try_start(parameters: AuthParameters) -> Result<Client<Ui>> {
     let auth = auth::Client::new(parameters.instance);
     let ws = auth.login(parameters.device, parameters.token).await?;
 
-    Ok(Client::start(ws, Ui::build()).await?)
+    Ok(Client::start(ws, Ui::build(), auth.server.url().scheme() == "https").await?)
 }
 
 fn describe_error(error: Error) -> String {

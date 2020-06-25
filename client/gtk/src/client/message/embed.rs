@@ -114,7 +114,7 @@ fn build_embed(url: String, metadata: LinkMetadata) -> Option<MessageEmbed> {
     }
 }
 
-async fn get_link_metadata(url: &str) -> Result<LinkMetadata> {
+pub async fn get_link_metadata(url: &str) -> Result<LinkMetadata> {
     type Connector = hyper_tls::HttpsConnector<hyper::client::HttpConnector>;
 
     let https = hyper_tls::HttpsConnector::new();
@@ -180,9 +180,9 @@ fn collect_metadata_props(html: scraper::Html) -> HashMap<String, String> {
 }
 
 #[derive(Debug, Clone)]
-struct LinkMetadata {
+pub struct LinkMetadata {
     opengraph: Option<OpenGraphMeta>,
-    invite: Option<InviteMeta>,
+    pub invite: Option<InviteMeta>,
 }
 
 #[derive(Debug, Clone)]
@@ -192,8 +192,8 @@ struct OpenGraphMeta {
 }
 
 #[derive(Debug, Clone)]
-struct InviteMeta {
-    code: InviteCode,
+pub struct InviteMeta {
+    pub code: InviteCode,
     name: String,
     description: String,
 }

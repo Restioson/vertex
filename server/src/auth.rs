@@ -8,10 +8,14 @@ use crate::database::UserRecord;
 
 pub const MAX_TOKEN_LENGTH: usize = 45;
 
-#[derive(Debug)]
-#[repr(u8)]
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[repr(i16)]
 pub enum HashSchemeVersion {
     Argon2V1 = 1,
+}
+
+impl HashSchemeVersion {
+    pub const LATEST: HashSchemeVersion = HashSchemeVersion::Argon2V1;
 }
 
 impl From<i16> for HashSchemeVersion {
@@ -29,8 +33,7 @@ pub fn valid_password(password: &str, config: &Config) -> bool {
 }
 
 pub fn valid_display_name(display_name: &str, config: &Config) -> bool {
-    display_name.len() <= config.max_display_name_len as usize
-        && display_name.len() >= 1
+    display_name.len() <= config.max_display_name_len as usize && !display_name.is_empty()
 }
 
 fn valid_username(username: &str, config: &Config) -> bool {

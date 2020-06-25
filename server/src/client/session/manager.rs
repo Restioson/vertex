@@ -5,16 +5,21 @@ use lazy_static::lazy_static;
 use vertex::prelude::*;
 
 use super::*;
+use crate::auth::HashSchemeVersion;
 use futures::TryStreamExt;
 use std::collections::HashMap;
 
 lazy_static! {
-    static ref USERS: DashMap<UserId, ActiveUser> = DashMap::new();
+    pub static ref USERS: DashMap<UserId, ActiveUser> = DashMap::new();
 }
 
+/// Stuff that is shared between sessions.
 pub struct ActiveUser {
     pub communities: HashMap<CommunityId, UserCommunity>,
     pub sessions: HashMap<DeviceId, Session>,
+    pub admin_perms: AdminPermissionFlags,
+    /// Stored here so, in case of set to compromised, we can check if to log this user out
+    pub hash_scheme_version: HashSchemeVersion,
 }
 
 impl ActiveUser {
@@ -22,9 +27,11 @@ impl ActiveUser {
         db: Database,
         user: UserId,
         device: DeviceId,
+        hash_scheme_version: HashSchemeVersion,
         session: Session,
     ) -> DbResult<Self> {
         let communities = db.get_communities_for_user(user).await?;
+        let admin_perms = db.get_admin_permissions(user).await?;
         let db = &db; // To prevent move
 
         let communities = communities
@@ -42,6 +49,8 @@ impl ActiveUser {
         Ok(ActiveUser {
             communities,
             sessions,
+            admin_perms,
+            hash_scheme_version,
         })
     }
 }
@@ -116,7 +125,12 @@ pub struct UserRoom {
     pub unread: bool,
 }
 
-pub async fn insert(db: Database, user: UserId, device: DeviceId) -> DbResult<Result<(), ()>> {
+pub async fn insert(
+    db: Database,
+    user: UserId,
+    device: DeviceId,
+    hash_scheme_version: HashSchemeVersion,
+) -> DbResult<Result<(), ()>> {
     if let Some(mut active_user) = USERS.get_mut(&user) {
         if active_user.sessions.contains_key(&device) {
             return Ok(Err(()));
@@ -124,8 +138,14 @@ pub async fn insert(db: Database, user: UserId, device: DeviceId) -> DbResult<Re
 
         active_user.sessions.insert(device, Session::Upgrading);
     } else {
-        let active_user =
-            ActiveUser::load_with_new_session(db, user, device, Session::Upgrading).await?;
+        let active_user = ActiveUser::load_with_new_session(
+            db,
+            user,
+            device,
+            hash_scheme_version,
+            Session::Upgrading,
+        )
+        .await?;
         USERS.insert(user, active_user);
     }
 
@@ -151,8 +171,30 @@ pub fn upgrade(user: UserId, device: DeviceId, addr: Address<ActiveSession>) -> 
     }
 }
 
-pub fn remove_and_notify(user: UserId, device: DeviceId) -> Result<(), Error> {
-    match remove(user, device) {
+pub fn remove_and_notify_user(user: UserId) {
+    let mut lock = USERS.get_mut(&user);
+    if let Some(ref mut active_user) = lock {
+        let sessions = &mut active_user.sessions;
+        sessions.retain(|_, session| match session {
+            Session::Active { actor, .. } => {
+                let _ = actor
+                    .do_send(LogoutThisSession)
+                    .map_err(handle_disconnected("ClientSession"));
+                false
+            }
+            _ => true,
+        });
+
+        if sessions.is_empty() {
+            // Drop the lock so that we can remove it without deadlocking
+            drop(lock);
+            USERS.remove(&user);
+        }
+    }
+}
+
+pub fn remove_and_notify_device(user: UserId, device: DeviceId) -> Result<(), Error> {
+    match remove_device(user, device) {
         Some(Session::Active { actor, .. }) => actor
             .do_send(LogoutThisSession)
             .map_err(handle_disconnected("ClientSession")),
@@ -160,7 +202,7 @@ pub fn remove_and_notify(user: UserId, device: DeviceId) -> Result<(), Error> {
     }
 }
 
-pub fn remove(user: UserId, device: DeviceId) -> Option<Session> {
+pub fn remove_device(user: UserId, device: DeviceId) -> Option<Session> {
     let mut lock = USERS.get_mut(&user);
     if let Some(ref mut active_user) = lock {
         let sessions = &mut active_user.sessions;

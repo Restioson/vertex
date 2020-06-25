@@ -2,7 +2,7 @@ use gtk::prelude::*;
 
 use lazy_static::lazy_static;
 
-use crate::{auth, AuthParameters, Error, Result, Server, token_store, TryGetText, window};
+use crate::{AuthParameters, Error, Result, Server, token_store, TryGetText, window};
 use crate::connect::AsConnector;
 use crate::Glade;
 use crate::screen;
@@ -49,14 +49,23 @@ async fn bind_events(screen: &Screen) {
         screen.connector()
             .do_async(|screen, _| async move {
                 let instance_ip = screen.instance_entry.try_get_text().unwrap_or_default();
-
                 let username = screen.username_entry.try_get_text().unwrap_or_default();
                 let password = screen.password_entry.try_get_text().unwrap_or_default();
 
                 screen.status_stack.set_visible_child(&screen.spinner);
                 screen.error_label.set_text("");
 
-                match login(instance_ip, username, password).await {
+                let instance = match Server::parse(instance_ip) {
+                    Ok(instance) => instance,
+                    Err(err) => {
+                        println!("Encountered error during login: {:?}", err);
+                        screen.error_label.set_text(&describe_error(err));
+                        screen.status_stack.set_visible_child(&screen.error_label);
+                        return;
+                    }
+                };
+
+                match login(instance, username, password).await {
                     Ok(parameters) => {
                         screen::active::start(parameters).await;
                     }
@@ -81,17 +90,16 @@ async fn bind_events(screen: &Screen) {
     );
 }
 
-async fn login(
-    instance: String,
+pub async fn login(
+    instance: Server,
     username: String,
     password: String,
 ) -> Result<AuthParameters> {
-    let instance = Server::parse(instance)?;
-    let auth = auth::Client::new(instance.clone());
+    let auth = crate::auth::Client::new(instance.clone());
 
     use vertex::prelude::*;
     let token = auth.create_token(
-        Credentials::new(username, password),
+        Credentials::new(username.clone(), password),
         TokenCreationOptions::default(),
     ).await?;
 
@@ -99,6 +107,7 @@ async fn login(
         instance,
         device: token.device,
         token: token.token,
+        username,
     };
 
     token_store::store_token(&parameters);
@@ -106,7 +115,7 @@ async fn login(
     Ok(parameters)
 }
 
-fn describe_error(error: Error) -> String {
+pub fn describe_error(error: Error) -> String {
     match error {
         Error::InvalidUrl => "Invalid instance ip".to_owned(),
         Error::ProtocolError(_) => "Protocol error: check your server instance?".to_owned(),

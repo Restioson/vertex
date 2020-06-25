@@ -37,7 +37,7 @@ glib = "0.9"
 gdk = "0.12"
 pango = "0.8"
 gdk-pixbuf = "0.8"
-gtk = { version = "0.8", features = ["v3_20"] }
+gtk = { version = "0.8", features = ["v3_22"] }
 atk = "0.8"
 
 url = { version = "2.1", features = ["serde"] }
@@ -60,7 +60,7 @@ futures = "0.3"
 
 tokio = { version = "0.2.9", features = ["full"] }
 
-tungstenite = "0.9"
+tungstenite = "0.10"
 tokio-tungstenite = { git = "https://github.com/snapview/tokio-tungstenite.git", features = ["tls"] }
 
 scraper = "0.11"
@@ -78,6 +78,11 @@ lazy_static = "1.4"
 ears = "0.7"
 confy = "0.4"
 arc-swap = "0.4"
+
+bimap = "0.4"
+
+nom = "^5"
+itertools = "^0.8"
 
 vertex = { path = "../../common" }
 

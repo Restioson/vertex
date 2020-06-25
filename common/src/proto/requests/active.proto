@@ -3,6 +3,7 @@ package vertex.requests.active;
 
 import "types.proto";
 import "structures.proto";
+import "requests/administration.proto";
 
 message ClientMessage {
     types.RequestId id = 1;
@@ -26,10 +27,11 @@ message ClientRequest {
         structures.Delete delete = 13;
         ChangeUsername change_username = 14;
         ChangeDisplayName change_display_name = 15;
-        ChangePassword change_password = 16;
-        GetProfile get_profile = 17;
-        ChangeCommunityName change_community_name = 18;
-        ChangeCommunityDescription change_community_description = 19;
+        GetProfile get_profile = 16;
+        ChangeCommunityName change_community_name = 17;
+        ChangeCommunityDescription change_community_description = 18;
+        administration.AdminRequest admin_action = 19;
+        ReportUser report_user = 20;
     }
 }
 
@@ -42,9 +44,7 @@ message ClientSentMessage {
 message GetRoomUpdate {
     types.CommunityId community = 1;
     types.RoomId room = 2;
-    oneof last_received { // Option<T>
-        types.MessageId present = 3;
-    }
+    types.MessageId last_received = 3; // nullable
     uint64 message_count = 4;
 }
 
@@ -86,9 +86,7 @@ message CreateRoom {
 
 message CreateInvite {
     types.CommunityId community = 1;
-    oneof expiration_datetime { // Option<T>
-        int64 present = 2; // Unix timestamp
-    }
+    oneof expiration_datetime {int64 present = 2; } // Option<i64> - Unix timestamp
 }
 
 message JoinCommunity {
@@ -103,11 +101,6 @@ message ChangeDisplayName {
     string new_display_name = 2;
 }
 
-message ChangePassword {
-    string old_password = 1;
-    string new_password = 2;
-}
-
 message GetProfile {
     types.UserId user = 1;
 }
@@ -120,4 +113,10 @@ message ChangeCommunityName {
 message ChangeCommunityDescription {
     string new = 1;
     types.CommunityId community = 2;
+}
+
+message ReportUser {
+    types.MessageId message = 1;
+    string short_desc = 2;
+    string extended_desc = 3;
 }

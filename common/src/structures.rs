@@ -1,4 +1,5 @@
 use crate::proto::{self, DeserializeError};
+use crate::requests::AdminPermissionFlags;
 use crate::types::*;
 use bitflags::bitflags;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
@@ -157,11 +158,7 @@ impl TryFrom<proto::structures::RoomUpdate> for RoomUpdate {
 
     fn try_from(update: proto::structures::RoomUpdate) -> Result<Self, Self::Error> {
         Ok(RoomUpdate {
-            last_read: if let Some(last_read) = update.last_read {
-                Some(last_read.try_into()?)
-            } else {
-                None
-            },
+            last_read: update.last_read.map(|x| x.try_into()).transpose()?,
             new_messages: if let Some(new_messages) = update.new_messages {
                 new_messages.try_into()?
             } else {
@@ -281,6 +278,8 @@ pub struct ClientReady {
     pub user: UserId,
     pub profile: Profile,
     pub communities: Vec<CommunityStructure>,
+    pub permissions: TokenPermissionFlags,
+    pub admin_permissions: AdminPermissionFlags,
 }
 
 impl From<ClientReady> for proto::structures::ClientReady {
@@ -289,6 +288,8 @@ impl From<ClientReady> for proto::structures::ClientReady {
             user: Some(ready.user.into()),
             profile: Some(ready.profile.into()),
             communities: ready.communities.into_iter().map(Into::into).collect(),
+            permission_flags: ready.permissions.bits(),
+            admin_permission_flags: ready.admin_permissions.bits(),
         }
     }
 }
@@ -307,6 +308,10 @@ impl TryFrom<proto::structures::ClientReady> for ClientReady {
             user: ready.user?.try_into()?,
             profile: ready.profile?.try_into()?,
             communities,
+            permissions: TokenPermissionFlags::from_bits_truncate(ready.permission_flags),
+            admin_permissions: AdminPermissionFlags::from_bits_truncate(
+                ready.admin_permission_flags,
+            ),
         })
     }
 }
@@ -382,18 +387,10 @@ impl From<TokenCreationOptions> for proto::structures::TokenCreationOptions {
         use proto::structures::token_creation_options::{DeviceName, ExpirationDatetime};
 
         proto::structures::TokenCreationOptions {
-            device_name: if let Some(name) = options.device_name {
-                Some(DeviceName::DeviceNamePresent(name))
-            } else {
-                None
-            },
-            expiration_datetime: if let Some(dt) = options.expiration_datetime {
-                Some(ExpirationDatetime::ExpirationDatetimePresent(
-                    dt.timestamp(),
-                ))
-            } else {
-                None
-            },
+            device_name: options.device_name.map(DeviceName::DeviceNamePresent),
+            expiration_datetime: options.expiration_datetime
+                .map(|dt| dt.timestamp())
+                .map(ExpirationDatetime::ExpirationDatetimePresent),
             permission_flags: options.permission_flags.bits,
         }
     }
@@ -451,6 +448,10 @@ bitflags! {
         const CREATE_ROOMS = 1 << 10;
         /// Create invites to communities
         const CREATE_INVITES = 1 << 11;
+        /// Perform administrator actions
+        const ADMINISTER = 1 << 12;
+        /// Report users to server administrators
+        const REPORT_USERS = 1 << 13;
     }
 }
 

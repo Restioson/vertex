@@ -90,7 +90,7 @@ impl Database {
             &token.device.0,
             &token.device_name,
             &token.token_hash,
-            &(token.hash_scheme_version as u8 as i16),
+            &(token.hash_scheme_version as i16),
             &token.user.0,
             &token.last_used,
             &token.expiration_date,

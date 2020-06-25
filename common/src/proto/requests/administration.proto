@@ -1,0 +1,136 @@
+syntax = "proto3";
+package vertex.requests.administration;
+
+import "types.proto";
+
+message AdminRequest {
+    oneof request {
+        Promote promote_user = 1;
+        Demote demote_user = 2;
+        Ban ban_user = 3;
+        SearchUser search_user = 4;
+        types.None list_all_users = 5;
+        Unban unban_user = 6;
+        Unlock unlock_user = 7;
+        types.None list_all_admins = 8;
+        SearchCriteria search_for_reports = 9;
+        SetReportStatus set_report_status = 10;
+        SetCompromisedType set_accounts_compromised = 11;
+    }
+}
+
+message AdminResponse {
+    oneof response {
+        SearchedUsers searched_users = 1;
+        Admins admins = 2;
+        Reports reports = 3;
+    }
+}
+
+message Promote {
+    types.UserId user = 1;
+    int64 permissions_flags = 2;
+}
+
+message Demote {
+    types.UserId user = 1;
+}
+
+message Ban {
+    types.UserId user = 1;
+}
+
+message Unban {
+    types.UserId user = 1;
+}
+
+message Unlock {
+    types.UserId user = 1;
+}
+
+message SearchUser {
+    string name = 1;
+}
+
+message SearchedUsers {
+    repeated ServerUser users = 1;
+}
+
+message ServerUser {
+    string username = 1;
+    string display_name = 2;
+    bool banned = 3;
+    bool locked = 4;
+    bool compromised = 5;
+    bool latest_hash_scheme = 6;
+    types.UserId id = 7;
+}
+
+message Admins {
+    repeated Admin admins = 1;
+}
+
+message Admin {
+    string username = 1;
+    types.UserId id = 2;
+    int64 permissions_flags = 3;
+}
+
+message ReportUser {
+    types.UserId id = 1;
+    string username = 2;
+}
+
+message ReportMessage {
+    types.MessageId id = 1; // Can be null
+    string text = 2;
+    int64 sent_at = 3;
+}
+
+message ReportRoom {
+    types.RoomId id = 1;
+    string name = 2;
+}
+
+message ReportCommunity {
+    types.CommunityId id = 1;
+    string name = 2;
+}
+
+message Report {
+    int32 id = 1;
+    ReportUser reporter = 2; // Nullable
+    ReportUser reported = 3;
+    ReportMessage message = 4;
+    ReportRoom room = 5; // Nullable
+    ReportCommunity community = 6; // Nullable
+    int64 datetime = 7;
+    string short_desc = 8;
+    string extended_desc = 9;
+    uint32 status = 10;
+}
+
+message Reports {
+    repeated Report reports = 1;
+}
+
+message SearchCriteria {
+    string words = 1;
+    oneof of_user { string of_user_present = 2; }; // Option<String>
+    oneof by_user { string by_user_present = 3; }; //      "
+    oneof before_date { int64 before_timestamp = 4; }; //  (etc) - Unix timestamp
+    oneof after_date { int64 after_timestamp = 5; };
+    oneof in_community { string in_community_present = 6; };
+    oneof in_room { string in_room_present = 7; };
+    oneof status { uint32 status_code = 8; };
+}
+
+message SetReportStatus {
+    int32 id = 1;
+    uint32 status = 2;
+}
+
+enum SetCompromisedType {
+    All = 0;
+    OldHashes = 1;
+}

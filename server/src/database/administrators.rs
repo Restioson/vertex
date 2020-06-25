@@ -1,5 +1,5 @@
-use crate::database::{Database, DbResult, InvalidUser};
-use bitflags::bitflags;
+use crate::database::{Database, DbResult};
+use futures::{Stream, TryStreamExt};
 use std::error::Error;
 use tokio_postgres::error::{DbError, SqlState};
 use tokio_postgres::types::ToSql;
@@ -11,46 +11,35 @@ pub(super) const CREATE_ADMINISTRATORS_TABLE: &str = r"
         permission_flags     BIGINT NOT NULL
     )";
 
-bitflags! {
-    pub struct AdminPermissionFlags: i64 {
-        /// All permissions. Could be used for the server owner.
-        const ALL = 1;
-        /// Ban users.
-        const BAN = 1 << 1;
-    }
-}
-
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CreateAdminError {
     InvalidUser,
-    AlreadyAdmin,
 }
 
 impl Database {
-    pub async fn create_admin(
+    pub async fn set_admin_permissions(
         &self,
         user: UserId,
         permissions: AdminPermissionFlags,
     ) -> DbResult<Result<(), CreateAdminError>> {
-        const STMT: &str = "
-            INSERT (user, permission_flags) INTO administrators
-                ON CONFLICT DO NOTHING
+        const UPDATE: &str = "
+            INSERT INTO administrators (user_id, permission_flags) VALUES ($1, $2)
+                ON CONFLICT(user_id) DO UPDATE SET permission_flags = $2
         ";
+        const DELETE: &str = "DELETE FROM administrators WHERE user_id = $1";
 
         let conn = self.pool.connection().await?;
-        let args: &[&(dyn ToSql + Sync)] = &[&user.0, &permissions.bits()];
-        let res = conn.client.execute(STMT, args).await;
+        let res = if permissions == AdminPermissionFlags::from_bits_truncate(0) {
+            conn.client.execute(DELETE, &[&user.0]).await
+        } else {
+            let args: &[&(dyn ToSql + Sync)] = &[&user.0, &permissions.bits()];
+            conn.client.execute(UPDATE, args).await
+        };
 
         match res {
-            Ok(1) => {
-                // 1 row modified = successfully added
-                Ok(Ok(()))
-            }
-            Ok(0) => {
-                // 0 rows modified = failed to add
-                Ok(Err(CreateAdminError::AlreadyAdmin))
-            }
+            Ok(1) => Ok(Ok(())), // 1 row modified = successfully added
             Ok(_n) => {
-                panic!("db error: create admin query returned more than one row modified!");
+                panic!("db error: create admin query returned != 1 row modified!");
             }
             Err(err) => {
                 if err.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {
@@ -60,7 +49,9 @@ impl Database {
                         .and_then(|e| e.constraint());
 
                     match constraint {
-                        Some("administrators_user_fkey") => Ok(Err(CreateAdminError::InvalidUser)),
+                        Some("administrators_user_id_fkey") => {
+                            Ok(Err(CreateAdminError::InvalidUser))
+                        }
                         Some(_) | None => Err(err.into()),
                     }
                 } else {
@@ -85,22 +76,28 @@ impl Database {
         }
     }
 
-    pub async fn set_admin_permissions(
-        &self,
-        user: UserId,
-        permissions: AdminPermissionFlags,
-    ) -> DbResult<Result<(), InvalidUser>> {
-        const STMT: &str = "UPDATE administrators SET permission_flags = $1 WHERE user_id = $2";
+    pub async fn list_all_admins(&self) -> DbResult<impl Stream<Item = DbResult<Admin>>> {
+        const QUERY: &str = "
+            SELECT user_id, username, permission_flags
+            FROM administrators
+            INNER JOIN users ON administrators.user_id = users.id";
 
-        let conn = self.pool.connection().await?;
-        let args: &[&(dyn ToSql + Sync)] = &[&permissions.bits(), &user.0];
-        let ret = conn.client.execute(STMT, args).await?;
+        let stream = self.query_stream(QUERY, &[]).await?;
+        let stream = stream
+            .and_then(|row| async move {
+                let id = UserId(row.try_get("user_id")?);
+                let username = row.try_get("username")?;
+                let permissions =
+                    AdminPermissionFlags::from_bits_truncate(row.try_get("permission_flags")?);
 
-        if ret == 1 {
-            // 1 row modified = user was admin
-            Ok(Ok(()))
-        } else {
-            Ok(Err(InvalidUser))
-        }
+                Ok(Admin {
+                    username,
+                    id,
+                    permissions,
+                })
+            })
+            .map_err(|e| e.into());
+
+        Ok(stream)
     }
 }

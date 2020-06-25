@@ -4,7 +4,7 @@ use lazy_static::lazy_static;
 
 use crate::client;
 use crate::connect::AsConnector;
-use crate::{Glade, };
+use crate::Glade;
 
 use super::*;
 use atk::{AtkObjectExt, RelationType, RelationSetExt};

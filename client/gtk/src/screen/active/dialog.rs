@@ -7,7 +7,7 @@ use crate::connect::AsConnector;
 use crate::window;
 
 use super::Ui;
-use gtk::{DialogFlags, ResponseType, Label, EntryBuilder, WidgetExt};
+use gtk::{DialogFlags, ResponseType, Label, EntryBuilder, WidgetExt, TextBufferBuilder, ScrolledWindowBuilder};
 use atk::{RelationType, AtkObjectExt, RelationSetExt};
 
 pub fn show_add_community(client: Client<Ui>) {
@@ -24,7 +24,12 @@ pub fn show_add_community(client: Client<Ui>) {
 
         let label = Label::new(Some("Add a Community"));
         label.get_style_context().add_class("title");
-        dialog.get_content_area().add(&label);
+        let title_box = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
+            .child(&label)
+            .build();
+        dialog.get_content_area().add(&title_box);
 
         let client = client.clone();
         dialog.connect_response(move |dialog, response_ty| {
@@ -37,11 +42,11 @@ pub fn show_add_community(client: Client<Ui>) {
                     }
                     dialog.emit_close();
                 }
-                _ => {},
+                _ => dialog.emit_close(),
             }
         });
 
-        dialog
+        (dialog, title_box)
     });
 }
 
@@ -66,6 +71,11 @@ pub fn show_create_community(client: Client<Ui>) {
         let entry = EntryBuilder::new()
             .placeholder_text("Community name...")
             .build();
+        let title_box = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
+            .child(&label)
+            .build();
 
         entry.clone().connect_activate(
             dialog.connector()
@@ -74,7 +84,7 @@ pub fn show_create_community(client: Client<Ui>) {
         );
 
         let content = dialog.get_content_area();
-        content.add(&label);
+        content.add(&title_box);
         content.add(&entry);
 
         let client = client.clone();
@@ -84,6 +94,7 @@ pub fn show_create_community(client: Client<Ui>) {
                     let entry = entry.clone();
                     async move {
                         if response_type != ResponseType::Apply {
+                            dialog.emit_close();
                             return;
                         }
 
@@ -99,7 +110,7 @@ pub fn show_create_community(client: Client<Ui>) {
                 .build_widget_and_owned_listener()
         );
 
-        dialog
+        (dialog, title_box)
     });
 }
 
@@ -117,6 +128,11 @@ pub fn show_join_community(client: Client<Ui>) {
         let entry = EntryBuilder::new()
             .placeholder_text("Invite code...")
             .build();
+        let title_box = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
+            .child(&label)
+            .build();
 
         entry.clone().connect_activate(
             dialog.connector()
@@ -125,7 +141,7 @@ pub fn show_join_community(client: Client<Ui>) {
         );
 
         let content = dialog.get_content_area();
-        content.add(&label);
+        content.add(&title_box);
         content.add(&entry);
 
         let client = client.clone();
@@ -135,6 +151,7 @@ pub fn show_join_community(client: Client<Ui>) {
                     let entry = entry.clone();
                     async move {
                         if response_type != ResponseType::Apply {
+                            dialog.emit_close();
                             return;
                         }
 
@@ -151,7 +168,7 @@ pub fn show_join_community(client: Client<Ui>) {
                 .build_widget_and_owned_listener()
         );
 
-        dialog
+        (dialog, title_box)
     });
 }
 
@@ -166,6 +183,11 @@ pub fn show_invite_dialog(invite: InviteCode) {
 
         let label = Label::new(Some("Invite Code"));
         label.get_style_context().add_class("title");
+        let title_box = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
+            .child(&label)
+            .build();
 
         let code_view: gtk::TextView = gtk::TextViewBuilder::new()
             .editable(false)
@@ -182,7 +204,7 @@ pub fn show_invite_dialog(invite: InviteCode) {
         code_view.get_style_context().add_class("invite_code_text");
 
         let content = dialog.get_content_area();
-        content.add(&label);
+        content.add(&title_box);
         content.add(&code_view);
 
         code_view.connect_button_release_event(|code_view, _| {
@@ -194,7 +216,7 @@ pub fn show_invite_dialog(invite: InviteCode) {
         });
 
         dialog.connect_response(|dialog, _| dialog.emit_close());
-        dialog
+        (dialog, title_box)
     });
 }
 
@@ -212,6 +234,11 @@ pub fn show_create_room(community: client::CommunityEntry<Ui>) {
         let entry = EntryBuilder::new()
             .placeholder_text("Channel name...")
             .build();
+        let title_box = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
+            .child(&label)
+            .build();
 
         entry.clone().connect_activate(
             dialog.connector()
@@ -220,7 +247,7 @@ pub fn show_create_room(community: client::CommunityEntry<Ui>) {
         );
 
         let content = dialog.get_content_area();
-        content.add(&label);
+        content.add(&title_box);
         content.add(&entry);
 
         dialog.connect_response(
@@ -229,6 +256,7 @@ pub fn show_create_room(community: client::CommunityEntry<Ui>) {
                     let entry = entry.clone();
                     async move {
                         if response_type != ResponseType::Apply {
+                            dialog.emit_close();
                             return;
                         }
 
@@ -244,9 +272,129 @@ pub fn show_create_room(community: client::CommunityEntry<Ui>) {
                 .build_widget_and_owned_listener()
         );
 
-        dialog
+        (dialog, title_box)
     });
 }
+
+pub fn show_report_message(client: Client<Ui>, msg: MessageId) {
+    window::show_dialog(|window| {
+        let dialog = gtk::Dialog::new_with_buttons(
+            None,
+            Some(&window.window),
+            DialogFlags::MODAL | DialogFlags::DESTROY_WITH_PARENT,
+            &[("Report", ResponseType::Apply)],
+        );
+
+        let label = Label::new(Some("Report A Message"));
+        label.get_style_context().add_class("title");
+        let title_box = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
+            .child(&label)
+            .build();
+
+        let short = EntryBuilder::new()
+            .placeholder_text("Short description...")
+            .build();
+
+        let buf = TextBufferBuilder::new()
+            .text("Describe other details and reasoning related to the report.")
+            .build();
+        let long = gtk::TextViewBuilder::new()
+            .buffer(&buf)
+            .build();
+        let long_scroll = ScrolledWindowBuilder::new()
+            .child(&long)
+            .name("extended_desc_scroll")
+            .max_content_width(380)
+            .min_content_width(380)
+            .max_content_height(200)
+            .min_content_height(200)
+            .build();
+        let long_box = gtk::BoxBuilder::new()
+            .child(&long_scroll)
+            .name("extended_desc_box")
+            .build();
+
+        let content = dialog.get_content_area();
+        content.add(&title_box);
+        content.add(&short);
+        content.add(&long_box);
+
+        let client = client.clone();
+        dialog.connect_response(
+            client.connector()
+                .do_async(move |client, (dialog, response_type): (gtk::Dialog, ResponseType)| {
+                    let short = short.clone();
+                    let long = long.clone();
+
+                    async move {
+                        if response_type != ResponseType::Apply {
+                            dialog.emit_close();
+                            return;
+                        }
+
+                        let buf = long.get_buffer().unwrap();
+                        let (begin, end) = &buf.get_bounds();
+                        let long_desc = buf.get_text(begin, end, false);
+                        let long_desc = long_desc.as_ref().map(|c| c.as_str()).unwrap_or_default();
+
+                        if let Ok(short_desc) = short.try_get_text() {
+                            let res = client.report_message(msg, &short_desc, long_desc).await;
+                            if let Err(e) = res {
+                                show_generic_error(&e);
+                            }
+                        }
+                        dialog.emit_close();
+                    }
+                })
+                .build_widget_and_owned_listener()
+        );
+
+        (dialog, title_box)
+    });
+}
+
+pub fn show_choose_report_action(client: Client<Ui>, user: UserId) {
+    window::show_dialog(|window| {
+        let dialog = gtk::Dialog::new_with_buttons(
+            None,
+            Some(&window.window),
+            DialogFlags::MODAL | DialogFlags::DESTROY_WITH_PARENT,
+            &[("None", ResponseType::Other(0)), ("Ban", ResponseType::Other(1))],
+        );
+
+        let heading = Label::new(Some("Choose an action"));
+        heading.get_style_context().add_class("title");
+        let title_box = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
+            .child(&heading)
+            .build();
+
+        let content = dialog.get_content_area();
+        content.add(&title_box);
+
+        dialog.connect_response(
+            client.connector()
+                .do_async(move |client, (dialog, response_type): (gtk::Dialog, ResponseType)| {
+                    async move {
+                        if let ResponseType::Other(1) = response_type {
+                            match client.ban_users(vec![user]).await.map(|mut v| v.pop()) {
+                                Err(ref e) | Ok(Some((_, ref e))) => show_generic_error(&e),
+                                _ => {}
+                            }
+                        }
+
+                        dialog.emit_close();
+                    }
+                })
+                .build_widget_and_owned_listener()
+        );
+        (dialog, title_box)
+    });
+}
+
 
 pub fn show_generic_error<E: std::fmt::Display>(error: &E) {
     window::show_dialog(|window| {
@@ -260,15 +408,20 @@ pub fn show_generic_error<E: std::fmt::Display>(error: &E) {
         let heading = Label::new(Some("Error"));
         heading.get_style_context().add_class("title");
         heading.set_widget_name("error_title");
+        let title_box = gtk::BoxBuilder::new()
+            .orientation(gtk::Orientation::Horizontal)
+            .hexpand(true)
+            .child(&heading)
+            .build();
 
         let description: gtk::Label = gtk::Label::new(Some(&format!("{}", error)));
         description.get_style_context().add_class("error_description");
 
         let content = dialog.get_content_area();
-        content.add(&heading);
+        content.add(&title_box);
         content.add(&description);
 
         dialog.connect_response(|dialog, _| dialog.emit_close());
-        dialog
+        (dialog, title_box)
     });
 }

@@ -3,6 +3,7 @@ use std::fmt;
 
 use crate::proto;
 use crate::proto::DeserializeError;
+use crate::requests::AdminResponse;
 use crate::structures::*;
 use crate::types::*;
 
@@ -23,6 +24,7 @@ pub enum OkResponse {
     NewInvite(InviteCode),
     RoomUpdate(RoomUpdate),
     MessageHistory(MessageHistory),
+    Admin(AdminResponse),
 }
 
 impl From<OkResponse> for proto::responses::Ok {
@@ -46,6 +48,7 @@ impl From<OkResponse> for proto::responses::Ok {
             }
             RoomUpdate(update) => Response::RoomUpdate(update.into()),
             MessageHistory(history) => Response::MessageHistory(history.into()),
+            Admin(admin) => Response::Admin(admin.into()),
         };
 
         proto::responses::Ok {
@@ -73,6 +76,7 @@ impl TryFrom<proto::responses::Ok> for OkResponse {
             NewInvite(new_invite) => OkResponse::NewInvite(InviteCode(new_invite.code)),
             RoomUpdate(update) => OkResponse::RoomUpdate(update.try_into()?),
             MessageHistory(history) => OkResponse::MessageHistory(history.try_into()?),
+            Admin(admin) => OkResponse::Admin(admin.try_into()?),
         })
     }
 }
@@ -97,6 +101,7 @@ pub enum Error {
     InvalidCommunity,
     InvalidInviteCode,
     InvalidUser,
+    InvalidMessage,
     /// The given string field value was too long.
     TooLong,
     AlreadyInCommunity,
@@ -129,6 +134,7 @@ impl fmt::Display for Error {
             MessageTooLong => write!(f, "Message too long"),
             TooLong => write!(f, "Text field too long"),
             Unimplemented => write!(f, "Unimplemented API"),
+            InvalidMessage => write!(f, "Invalid message (deleted?)"),
         }
     }
 }
@@ -166,6 +172,7 @@ impl From<Error> for proto::responses::Error {
                 InvalidCommunity,
                 InvalidInviteCode,
                 InvalidUser,
+                InvalidMessage,
                 AlreadyInCommunity,
                 TooManyInviteCodes,
                 InvalidMessageSelector,
@@ -196,6 +203,7 @@ impl TryFrom<proto::responses::Error> for Error {
                 InvalidCommunity,
                 InvalidInviteCode,
                 InvalidUser,
+                InvalidMessage,
                 AlreadyInCommunity,
                 TooManyInviteCodes,
                 InvalidMessageSelector,

@@ -116,6 +116,14 @@ impl Database {
         }
     }
 
+    pub async fn get_message_by_id(&self, id: MessageId) -> DbResult<Option<MessageRecord>> {
+        const QUERY: &str = "SELECT * FROM messages WHERE id = $1";
+        match self.query_opt(QUERY, &[&id.0]).await? {
+            Some(row) => Ok(Some(MessageRecord::try_from(row)?)),
+            None => Ok(None),
+        }
+    }
+
     pub async fn get_message_id(&self, ord: MessageOrdinal) -> DbResult<Option<MessageId>> {
         const QUERY: &str = "SELECT id FROM messages WHERE ord = $1";
         match self.query_opt(QUERY, &[&(ord.0 as i64)]).await? {

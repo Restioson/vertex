@@ -20,6 +20,7 @@ pub enum AuthRequest {
     RefreshToken(RefreshToken),
     RevokeToken(RevokeToken),
     RegisterUser(RegisterUser),
+    ChangePassword(ChangePassword),
 }
 
 impl AuthRequest {
@@ -52,6 +53,7 @@ impl From<AuthRequest> for proto::requests::auth::AuthRequest {
             RefreshToken(refresh) => Message::RefreshToken(refresh.into()),
             RevokeToken(revoke) => Message::RevokeToken(revoke.into()),
             RegisterUser(register) => Message::RegisterUser(register.into()),
+            ChangePassword(change) => Message::ChangePassword(change.into()),
         };
 
         proto::requests::auth::AuthRequest {
@@ -71,6 +73,7 @@ impl TryFrom<proto::requests::auth::AuthRequest> for AuthRequest {
             RefreshToken(refresh) => AuthRequest::RefreshToken(refresh.try_into()?),
             RevokeToken(revoke) => AuthRequest::RevokeToken(revoke.try_into()?),
             RegisterUser(register) => AuthRequest::RegisterUser(register.try_into()?),
+            ChangePassword(change) => AuthRequest::ChangePassword(change.into()),
         })
     }
 }
@@ -165,11 +168,7 @@ impl From<RegisterUser> for proto::requests::auth::RegisterUser {
 
         proto::requests::auth::RegisterUser {
             credentials: Some(register.credentials.into()),
-            display_name: if let Some(name) = register.display_name {
-                Some(DisplayName::Present(name))
-            } else {
-                None
-            },
+            display_name: register.display_name.map(DisplayName::Present)
         }
     }
 }
@@ -212,6 +211,33 @@ impl TryFrom<proto::requests::auth::NewToken> for NewToken {
             device: new.device?.try_into()?,
             token: AuthToken(new.token_string),
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ChangePassword {
+    pub username: String,
+    pub new_password: String,
+    pub old_password: String,
+}
+
+impl From<ChangePassword> for proto::requests::auth::ChangePassword {
+    fn from(change: ChangePassword) -> Self {
+        proto::requests::auth::ChangePassword {
+            username: change.username,
+            new_password: change.new_password,
+            old_password: change.old_password,
+        }
+    }
+}
+
+impl From<proto::requests::auth::ChangePassword> for ChangePassword {
+    fn from(change: proto::requests::auth::ChangePassword) -> Self {
+        ChangePassword {
+            username: change.username,
+            new_password: change.new_password,
+            old_password: change.old_password,
+        }
     }
 }
 

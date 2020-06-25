@@ -1,3 +1,4 @@
+use super::administration::AdminRequest;
 use crate::proto;
 use crate::proto::DeserializeError;
 use crate::structures::*;
@@ -114,10 +115,6 @@ pub enum ClientRequest {
     ChangeDisplayName {
         new_display_name: String,
     },
-    ChangePassword {
-        old_password: String,
-        new_password: String,
-    },
     GetProfile(UserId),
     ChangeCommunityName {
         community: CommunityId,
@@ -127,6 +124,12 @@ pub enum ClientRequest {
         community: CommunityId,
         new: String,
     },
+    AdminAction(AdminRequest),
+    ReportUser {
+        message: MessageId,
+        short_desc: String,
+        extended_desc: String,
+    }
 }
 
 impl From<ClientRequest> for proto::requests::active::ClientRequest {
@@ -144,11 +147,10 @@ impl From<ClientRequest> for proto::requests::active::ClientRequest {
                 last_received,
                 message_count,
             } => {
-                use request::get_room_update::LastReceived::Present;
                 Request::GetRoomUpdate(request::GetRoomUpdate {
                     community: Some(community.into()),
                     room: Some(room.into()),
-                    last_received: last_received.map(|x| Present(x.into())),
+                    last_received: last_received.map(|x| x.into()),
                     message_count,
                 })
             }
@@ -197,13 +199,6 @@ impl From<ClientRequest> for proto::requests::active::ClientRequest {
             ChangeDisplayName { new_display_name } => {
                 Request::ChangeDisplayName(request::ChangeDisplayName { new_display_name })
             }
-            ChangePassword {
-                old_password,
-                new_password,
-            } => Request::ChangePassword(request::ChangePassword {
-                new_password,
-                old_password,
-            }),
             GetProfile(id) => Request::GetProfile(request::GetProfile {
                 user: Some(id.into()),
             }),
@@ -217,6 +212,14 @@ impl From<ClientRequest> for proto::requests::active::ClientRequest {
                 Request::ChangeCommunityDescription(request::ChangeCommunityDescription {
                     new,
                     community: Some(community.into()),
+                })
+            }
+            AdminAction(req) => Request::AdminAction(req.into()),
+            ReportUser { message, short_desc, extended_desc } => {
+                Request::ReportUser(request::ReportUser {
+                    message: Some(message.into()),
+                    short_desc,
+                    extended_desc,
                 })
             }
         };
@@ -238,15 +241,10 @@ impl TryFrom<proto::requests::active::ClientRequest> for ClientRequest {
             SendMessage(msg) => ClientRequest::SendMessage(msg.try_into()?),
             Edit(edit) => ClientRequest::EditMessage(edit.try_into()?),
             GetRoomUpdate(get) => {
-                use request::get_room_update::LastReceived::Present;
                 ClientRequest::GetRoomUpdate {
                     community: get.community?.try_into()?,
                     room: get.room?.try_into()?,
-                    last_received: if let Some(Present(v)) = get.last_received {
-                        Some(v.try_into()?)
-                    } else {
-                        None
-                    },
+                    last_received: get.last_received.map(|x| x.try_into()).transpose()?,
                     message_count: get.message_count,
                 }
             }
@@ -289,10 +287,6 @@ impl TryFrom<proto::requests::active::ClientRequest> for ClientRequest {
             ChangeDisplayName(change) => ClientRequest::ChangeDisplayName {
                 new_display_name: change.new_display_name,
             },
-            ChangePassword(change) => ClientRequest::ChangePassword {
-                old_password: change.old_password,
-                new_password: change.new_password,
-            },
             GetProfile(get) => ClientRequest::GetProfile(get.user?.try_into()?),
             ChangeCommunityName(change) => ClientRequest::ChangeCommunityName {
                 new: change.new,
@@ -301,6 +295,12 @@ impl TryFrom<proto::requests::active::ClientRequest> for ClientRequest {
             ChangeCommunityDescription(change) => ClientRequest::ChangeCommunityDescription {
                 new: change.new,
                 community: change.community?.try_into()?,
+            },
+            AdminAction(action) => ClientRequest::AdminAction(action.try_into()?),
+            ReportUser(report) => ClientRequest::ReportUser {
+                message: report.message?.try_into()?,
+                short_desc: report.short_desc,
+                extended_desc: report.extended_desc,
             },
         };
 

@@ -6,7 +6,7 @@ use std::fs::OpenOptions;
 use std::num::NonZeroU32;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use directories::ProjectDirs;
@@ -28,6 +28,7 @@ use crate::client::{session::WebSocketMessage, Authenticator};
 use crate::community::{Community, CommunityActor};
 use crate::config::Config;
 use crate::database::{DbResult, MalformedInviteCode};
+use clap::{App, Arg};
 
 mod auth;
 mod client;
@@ -102,7 +103,7 @@ fn setup_logging(config: &Config) {
     let dir = dirs.data_dir().join("logs");
 
     fs::create_dir_all(&dir)
-        .unwrap_or_else(|_| panic!("Error creating log dirs ({})", dir.to_string_lossy(),));
+        .unwrap_or_else(|_| panic!("Error creating log dirs ({})", dir.to_string_lossy()));
 
     fern::Dispatch::new()
         .format(|out, message, record| {
@@ -152,6 +153,28 @@ async fn load_communities(db: Database) {
 
 #[tokio::main]
 async fn main() {
+    let args = App::new("Vertex server")
+        .version("0.1")
+        .author("Restioson <restiosondev@gmail.com>")
+        .about("Server for the Vertex chat application https://github.com/Restioson/vertex")
+        .arg(
+            Arg::with_name("add-admin")
+                .short("A")
+                .long("add-admin")
+                .value_name("USERNAME")
+                .help("Adds an admin with all permissions")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("remove-admin")
+                .short("R")
+                .long("remove-admin")
+                .value_name("USERNAME")
+                .help("Removes a user as admin")
+                .takes_value(true),
+        )
+        .get_matches();
+
     println!("Vertex server starting...");
 
     let config = config::load_config();
@@ -168,6 +191,8 @@ async fn main() {
             .clone()
             .sweep_invite_codes_loop(Duration::from_secs(config.invite_codes_sweep_interval_secs)),
     );
+
+    promote_and_demote(args, &database).await;
 
     load_communities(database.clone()).await;
 
@@ -229,13 +254,22 @@ async fn main() {
             reply_protobuf(self::refresh_token(global, bytes).await)
         });
 
+    let change_password = warp::path("change_password")
+        .and(global.clone())
+        .and(warp::post())
+        .and(warp::body::bytes())
+        .and_then(|global, bytes| async move {
+            reply_protobuf(self::change_password(global, bytes).await)
+        });
+
     let invite = warp::path!("invite" / String)
         //  .and(warp::header::<String>("host")) // https://github.com/seanmonstar/warp/issues/432
         .and(global.clone())
         .and_then(|invite, global| self::invite_reply(global, invite));
 
     let token = warp::path("token").and(create_token.or(revoke_token).or(refresh_token));
-    let client = warp::path("client").and(authenticate.or(register.or(token)));
+    let auth = authenticate.or(register.or(token.or(change_password)));
+    let client = warp::path("client").and(auth);
     let routes = invite.or(client);
     let routes = warp::path("vertex").and(routes);
 
@@ -250,6 +284,45 @@ async fn main() {
             .await;
     } else {
         warp::serve(routes).run(config.ip).await;
+    }
+}
+
+async fn promote_and_demote(args: clap::ArgMatches<'_>, database: &Database) {
+    for name in args.values_of("add-admin").into_iter().flatten() {
+        let id = database
+            .get_user_by_name(name.to_string())
+            .await
+            .expect("Error promoting user to admin")
+            .unwrap_or_else(|| panic!("Invalid username {} to add as admin", name))
+            .id;
+
+        database
+            .set_admin_permissions(id, AdminPermissionFlags::ALL)
+            .await
+            .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e))
+            .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e));
+
+        info!(
+            "User {} successfully promoted to admin with all permissions!",
+            name
+        );
+    }
+
+    for name in args.values_of("remove-admin").into_iter().flatten() {
+        let id = database
+            .get_user_by_name(name.to_string())
+            .await
+            .expect("Error removing user as admin")
+            .unwrap_or_else(|| panic!("Invalid username {} to demote", name))
+            .id;
+
+        database
+            .set_admin_permissions(id, AdminPermissionFlags::from_bits_truncate(0))
+            .await
+            .unwrap_or_else(|e| panic!("Error demoting user {}: {:?}", name, e))
+            .unwrap_or_else(|e| panic!("Error demoting user {}: {:?}", name, e));
+
+        info!("User {} successfully demoted!", name);
     }
 }
 
@@ -272,14 +345,22 @@ async fn login(
         global: global.clone(),
     };
 
-    let (user, device, perms) = authenticator.login(login.device, login.token).await?;
+    let details = authenticator.login(login.device, login.token).await?;
+    let (user, device, perms, hsv) = details;
 
-    match client::session::insert(global.database.clone(), user, device).await? {
+    match client::session::insert(global.database.clone(), user, device, hsv).await? {
         Ok(_) => {
             let upgrade = ws.on_upgrade(move |websocket| {
                 let (sink, stream) = websocket.split();
 
-                let session = ActiveSession::new(sink, global, user, device, perms);
+                let session = ActiveSession {
+                    ws: sink,
+                    global,
+                    heartbeat: Instant::now(),
+                    user,
+                    device,
+                    perms,
+                };
                 let session = session.spawn();
 
                 session.clone().attach_stream(stream.map(WebSocketMessage));
@@ -347,6 +428,23 @@ async fn revoke_token(global: Global, bytes: bytes::Bytes) -> AuthResponse {
         .await
 }
 
+async fn change_password(global: Global, bytes: bytes::Bytes) -> AuthResponse {
+    let change = match AuthRequest::from_protobuf_bytes(&bytes)? {
+        AuthRequest::ChangePassword(change) => change,
+        _ => return AuthResponse::Err(AuthError::WrongEndpoint),
+    };
+
+    let credentials = Credentials {
+        username: change.username,
+        password: change.old_password,
+    };
+
+    let authenticator = Authenticator { global };
+    authenticator
+        .change_password(credentials, change.new_password)
+        .await
+}
+
 async fn invite_reply(
     global: Global,
     //  hostname: String, // https://github.com/seanmonstar/warp/issues/432
@@ -383,6 +481,7 @@ async fn invite(
 
     let html = format!(
         r#"
+        <html>
             <head>
                 <meta property="vertex:invite_code" content="{invite_code}"/>
                 <meta property="vertex:invite_name" content="{community}"/>
@@ -397,6 +496,7 @@ async fn invite(
                     window.location.replace("vertex" + no_http);
                 </script>
             </script>
+        </html>
         "#,
         //        hostname = hostname, // TODO https://github.com/seanmonstar/warp/issues/432
         // We just use JS as a workaround

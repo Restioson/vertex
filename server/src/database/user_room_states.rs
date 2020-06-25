@@ -225,7 +225,7 @@ fn handle_sql_error(res: Result<u64, Error>) -> DbResult<Result<(), SetUserRoomS
                     Some("user_room_states_room_fkey") => {
                         Ok(Err(SetUserRoomStateError::InvalidRoom))
                     }
-                    Some("user_room_states_user_fkey") => {
+                    Some("user_room_states_user_id_fkey") => {
                         Ok(Err(SetUserRoomStateError::InvalidUser))
                     }
                     Some(_) | None => Err(err.into()),

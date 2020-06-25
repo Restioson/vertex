@@ -103,6 +103,7 @@ button {
 
   padding: 5px 8px;
   border-radius: 10px;
+  font-size: 16px;
 
   transition: all 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
@@ -161,6 +162,7 @@ spinner:checked {
 scrollbar {
   transition: 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
+
 scrollbar slider {
   min-width: 6px;
   min-height: 6px;
@@ -170,9 +172,11 @@ scrollbar slider {
   background-clip: padding-box;
   background-color: @room_list_bg_color;
 }
+
 scrollbar slider:hover {
   background-color: shade(@room_list_bg_color, 1.1);
 }
+
 scrollbar slider:hover:active {
   background-color: shade(@room_list_bg_color, 1.1);
 }
@@ -210,6 +214,23 @@ switch:checked slider {
   background-color: shade(@accent_color, 0.6);
 }
 
+checkbutton, #settings .search_list check {
+  padding: 4px;
+  min-height: 17px;
+  min-width: 17px;
+}
+
+
+checkbutton check {
+  margin-right: 15px;
+  min-width: 20px;
+  min-height: 20px;
+}
+
+checkbutton {
+  font-size: 16px;
+}
+
 /*
   Dialog
 */
@@ -227,6 +248,17 @@ switch:checked slider {
   box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0);
 }
 
+.dialog #close_button {
+  background: transparent;
+  opacity: 0.5;
+  padding: 0px;
+  margin: 0px;
+}
+
+.dialog #close_button:hover {
+  opacity: 1;
+}
+
 .dialog .title {
   font-size: 20px;
 }
@@ -240,11 +272,24 @@ switch:checked slider {
   font-size: 16px;
 }
 
-.dialog .invite_code_text {
-  background: @widget_bg_color;
+.dialog entry {
   padding: 8px;
   border-radius: 8px;
-  margin: 4px;
+  margin-bottom: 6px;
+}
+
+.dialog textview {
+  background: @widget_bg_color;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.dialog extended_desc_scroll {
+  border-radius: 8px;
+}
+
+.dialog extended_desc_box {
+  margin: 6px;
 }
 
 .dialog .error_description {
@@ -265,11 +310,15 @@ switch:checked slider {
 
 #active #sidebar {
   padding-top: 4px;
-  min-width: 260px;
+  min-width: 290px;
 }
 
 #active #sidebar, #communities {
   background: @sidebar_bg_color;
+}
+
+#communities #menu_button {
+  margin: 10px;
 }
 
 #active #add_community_button {
@@ -312,26 +361,47 @@ switch:checked slider {
   padding: 6px;
 }
 
-#active #messages row, #active #message row:hover {
+#messages row, #message row:hover {
   background: @content_bg_color;
 }
 
-#active #message_entry {
+#message_entry {
   background: @message_entry_color;
+  color: shade(@widget_color, 0.7);
   margin: 7px 4px;
   border-radius: 10px;
 }
 
-#active #message_entry:focus {
+#message_entry:focus {
   background: shade(@message_entry_color, 1.2);
+  color: @widget_color;
 }
 
-#active #message_entry.disabled {
+#message_entry.disabled {
   background: shade(@message_entry_color, 0.9);
   color: shade(@widget_color, 0.5);
 }
 
-#active #message .embed {
+#message #message_settings {
+  opacity: 0;
+  margin: 1px;
+  margin-right: 2px;
+  margin-left: 2px;
+}
+
+#message #message_settings.active {
+  opacity: 1
+}
+
+#active #messages #entry_list row:hover #message_settings {
+  opacity: 1;
+}
+
+#message_menu {
+  padding: 0px;
+}
+
+#message .embed {
   background: @sidebar_bg_color;
   min-width: 320px;
   padding: 6px;
@@ -339,16 +409,16 @@ switch:checked slider {
   border-radius: 10px;
 }
 
-#active #message #invite #community_header {
+#message #invite #community_header {
   padding: 4px;
 }
 
-#active #message #invite #label {
+#message #invite #label {
   color: @subtitle_color;
   font-size: 15px;
 }
 
-#active #message #invite #community_icon {
+#message #invite #community_icon {
   min-width: 40px;
   min-height: 40px;
 
@@ -358,23 +428,23 @@ switch:checked slider {
   border-radius: 20px;
 }
 
-#active #message #invite #community_icon border {
+#message #invite #community_icon border {
   border-style: none;
 }
 
-#active #message #invite #community_name {
+#message #invite #community_name {
   color: #d0d0d0;
   font-size: 15px;
   font-weight: 600;
 }
 
-#active #message #invite #community_description {
+#message #invite #community_description {
   color: @subtitle_color;
   font-size: 15px;
   font-style: italic;
 }
 
-#active #message #invite #join_button {
+#message #invite #join_button {
   min-width: 60px;
   min-height: 10px;
   background: transparent;
@@ -385,17 +455,17 @@ switch:checked slider {
   border-radius: 20px;
 }
 
-#active #message #invite #join_button:hover {
+#message #invite #join_button:hover {
   background: @widget_bg_color;
 }
 
-#active #message #opengraph #title {
+#message #opengraph #title {
   color: #d0d0d0;
   font-size: 15px;
   font-weight: 600;
 }
 
-#active #message #opengraph #description {
+#message #opengraph #description {
   color: @subtitle_color;
   font-size: 15px;
   font-style: italic;
@@ -487,24 +557,24 @@ switch:checked slider {
   margin-left: 8px;
 }
 
-#active #message_group {
+#message_group {
   font-size: 15px;
   padding: 7px;
 }
 
-#active #message_group #author_name {
+#message_group #author_name {
   font-weight: 600;
   padding-left: 2px;
 }
 
-#active #message_group #timestamp {
+#message_group #timestamp {
   font-size: 13px;
   font-style: italic;
   color: grey;
   padding-left: 7px;
 }
 
-#active #message_group #author_icon {
+#message_group #author_icon {
   min-width: 40px;
   min-height: 40px;
 
@@ -514,25 +584,29 @@ switch:checked slider {
   border-radius: 20px;
 }
 
-#active #entry_list row {
+#active #entry_list row, .report_message row {
   padding: 2px;
   border-radius: 6px;
 }
 
-#active #entry_list row:hover {
+#active #entry_list row:hover, .report_message row:hover {
   background: shade(@content_bg_color, 0.9);
 }
 
-#active #message #message_text {
+.report_message row {
+  background: @content_bg_color;
+}
+
+#message #message_text {
   color: #e0e0e0;
   font-size: 15px;
 }
 
-#active #message #message_text.pending {
+#message #message_text.pending {
   color: @subtitle_color;
 }
 
-#active #message #message_text.error {
+ #message #message_text.error {
   color: @error_color;
 }
 
@@ -606,6 +680,11 @@ switch:checked slider {
   min-height: 26px;
 }
 
+#compromised_explanation {
+  color: @error_color;
+  font-size: 16px;
+}
+
 /*
   settings screen
 */
@@ -634,12 +713,63 @@ switch:checked slider {
   color: @error_color;
 }
 
+#settings #settings_viewport {
+  margin-right: 15px;
+}
+
 #settings switch {
   margin-right: 10px;
 }
 
 #settings .setting_heading {
   font-weight: 600;
+  font-size: 18px;
+  padding: 8px;
+}
+
+#settings label {
+  font-size: 16px;
+}
+
+#settings .list_scroll {
+  min-height: 300px;
+  padding: 10px;
+}
+
+#settings #admins_scroll {
+  min-height: 150px;
+}
+
+#settings .search_entry, #settings button {
+  padding: 10px;
+  margin: 7px;
+}
+
+#settings .view {
+  background: @sidebar_bg_color;
+  border-top-color: shade(@content_bg_color, 1.5);
+  color: #e0e0e0;
+  font-size: 16px;
+}
+
+#settings .view button {
+  background-color: @content_bg_color;
+  margin: 0px;
+  padding: 5px;
+  border-radius: 0px;
+  font-weight: 500;
+}
+
+#settings .search_list check, checkbutton check {
+  background: shade(@dark_widget_bg_color, 0.95);
+}
+
+#settings .search_list check:hover {
+  background: @dark_widget_bg_color;
+}
+
+#settings .search_list:hover {
+  background: shade(@sidebar_bg_color, 1.1);
 }
 
 #settings .setting_description {
@@ -660,9 +790,19 @@ switch:checked slider {
   background: shade(@sidebar_bg_color, 1.1);
 }
 
+/* "Close" & "Log out" */
+#settings .leave_button {
+  background: @sidebar_bg_color;
+  margin: 12px;
+}
+
+#settings .leave_button:hover {
+  background: shade(@sidebar_bg_color, 1.1);
+}
+
 #settings .button_label  {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 18px;
   padding: 8px;
 }
 
@@ -702,4 +842,23 @@ switch:checked slider {
   min-height: 20px;
   padding: 8px;
   margin: 4px;
+}
+
+/* reports */
+#report label {
+  font-size: 16px;
+  margin-left: 10px;
+}
+
+#report button label {
+  margin-left: 0px;
+}
+
+.report_message row {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+#settings #reports_scroll {
+  min-height: 400px;
 }

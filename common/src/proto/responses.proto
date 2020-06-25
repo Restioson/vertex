@@ -3,6 +3,7 @@ package vertex.responses;
 
 import "types.proto";
 import "structures.proto";
+import "requests/administration.proto";
 
 message Response {
     types.RequestId id = 1;
@@ -23,6 +24,7 @@ message Ok {
         NewInvite new_invite = 8;
         structures.RoomUpdate room_update = 9;
         structures.MessageHistory message_history = 10;
+        requests.administration.AdminResponse admin = 11;
     }
 }
 
@@ -55,5 +57,5 @@ enum Error {
     MessageTooLong = 16;
     Unimplemented = 17;
     TooLong = 18;
+    InvalidMessage = 19;
 }
-
