@@ -100,6 +100,7 @@ impl<Ui: ClientUi> ChatState<Ui> {
     }
 
     fn push(&mut self, id: MessageId, content: MessageContent, side: ChatSide) -> Ui::MessageEntryWidget {
+        println!("0: {:?}", content);
         let widget = self.push_widget(content, side, id);
         let entry = ChatEntry { id, widget: widget.clone() };
 

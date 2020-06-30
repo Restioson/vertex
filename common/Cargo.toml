@@ -5,14 +5,14 @@ authors = ["Restioson <restiosondev@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-serde = "^1"
+serde = "1"
 uuid = { version = "0.8", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
-bitflags = "^1"
-prost = "^0.6.1"
-fern = "^0.5"
-directories = "^2"
-log = "^0.4"
+bitflags = "1"
+prost = "0.6.1"
+fern = "0.6"
+directories-next = "1"
+log = "0.4"
 
 [build-dependencies]
-prost-build = "^0.6.1"
+prost-build = "0.6.1"

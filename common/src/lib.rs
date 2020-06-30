@@ -28,7 +28,7 @@ pub fn setup_logging(
     name: &str,
     log_level: log::LevelFilter,
 ) {
-    let dirs = directories::ProjectDirs::from("", "vertex_chat", name)
+    let dirs = directories_next::ProjectDirs::from("", "vertex_chat", name)
         .expect("Error getting project directories");
     let dir = dirs.data_dir().join("logs");
 

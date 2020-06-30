@@ -4,46 +4,37 @@ version = "0.1.0"
 authors = ["Restioson <restiosondev@gmail.com>"]
 edition = "2018"
 
-[profile.dev]
-opt-level = 1
-debug = false
-lto = false
-incremental = true
-
-[profile.dev.package."*"]
+[profile.dev.package."rust-argon2"]
 opt-level = 3
-
-[profile.dev.package."vertex_server"]
-opt-level = 1
 
 [dependencies]
 xtra = { version = "0.5.0-beta", features = ["with-tokio-0_2"] }
 spaad = { version = "0.4.0-beta", features = ["with-tokio-0_2"] }
-async-trait = "^0.1"
-warp = { version = "^0.2", features = ["tls"] }
-http = "^0.2"
-serde = "^1"
-url = "^2"
-futures = "^0.3"
-l337 = { git = "https://github.com/OneSignal/L3-37", rev = "a970fe669787c4caf8ae699870b97ed1d7616f00" }
-l337-postgres = { git = "https://github.com/OneSignal/L3-37", rev = "a970fe669787c4caf8ae699870b97ed1d7616f00" }
-tokio = { version = "^0.2", features = ["full"] }
-tokio-postgres = { version = "^0.5", features = ["with-uuid-0_8", "with-chrono-0_4"] }
-uuid = { version = "^0.8", features = ["serde", "v4"] }
-chrono = { version = "^0.4", features = ["serde"] }
-rust-argon2 = "^0.5"
-rand = "^0.7"
-lazy_static = "^1"
-bytes = "^0.5"
-base64 = "^0.11"
-byteorder = "^1"
-directories = "^2"
-toml = "^0.5"
-unicode-normalization = "^0.1"
-log = "^0.4"
-dashmap = "^3"
-backtrace = "^0.3"
-governor = { version = "^0.2", default-features = false, features = ["std", "dashmap"] }
-arc-swap = "^0.4"
-clap = "^2"
+async-trait = "0.1"
+warp = { version = "0.2", features = ["tls"] }
+http = "0.2"
+serde = "1"
+url = "2"
+futures = "0.3"
+l337 = "0.4"
+l337-postgres = "0.4"
+tokio = { version = "0.2", features = ["full"] }
+tokio-postgres = { version = "0.5", features = ["with-uuid-0_8", "with-chrono-0_4"] }
+uuid = { version = "0.8", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+rust-argon2 = "0.8"
+rand = "0.7"
+lazy_static = "1"
+bytes = "0.5"
+base64 = "0.12"
+byteorder = "1"
+directories-next = "1"
+toml = "0.5"
+unicode-normalization = "0.1"
+log = "0.4"
+dashmap = "3"
+backtrace = "0.3"
+governor = { version = "0.2", default-features = false, features = ["std", "dashmap"] }
+arc-swap = "0.4"
+clap = "2"
 vertex = { path = "../common/" }

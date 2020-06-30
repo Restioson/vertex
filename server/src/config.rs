@@ -1,6 +1,6 @@
 // configuration framework rewrite time. very epic
 
-use directories::ProjectDirs;
+use directories_next::ProjectDirs;
 use log::Level;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};

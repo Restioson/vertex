@@ -25,6 +25,7 @@ impl ChatWidget {
             author,
             profile,
             time,
+            // TODO
             true,
             config::get().screen_reader_message_list,
         );
@@ -84,7 +85,12 @@ impl client::ChatWidget<Ui> for ChatWidget {
     ) -> MessageEntryWidget {
         let msg_list = self.message_list.clone();
         let group = self.next_group(content.author, content.profile, content.time, side);
-        group.add_message(content.text, id, side, &msg_list, client)
+        group.add_message(
+            content.text,
+            id,
+            side,
+            &msg_list, client
+        )
     }
 
     fn remove_message(&mut self, widget: &mut MessageEntryWidget) {
