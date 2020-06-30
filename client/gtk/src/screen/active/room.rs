@@ -1,4 +1,4 @@
-use crate::{client, resource};
+use crate::{resource};
 
 use super::*;
 
@@ -39,8 +39,4 @@ impl RoomEntryWidget {
 
         RoomEntryWidget { container, label }
     }
-}
-
-impl client::RoomEntryWidget<Ui> for RoomEntryWidget {
-    fn bind_events(&self, _room: &client::RoomEntry<Ui>) {}
 }

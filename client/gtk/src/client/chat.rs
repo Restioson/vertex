@@ -6,36 +6,21 @@ use vertex::prelude::*;
 
 use crate::{Client, SharedMut, Result, scheduler};
 use crate::client::RoomEntry;
+use crate::screen::active::message::MessageEntryWidget;
+use crate::screen::active::ChatWidget;
 
-use super::ClientUi;
 use super::message::*;
 use uuid::Uuid;
 
 pub const MESSAGE_DROP_THRESHOLD: usize = MESSAGE_PAGE_SIZE * 4;
 pub const MESSAGE_DROP_COUNT: usize = MESSAGE_PAGE_SIZE * 2;
 
-pub trait ChatWidget<Ui: ClientUi> {
-    fn clear(&mut self);
-
-    fn add_message(
-        &mut self,
-        content: MessageContent,
-        side: ChatSide,
-        client: Client<Ui>,
-        id: MessageId,
-    ) -> Ui::MessageEntryWidget;
-
-    fn remove_message(&mut self, widget: &mut Ui::MessageEntryWidget);
-
-    fn flush(&mut self);
+pub struct PendingMessageHandle<'a> {
+    chat: &'a Chat,
+    widget: MessageEntryWidget,
 }
 
-pub struct PendingMessageHandle<'a, Ui: ClientUi> {
-    chat: &'a Chat<Ui>,
-    widget: Ui::MessageEntryWidget,
-}
-
-impl<'a, Ui: ClientUi> PendingMessageHandle<'a, Ui> {
+impl<'a> PendingMessageHandle<'a> {
     pub async fn upgrade(mut self, message: Message) {
         let mut state = self.chat.state.write().await;
         state.widget.remove_message(&mut self.widget);
@@ -55,19 +40,19 @@ pub enum ChatSide {
     Back,
 }
 
-struct ChatEntry<Ui: ClientUi> {
+struct ChatEntry {
     id: MessageId,
-    widget: Ui::MessageEntryWidget,
+    widget: MessageEntryWidget,
 }
 
-pub struct ChatState<Ui: ClientUi> {
-    client: Client<Ui>,
-    widget: Ui::ChatWidget,
-    entries: LinkedList<ChatEntry<Ui>>,
+pub struct ChatState {
+    client: Client,
+    widget: ChatWidget,
+    entries: LinkedList<ChatEntry>,
 }
 
-impl<Ui: ClientUi> ChatState<Ui> {
-    fn new(client: Client<Ui>, widget: Ui::ChatWidget) -> Self {
+impl ChatState {
+    fn new(client: Client, widget: ChatWidget) -> Self {
         ChatState {
             client,
             widget,
@@ -80,7 +65,7 @@ impl<Ui: ClientUi> ChatState<Ui> {
         content: MessageContent,
         side: ChatSide,
         id: MessageId,
-    ) -> Ui::MessageEntryWidget {
+    ) -> MessageEntryWidget {
         let rich = RichMessage::parse(content.text.clone());
         let widget = self.widget.add_message(content, side, self.client.clone(), id);
 
@@ -99,8 +84,7 @@ impl<Ui: ClientUi> ChatState<Ui> {
         widget
     }
 
-    fn push(&mut self, id: MessageId, content: MessageContent, side: ChatSide) -> Ui::MessageEntryWidget {
-        println!("0: {:?}", content);
+    fn push(&mut self, id: MessageId, content: MessageContent, side: ChatSide) -> MessageEntryWidget {
         let widget = self.push_widget(content, side, id);
         let entry = ChatEntry { id, widget: widget.clone() };
 
@@ -110,6 +94,7 @@ impl<Ui: ClientUi> ChatState<Ui> {
         }
 
         if self.entries.len() > MESSAGE_DROP_THRESHOLD {
+            dbg!("drop");
             self.drop_side(side);
         }
 
@@ -132,6 +117,7 @@ impl<Ui: ClientUi> ChatState<Ui> {
         };
 
         for dropped in dropped.iter_mut() {
+            println!("remove :(");
             self.widget.remove_message(&mut dropped.widget);
         }
     }
@@ -157,15 +143,15 @@ impl<Ui: ClientUi> ChatState<Ui> {
 }
 
 #[derive(Clone)]
-pub struct Chat<Ui: ClientUi> {
-    client: Client<Ui>,
-    room: RoomEntry<Ui>,
-    pub state: SharedMut<ChatState<Ui>>,
+pub struct Chat {
+    client: Client,
+    room: RoomEntry,
+    pub state: SharedMut<ChatState>,
     reading_new: Rc<AtomicBool>,
 }
 
-impl<Ui: ClientUi> Chat<Ui> {
-    pub async fn new(client: Client<Ui>, widget: Ui::ChatWidget, room: RoomEntry<Ui>) -> Self {
+impl Chat {
+    pub async fn new(client: Client, widget: ChatWidget, room: RoomEntry) -> Self {
         let history = room.collect_recent_history().await;
 
         let chat = Chat {
@@ -188,7 +174,7 @@ impl<Ui: ClientUi> Chat<Ui> {
         }
     }
 
-    pub async fn push(&self, message: Message) -> Ui::MessageEntryWidget {
+    pub async fn push(&self, message: Message) -> MessageEntryWidget {
         let content = self.build_content(&message).await;
 
         let mut state = self.state.write().await;
@@ -199,7 +185,7 @@ impl<Ui: ClientUi> Chat<Ui> {
         widget
     }
 
-    pub async fn push_pending(&self, content: MessageContent) -> PendingMessageHandle<'_, Ui> {
+    pub async fn push_pending(&self, content: MessageContent) -> PendingMessageHandle<'_> {
         let mut state = self.state.write().await;
 
         let widget = state.push_widget(content, ChatSide::Front, MessageId(Uuid::default()));
@@ -241,6 +227,8 @@ impl<Ui: ClientUi> Chat<Ui> {
 
         let mut state = self.state.write().await;
         for message in messages {
+            // TODO
+            //dbg!(&message);
             let content = self.build_content(&message).await;
             state.push(message.id, content, side);
         }

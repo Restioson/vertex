@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use gtk::prelude::*;
 use vertex::prelude::*;
-use crate::{screen, Client, scheduler};
+use crate::{Client, scheduler};
 use std::rc::Rc;
 use crate::connect::AsConnector;
 use bimap::BiMap;
@@ -15,11 +15,11 @@ pub struct AdminsList {
     view: gtk::TreeView,
     username_to_id: Rc<Mutex<BiMap<String, UserId>>>,
     id_to_perm: Rc<Mutex<HashMap<UserId, AdminPermissionFlags>>>,
-    client: Client<screen::active::Ui>,
+    client: Client,
 }
 
 impl AdminsList {
-    pub fn build(builder: gtk::Builder, client: Client<screen::active::Ui>) {
+    pub fn build(builder: gtk::Builder, client: Client) {
         let demote_button: gtk::Button = builder.get_object("demote_button").unwrap();
 
         let this = Rc::new(AdminsList {

@@ -4,21 +4,13 @@ pub use embed::*;
 pub use rich::*;
 use vertex::prelude::*;
 
-use crate::Client;
 
-use super::ClientUi;
 
 mod rich;
 mod embed;
 
 pub const MESSAGE_PAGE_SIZE: usize = 50;
 pub const RECENT_HISTORY_SIZE: u64 = MESSAGE_PAGE_SIZE as u64;
-
-pub trait MessageEntryWidget<Ui: ClientUi>: Clone {
-    fn set_status(&self, status: MessageStatus);
-
-    fn push_embed(&self, client: &Client<Ui>, embed: MessageEmbed);
-}
 
 #[derive(Debug, Copy, Clone)]
 pub enum MessageStatus {

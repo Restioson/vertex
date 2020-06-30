@@ -71,7 +71,7 @@
 
         <Property Id='ARPHELPLINK' Value='https://vertex.cf/'/>
 
-        <UI>
+
             <UIRef Id='WixUI_FeatureTree'/>
             <Publish Dialog='WelcomeDlg' Control='Next' Event='NewDialog' Value='CustomizeDlg' Order='99'>1</Publish>
             <Publish Dialog='CustomizeDlg' Control='Back' Event='NewDialog' Value='WelcomeDlg' Order='99'>1</Publish>

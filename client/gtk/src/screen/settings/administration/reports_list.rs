@@ -1,6 +1,6 @@
 use gtk::prelude::*;
 use vertex::prelude::*;
-use crate::{screen, Glade, Client, scheduler, TryGetText, config};
+use crate::{Glade, Client, scheduler, TryGetText, config};
 use std::rc::Rc;
 use crate::connect::AsConnector;
 use crate::screen::active::dialog;
@@ -9,11 +9,11 @@ use super::parse_search;
 
 pub struct ReportsList {
     list: gtk::Box,
-    client: Client<screen::active::Ui>,
+    client: Client,
 }
 
 impl ReportsList {
-    pub fn build(builder: gtk::Builder, client: Client<screen::active::Ui>) {
+    pub fn build(builder: gtk::Builder, client: Client) {
         let list_all: gtk::Button = builder.get_object("list_reports").unwrap();
         let search: gtk::SearchEntry = builder.get_object("reports_search_entry").unwrap();
 
@@ -130,7 +130,7 @@ impl ReportsList {
 }
 
 fn build_buttons(
-    client: Client<screen::active::Ui>,
+    client: Client,
     buttons: gtk::Box,
     status_label: gtk::Label,
     status: ReportStatus,

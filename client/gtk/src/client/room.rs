@@ -3,12 +3,8 @@ use chrono::Utc;
 use vertex::prelude::*;
 use crate::{Client, Error, Result, SharedMut};
 
-use super::ClientUi;
 use super::message::*;
-
-pub trait RoomEntryWidget<Ui: ClientUi>: Clone {
-    fn bind_events(&self, room: &RoomEntry<Ui>);
-}
+use crate::screen::active::{RoomEntryWidget};
 
 pub struct RoomState {
     pub message_buffer: MessageRingBuffer,
@@ -16,10 +12,10 @@ pub struct RoomState {
 }
 
 #[derive(Clone)]
-pub struct RoomEntry<Ui: ClientUi> {
-    pub client: Client<Ui>,
+pub struct RoomEntry {
+    pub client: Client,
 
-    pub widget: Ui::RoomEntryWidget,
+    pub widget: RoomEntryWidget,
 
     pub community: CommunityId,
     pub id: RoomId,
@@ -29,10 +25,10 @@ pub struct RoomEntry<Ui: ClientUi> {
     pub state: SharedMut<RoomState>,
 }
 
-impl<Ui: ClientUi> RoomEntry<Ui> {
+impl RoomEntry {
     pub(super) fn new(
-        client: Client<Ui>,
-        widget: Ui::RoomEntryWidget,
+        client: Client,
+        widget: RoomEntryWidget,
         community: CommunityId,
         id: RoomId,
         name: String,
@@ -186,10 +182,10 @@ impl<Ui: ClientUi> RoomEntry<Ui> {
     }
 }
 
-impl<Ui: ClientUi> PartialEq<RoomEntry<Ui>> for RoomEntry<Ui> {
-    fn eq(&self, other: &RoomEntry<Ui>) -> bool {
+impl PartialEq<RoomEntry> for RoomEntry {
+    fn eq(&self, other: &RoomEntry) -> bool {
         self.id == other.id && self.community == other.community
     }
 }
 
-impl<Ui: ClientUi> Eq for RoomEntry<Ui> {}
+impl Eq for RoomEntry {}

@@ -7,18 +7,18 @@ use gtk::prelude::*;
 use vertex::prelude::*;
 use crate::connect::AsConnector;
 use crate::screen::active::dialog;
-use crate::{Client, screen, window, TryGetText};
+use crate::{Client, window, TryGetText};
 use super::Action;
 
 pub struct UsersSearch {
     list: gtk::ListStore,
     view: gtk::TreeView,
     username_to_id: Rc<Mutex<BiMap<String, UserId>>>,
-    client: Client<screen::active::Ui>,
+    client: Client,
 }
 
 impl UsersSearch {
-    pub fn build(builder: gtk::Builder, client: Client<screen::active::Ui>) {
+    pub fn build(builder: gtk::Builder, client: Client) {
         let users_search: gtk::SearchEntry = builder.get_object("users_search_entry").unwrap();
         let list_all_button: gtk::Button = builder.get_object("list_users_button").unwrap();
         let ban_button: gtk::Button = builder.get_object("ban_button").unwrap();

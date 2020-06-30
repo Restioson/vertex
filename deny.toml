@@ -1,0 +1,58 @@
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "x86_64-pc-windows-msvc" },
+    { triple = "x86_64-pc-windows-gnu" },
+    { triple = "x86_64-apple-darwin" },
+]
+
+[advisories]
+db-path = "~/.cargo/advisory-db"
+db-url = "https://github.com/rustsec/advisory-db"
+vulnerability = "deny"
+unmaintained = "warn"
+yanked = "warn"
+notice = "warn"
+ignore = []
+
+[licenses]
+unlicensed = "deny"
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "GPL-3.0",
+    "ISC",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "Zlib",
+    "CC0-1.0",
+]
+deny = []
+copyleft = "allow"
+allow-osi-fsf-free = "neither"
+default = "deny"
+confidence-threshold = 0.8
+#skip = [
+#    # ring has a rather complicated LICENSE file due to reasons spelled out
+#    # in said LICENSE file, but is basically OpenSSL for older parts, and ISC
+#    # for newer parts
+#    { name = "ring", licenses = [] },
+#    # webpki uses an ISC license but it only has a 0.83 confidence level
+#    { name = "webpki", licenses = [] },
+#]
+
+[licenses.private]
+ignore = false
+registries = []
+
+[bans]
+multiple-versions = "allow"
+highlight = "all"
+allow = []
+deny = []
+skip = []
+skip-tree = []
+
+[sources]
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

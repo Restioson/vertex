@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "server",
+    "common",
+    "client/gtk"
+]
+
+[profile.dev.package."rust-argon2"]
+opt-level = 3 # otherwise it is too slow for dev

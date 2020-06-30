@@ -1,17 +1,9 @@
 use std::collections::LinkedList;
-
-use gtk::prelude::*;
-
-use chat::*;
-use community::*;
-use dialog::*;
 use lazy_static::lazy_static;
-use message::*;
-use room::*;
+use gtk::prelude::*;
 
 use crate::{AuthParameters, Client, Error, Result, token_store, scheduler};
 use crate::auth;
-use crate::client;
 use crate::client::RoomEntry;
 use crate::connect::AsConnector;
 use crate::Glade;
@@ -23,11 +15,17 @@ use std::rc::Rc;
 use gdk::enums::key;
 use vertex::requests::AuthError;
 
-mod community;
+pub mod community;
 pub mod dialog;
 pub mod message;
-mod room;
-mod chat;
+pub mod room;
+pub mod chat;
+
+pub use chat::*;
+pub use community::*;
+pub use dialog::*;
+pub use message::*;
+pub use room::*;
 
 struct MessageScrollState {
     bottom: f64,
@@ -96,13 +94,8 @@ impl Ui {
     }
 }
 
-impl client::ClientUi for Ui {
-    type CommunityEntryWidget = CommunityEntryWidget;
-    type RoomEntryWidget = RoomEntryWidget;
-    type ChatWidget = ChatWidget;
-    type MessageEntryWidget = MessageEntryWidget;
-
-    fn bind_events(&self, client: &Client<Ui>) {
+impl Ui {
+    pub fn bind_events(&self, client: &Client) {
         self.settings_button.connect_clicked(
             client.connector()
                 .do_async(|client, _| async move {
@@ -292,7 +285,7 @@ impl client::ClientUi for Ui {
         );
     }
 
-    fn select_room(&self, room: &RoomEntry<Self>) -> ChatWidget {
+    pub fn select_room(&self, room: &RoomEntry) -> ChatWidget {
         self.clear_messages();
 
         self.message_entry.set_editable(true);
@@ -311,7 +304,7 @@ impl client::ClientUi for Ui {
         }
     }
 
-    fn deselect_room(&self) {
+    pub fn deselect_room(&self) {
         self.clear_messages();
 
         self.message_entry.set_editable(false);
@@ -321,7 +314,7 @@ impl client::ClientUi for Ui {
         self.room_name.set_text("");
     }
 
-    fn add_community(&self, name: String, description: String) -> CommunityEntryWidget {
+    pub fn add_community(&self, name: String, description: String) -> CommunityEntryWidget {
         let entry = CommunityEntryWidget::build(name, description);
         self.communities.add(&entry.widget);
         entry.widget.show_all();
@@ -329,7 +322,7 @@ impl client::ClientUi for Ui {
         entry
     }
 
-    fn window_focused(&self) -> bool {
+    pub fn window_focused(&self) -> bool {
         window::is_focused()
     }
 }
@@ -369,7 +362,7 @@ pub async fn start(parameters: AuthParameters) {
     }
 }
 
-async fn try_start(parameters: AuthParameters) -> Result<Client<Ui>> {
+async fn try_start(parameters: AuthParameters) -> Result<Client> {
     let auth = auth::Client::new(parameters.instance);
     let ws = auth.login(parameters.device, parameters.token).await?;
 

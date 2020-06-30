@@ -6,7 +6,7 @@ use gtk::prelude::*;
 use lazy_static::lazy_static;
 use bimap::BiMap;
 use vertex::prelude::*;
-use crate::{Glade, Client, screen};
+use crate::{Glade, Client};
 use crate::screen::active::dialog;
 use users_search::UsersSearch;
 use admins_list::AdminsList;
@@ -23,7 +23,7 @@ lazy_static! {
 }
 
 pub fn build_administration(
-    client: Client<screen::active::Ui>,
+    client: Client,
     perms: AdminPermissionFlags,
 ) -> gtk::Widget {
     use vertex::requests::AdminPermissionFlags as Perms;
@@ -121,7 +121,7 @@ async fn perform_action(
     action: Action,
     list: gtk::ListStore,
     username_to_id: Rc<Mutex<BiMap<String, UserId>>>,
-    client: &Client<screen::active::Ui>,
+    client: &Client,
 ) {
     let mut selected = Vec::new();
     let map = username_to_id.lock().unwrap();

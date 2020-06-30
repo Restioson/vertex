@@ -27,6 +27,7 @@ use crate::config::Config;
 use crate::database::{DbResult, MalformedInviteCode};
 use clap::{App, Arg};
 use crate::client::session::WsMessage;
+use vertex::RATELIMIT_BURST_PER_MIN;
 
 mod auth;
 mod client;
@@ -69,7 +70,7 @@ where
 }
 
 fn new_ratelimiter() -> RateLimiter<DeviceId, DashMapStateStore<DeviceId>, DefaultClock> {
-    RateLimiter::dashmap(Quota::per_minute(NonZeroU32::new(90u32).unwrap()))
+    RateLimiter::dashmap(Quota::per_minute(NonZeroU32::new(RATELIMIT_BURST_PER_MIN).unwrap()))
 }
 
 async fn refresh_ratelimiter(

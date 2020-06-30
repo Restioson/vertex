@@ -323,9 +323,12 @@ impl ActiveSession {
             }
         }
 
-        if message.is_ping() {
+        if message.is_ping() || message.is_pong() {
             self.heartbeat = Instant::now();
-            self.ws.send(ws::Message::ping(vec![])).await?;
+
+            if message.is_ping() {
+                self.ws.send(ws::Message::ping(vec![])).await?; // Doesn't let us send pong :(
+            }
         } else if message.is_binary() {
             let msg = match ClientMessage::from_protobuf_bytes(message.as_bytes()) {
                 Ok(m) => m,

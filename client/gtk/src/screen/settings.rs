@@ -6,14 +6,14 @@ use crate::{Client, SharedMut, token_store, window};
 use crate::config;
 use crate::connect::AsConnector;
 use crate::Glade;
-use crate::screen;
+
 use administration::*;
 use gtk::{Align, Orientation};
 
 #[derive(Clone)]
 pub struct Screen {
     pub main: gtk::Viewport,
-    client: Client<screen::active::Ui>,
+    client: Client,
     category_list: gtk::ListBox,
     settings_viewport: gtk::Viewport,
     current_settings: SharedMut<gtk::Widget>,
@@ -21,7 +21,7 @@ pub struct Screen {
     log_out: gtk::Button,
 }
 
-pub async fn build(client: Client<screen::active::Ui>) -> Screen {
+pub async fn build(client: Client) -> Screen {
     lazy_static! {
         static ref GLADE: Glade = Glade::open("settings/settings.glade").unwrap();
     }

@@ -6,12 +6,11 @@ use crate::{Client, Result, TryGetText, client};
 use crate::connect::AsConnector;
 use crate::window;
 
-use super::Ui;
 use gtk::{DialogFlags, ResponseType, Label, EntryBuilder, WidgetExt, TextBufferBuilder, ScrolledWindowBuilder};
 use atk::{RelationType, AtkObjectExt, RelationSetExt};
 use futures::Future;
 
-pub fn show_add_community(client: Client<Ui>) {
+pub fn show_add_community(client: Client) {
     window::show_dialog(|window| {
         let dialog = gtk::Dialog::new_with_buttons(
             None,
@@ -51,14 +50,14 @@ pub fn show_add_community(client: Client<Ui>) {
     });
 }
 
-async fn create_community(client: Client<Ui>, name: &str) -> Result<()> {
+async fn create_community(client: Client, name: &str) -> Result<()> {
     let community = client.create_community(name).await?;
     community.create_room("General").await?;
     community.create_room("Off Topic").await?;
     Ok(())
 }
 
-pub fn show_create_community(client: Client<Ui>) {
+pub fn show_create_community(client: Client) {
     window::show_dialog(|window| {
         let dialog = gtk::Dialog::new_with_buttons(
             None,
@@ -115,7 +114,7 @@ pub fn show_create_community(client: Client<Ui>) {
     });
 }
 
-pub fn show_join_community(client: Client<Ui>) {
+pub fn show_join_community(client: Client) {
     window::show_dialog(|window| {
         let dialog = gtk::Dialog::new_with_buttons(
             None,
@@ -221,7 +220,7 @@ pub fn show_invite_dialog(invite: InviteCode) {
     });
 }
 
-pub fn show_create_room(community: client::CommunityEntry<Ui>) {
+pub fn show_create_room(community: client::CommunityEntry) {
     window::show_dialog(|window| {
         let dialog = gtk::Dialog::new_with_buttons(
             None,
@@ -277,7 +276,7 @@ pub fn show_create_room(community: client::CommunityEntry<Ui>) {
     });
 }
 
-pub fn show_report_message(client: Client<Ui>, msg: MessageId) {
+pub fn show_report_message(client: Client, msg: MessageId) {
     window::show_dialog(|window| {
         let dialog = gtk::Dialog::new_with_buttons(
             None,
@@ -356,7 +355,7 @@ pub fn show_report_message(client: Client<Ui>, msg: MessageId) {
     });
 }
 
-pub fn show_choose_report_action(client: Client<Ui>, user: UserId) {
+pub fn show_choose_report_action(client: Client, user: UserId) {
     window::show_dialog(|window| {
         let dialog = gtk::Dialog::new_with_buttons(
             None,

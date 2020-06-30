@@ -206,7 +206,7 @@ fn setup_gtk_style(config: &Config) {
 }
 
 fn main() {
-    println!("{}", std::mem::size_of::<Client<screen::active::Ui>>());
+    println!("{}", std::mem::size_of::<Client>());
     println!("{}", std::mem::size_of::<net::RequestSender>());
     let application = gtk::Application::new(
             Some("cf.vertex.gtk"),

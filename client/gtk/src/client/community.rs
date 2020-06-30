@@ -4,34 +4,30 @@ use vertex::prelude::*;
 
 use crate::{Client, SharedMut};
 
-use super::{ClientUi, Error, Result};
+use super::{Error, Result};
 use super::room::*;
 
-pub trait CommunityEntryWidget<Ui: ClientUi>: Clone {
-    fn bind_events(&self, community: &CommunityEntry<Ui>);
+use crate::screen::active::CommunityEntryWidget;
 
-    fn add_room(&self, name: String) -> Ui::RoomEntryWidget;
-}
-
-pub struct CommunityState<Ui: ClientUi> {
+pub struct CommunityState {
     pub name: String,
-    rooms: Vec<RoomEntry<Ui>>,
+    rooms: Vec<RoomEntry>,
 }
 
 #[derive(Clone)]
-pub struct CommunityEntry<Ui: ClientUi> {
-    pub client: Client<Ui>,
+pub struct CommunityEntry {
+    pub client: Client,
 
-    pub widget: Ui::CommunityEntryWidget,
+    pub widget: CommunityEntryWidget,
 
     pub id: CommunityId,
-    pub state: SharedMut<CommunityState<Ui>>,
+    pub state: SharedMut<CommunityState>,
 }
 
-impl<Ui: ClientUi> CommunityEntry<Ui> {
+impl CommunityEntry {
     pub(super) fn new(
-        client: Client<Ui>,
-        widget: Ui::CommunityEntryWidget,
+        client: Client,
+        widget: CommunityEntryWidget,
         id: CommunityId,
         name: String,
     ) -> Self {
@@ -55,7 +51,7 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
         }
     }
 
-    pub async fn create_room(&self, name: &str) -> Result<RoomEntry<Ui>> {
+    pub async fn create_room(&self, name: &str) -> Result<RoomEntry> {
         let request = ClientRequest::CreateRoom { name: name.to_owned(), community: self.id };
         let request = self.client.request.send(request).await;
 
@@ -67,18 +63,18 @@ impl<Ui: ClientUi> CommunityEntry<Ui> {
         }
     }
 
-    pub async fn room_by_id(&self, id: RoomId) -> Option<RoomEntry<Ui>> {
+    pub async fn room_by_id(&self, id: RoomId) -> Option<RoomEntry> {
         self.state.read().await.rooms.iter()
             .find(|&room| room.id == id)
             .cloned()
     }
 
     #[inline]
-    pub async fn get_room(&self, index: usize) -> Option<RoomEntry<Ui>> {
+    pub async fn get_room(&self, index: usize) -> Option<RoomEntry> {
         self.state.read().await.rooms.get(index).cloned()
     }
 
-    pub(super) async fn add_room(&self, room: RoomStructure) -> RoomEntry<Ui> {
+    pub(super) async fn add_room(&self, room: RoomStructure) -> RoomEntry {
         let widget = self.widget.add_room(room.name.clone());
         let entry = RoomEntry::new(
             self.client.clone(),

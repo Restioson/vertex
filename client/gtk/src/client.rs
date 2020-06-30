@@ -18,6 +18,7 @@ use crate::{config, net, scheduler, screen, SharedMut, WeakSharedMut, window};
 use crate::{Error, Result};
 use url::Url;
 use crate::screen::active::dialog::show_generic_error;
+use crate::screen::active::Ui;
 
 mod community;
 mod room;
@@ -42,24 +43,6 @@ lazy_static::lazy_static! {
 //         Do need to properly consider this, though. A problematic case in doing that could be e.g.
 //         message adding in the controller; this has to reference the view and thus having multiple
 //         references. Then again, should this code be in the controller or in the view?
-pub trait ClientUi: Sized + Clone + 'static {
-    type CommunityEntryWidget: CommunityEntryWidget<Self>;
-    type RoomEntryWidget: RoomEntryWidget<Self>;
-
-    type ChatWidget: ChatWidget<Self>;
-
-    type MessageEntryWidget: MessageEntryWidget<Self>;
-
-    fn bind_events(&self, client: &Client<Self>);
-
-    fn select_room(&self, room: &RoomEntry<Self>) -> Self::ChatWidget;
-
-    fn deselect_room(&self);
-
-    fn add_community(&self, name: String, description: String) -> Self::CommunityEntryWidget;
-
-    fn window_focused(&self) -> bool;
-}
 
 async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
     where S: Stream<Item=tungstenite::Result<ServerEvent>> + Unpin
@@ -75,16 +58,16 @@ async fn client_ready<S>(event_receiver: &mut S) -> Result<ClientReady>
     }
 }
 
-pub struct ClientState<Ui: ClientUi> {
-    pub communities: Vec<CommunityEntry<Ui>>,
-    pub chat: Option<Chat<Ui>>,
-    pub selected_room: Option<RoomEntry<Ui>>,
+pub struct ClientState {
+    pub communities: Vec<CommunityEntry>,
+    pub chat: Option<Chat>,
+    pub selected_room: Option<RoomEntry>,
     pub message_entry_is_empty: bool,
     pub admin_perms: AdminPermissionFlags,
 }
 
 #[derive(Clone)]
-pub struct Client<Ui: ClientUi> {
+pub struct Client {
     request: Rc<net::RequestSender>,
 
     pub ui: Ui,
@@ -96,11 +79,11 @@ pub struct Client<Ui: ClientUi> {
 
     abort_handle: AbortHandle,
 
-    pub state: WeakSharedMut<ClientState<Ui>>,
+    pub state: WeakSharedMut<ClientState>,
 }
 
-impl<Ui: ClientUi> Client<Ui> {
-    pub async fn start(ws: net::AuthenticatedWs, ui: Ui, https: bool) -> Result<Client<Ui>> {
+impl Client {
+    pub async fn start(ws: net::AuthenticatedWs, ui: Ui, https: bool) -> Result<Client> {
         let (sender, receiver) = net::from_ws(ws.stream);
 
         let req_manager = net::RequestManager::new();
@@ -145,7 +128,7 @@ impl<Ui: ClientUi> Client<Ui> {
         };
         client.ui.deselect_room();
 
-        client.bind_events().await;
+        client.ui.bind_events(&client);
 
         for community in ready.communities {
             client.add_community(community).await;
@@ -160,10 +143,6 @@ impl<Ui: ClientUi> Client<Ui> {
         }.run());
 
         Ok(client)
-    }
-
-    async fn bind_events(&self) {
-        self.ui.bind_events(&self);
     }
 
     async fn handle_event(&self, event: ServerEvent) {
@@ -237,7 +216,7 @@ impl<Ui: ClientUi> Client<Ui> {
         log::warn!("received message for invalid room: {:?}#{:?}", community, room);
     }
 
-    pub async fn create_community(&self, name: &str) -> Result<CommunityEntry<Ui>> {
+    pub async fn create_community(&self, name: &str) -> Result<CommunityEntry> {
         let request = ClientRequest::CreateCommunity { name: name.to_owned() };
         let request = self.request.send(request).await;
 
@@ -247,7 +226,7 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
-    pub async fn join_community(&self, invite: InviteCode) -> Result<CommunityEntry<Ui>> {
+    pub async fn join_community(&self, invite: InviteCode) -> Result<CommunityEntry> {
         let request = ClientRequest::JoinCommunity(invite);
         let request = self.request.send(request).await;
 
@@ -257,10 +236,10 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
-    async fn add_community(&self, community: CommunityStructure) -> CommunityEntry<Ui> {
+    async fn add_community(&self, community: CommunityStructure) -> CommunityEntry {
         let widget = self.ui.add_community(community.name.clone(), community.description.clone());
 
-        let entry: CommunityEntry<Ui> = CommunityEntry::new(
+        let entry: CommunityEntry = CommunityEntry::new(
             self.clone(),
             widget,
             community.id,
@@ -282,7 +261,7 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
-    pub async fn community_by_id(&self, id: CommunityId) -> Option<CommunityEntry<Ui>> {
+    pub async fn community_by_id(&self, id: CommunityId) -> Option<CommunityEntry> {
         match self.state.upgrade() {
             Some(state) => {
                 state.read().await.communities.iter()
@@ -293,7 +272,7 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
-    pub async fn select_room(&self, room: RoomEntry<Ui>) {
+    pub async fn select_room(&self, room: RoomEntry) {
         let chat = self.ui.select_room(&room);
         let chat = Chat::new(
             self.clone(),
@@ -332,14 +311,14 @@ impl<Ui: ClientUi> Client<Ui> {
         self.request.send(ClientRequest::DeselectRoom).await;
     }
 
-    pub async fn selected_community(&self) -> Option<CommunityEntry<Ui>> {
+    pub async fn selected_community(&self) -> Option<CommunityEntry> {
         match self.selected_room().await {
             Some(room) => self.community_by_id(room.community).await,
             None => None,
         }
     }
 
-    pub async fn selected_room(&self) -> Option<RoomEntry<Ui>> {
+    pub async fn selected_room(&self) -> Option<RoomEntry> {
         match self.state.upgrade() {
             Some(state) => {
                 let state = state.read().await;
@@ -356,14 +335,14 @@ impl<Ui: ClientUi> Client<Ui> {
         }
     }
 
-    pub async fn chat_for(&self, room: RoomId) -> Option<Chat<Ui>> {
+    pub async fn chat_for(&self, room: RoomId) -> Option<Chat> {
         match self.chat().await {
             Some(chat) if chat.accepts(room) => Some(chat),
             _ => None,
         }
     }
 
-    pub async fn chat(&self) -> Option<Chat<Ui>> {
+    pub async fn chat(&self) -> Option<Chat> {
         match self.state.upgrade() {
             Some(state) => {
                 let state = state.read().await;
@@ -517,15 +496,15 @@ impl<Ui: ClientUi> Client<Ui> {
     }
 }
 
-struct ClientLoop<Ui: ClientUi, S> {
-    client: Client<Ui>,
+struct ClientLoop<S> {
+    client: Client,
     https: bool,
     event_receiver: S,
     abort_signal: Abortable<futures::future::Pending<()>>,
-    _state: SharedMut<ClientState<Ui>>,
+    _state: SharedMut<ClientState>,
 }
 
-impl<Ui: ClientUi, S> ClientLoop<Ui, S>
+impl<S> ClientLoop<S>
     where S: Stream<Item=tungstenite::Result<ServerEvent>> + Unpin
 {
     async fn run(self) {

@@ -119,7 +119,7 @@ impl MessageGroupWidget {
         id: MessageId,
         side: ChatSide,
         list: &gtk::ListBox,
-        client: Client<Ui>,
+        client: Client,
     ) -> MessageEntryWidget {
         let entry = MessageEntryWidget {
             group: self.clone(),
@@ -152,7 +152,7 @@ impl MessageGroupWidget {
         entry
     }
 
-    fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         match &self.flavour {
             MessageGroupFlavour::Inline { messages, .. } => messages.is_empty(),
             MessageGroupFlavour::Widget { entry_list, .. } => {
@@ -201,7 +201,7 @@ impl MessageGroupWidget {
         b: &gtk::Box,
         content: Option<String>,
         id: MessageId,
-        client: Client<Ui>,
+        client: Client,
     ) {
         let entry = MessageEntryWidget {
             group: self.clone(),
@@ -247,7 +247,7 @@ struct MessageContentWidget {
 
 impl MessageContentWidget {
     pub fn build(
-        client: Client<Ui>,
+        client: Client,
         text: Option<String>,
         id: MessageId,
         interactable: bool,
@@ -325,7 +325,7 @@ impl MessageContentWidget {
         MessageContentWidget { widget: vbox, text }
     }
 
-    fn build_menu(client: Client<Ui>, msg: MessageId) -> gtk::Popover {
+    fn build_menu(client: Client, msg: MessageId) -> gtk::Popover {
         lazy_static! {
             static ref GLADE: Glade = Glade::open("active/message_menu.glade").unwrap();
         }
@@ -369,8 +369,8 @@ impl MessageEntryWidget {
     }
 }
 
-impl client::MessageEntryWidget<Ui> for MessageEntryWidget {
-    fn set_status(&self, status: client::MessageStatus) {
+impl MessageEntryWidget {
+    pub fn set_status(&self, status: client::MessageStatus) {
         let style = self.content.text.get_style_context();
         style.remove_class("pending");
         style.remove_class("error");
@@ -382,13 +382,13 @@ impl client::MessageEntryWidget<Ui> for MessageEntryWidget {
         }
     }
 
-    fn push_embed(&self, client: &Client<Ui>, embed: MessageEmbed) {
+    pub fn push_embed(&self, client: &Client, embed: MessageEmbed) {
         let embed = build_embed(client, embed);
         self.content.widget.add(&embed);
     }
 }
 
-fn build_embed(client: &Client<Ui>, embed: MessageEmbed) -> gtk::Widget {
+fn build_embed(client: &Client, embed: MessageEmbed) -> gtk::Widget {
     match embed {
         MessageEmbed::OpenGraph(og) => build_opengraph_embed(og),
         MessageEmbed::Invite(invite) => build_invite_embed(client, invite),
@@ -418,7 +418,7 @@ fn build_opengraph_embed(embed: OpenGraphEmbed) -> gtk::Widget {
     opengraph.upcast()
 }
 
-fn build_invite_embed(client: &Client<Ui>, embed: InviteEmbed) -> gtk::Widget {
+fn build_invite_embed(client: &Client, embed: InviteEmbed) -> gtk::Widget {
     lazy_static! {
         static ref GLADE: Glade = Glade::open("active/embed/invite.glade").unwrap();
     }

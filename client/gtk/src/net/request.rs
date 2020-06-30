@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::num::NonZeroU32;
 
 use futures::channel::oneshot;
 use futures::FutureExt;
@@ -11,6 +12,10 @@ use vertex::prelude::*;
 
 use crate::net;
 use crate::{Result, Error};
+use governor::{RateLimiter, Quota};
+use governor::state::{NotKeyed, InMemoryState};
+use governor::clock::DefaultClock;
+use vertex::RATELIMIT_BURST_PER_MIN;
 
 const REQUEST_TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_secs(5);
 
@@ -32,20 +37,26 @@ impl RequestIdGenerator {
 
 struct RequestTracker {
     pending_requests: RefCell<HashMap<RequestId, EnqueuedRequest>>,
+    ratelimiter: RateLimiter<NotKeyed, InMemoryState, DefaultClock>,
 }
 
 impl RequestTracker {
     fn new() -> RequestTracker {
         RequestTracker {
             pending_requests: RefCell::new(HashMap::new()),
+            ratelimiter: RateLimiter::direct(
+                Quota::per_minute(NonZeroU32::new(RATELIMIT_BURST_PER_MIN).unwrap())
+            ),
         }
     }
 
-    fn enqueue(&self, id: RequestId) -> Option<oneshot::Receiver<Result<OkResponse>>> {
+    async fn enqueue(&self, id: RequestId) -> Option<oneshot::Receiver<Result<OkResponse>>> {
         let mut pending_requests = self.pending_requests.borrow_mut();
         if pending_requests.contains_key(&id) {
             return None;
         }
+
+        self.ratelimiter.until_ready().await;
 
         let (send, recv) = oneshot::channel();
         pending_requests.insert(id, EnqueuedRequest(send));
@@ -147,7 +158,7 @@ impl RequestSender {
     pub async fn send(&self, request: ClientRequest) -> Request {
         let id = self.id_gen.next();
 
-        let receiver = self.tracker.enqueue(id).expect("unable to enqueue message");
+        let receiver = self.tracker.enqueue(id).await.expect("unable to enqueue message");
 
         let message = ClientMessage { id, request };
         self.net.send(message).await;

@@ -54,8 +54,8 @@ impl CommunityEntryWidget {
     }
 }
 
-impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
-    fn bind_events(&self, community_entry: &client::CommunityEntry<Ui>) {
+impl CommunityEntryWidget {
+    pub fn bind_events(&self, community_entry: &client::CommunityEntry) {
         self.menu_button.connect_clicked(
             community_entry.connector()
                 .do_sync(|community, button| {
@@ -92,7 +92,7 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
         );
     }
 
-    fn add_room(&self, name: String) -> RoomEntryWidget {
+    pub fn add_room(&self, name: String) -> RoomEntryWidget {
         let widget = RoomEntryWidget::build(name);
         self.room_list.add(&widget.container);
         self.room_list.show_all();
@@ -101,7 +101,7 @@ impl client::CommunityEntryWidget<Ui> for CommunityEntryWidget {
     }
 }
 
-fn build_menu(community_entry: client::CommunityEntry<Ui>) -> gtk::Popover {
+fn build_menu(community_entry: client::CommunityEntry) -> gtk::Popover {
     lazy_static! {
         static ref GLADE: Glade = Glade::open("active/community_menu.glade").unwrap();
     }

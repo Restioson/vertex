@@ -24,6 +24,8 @@ pub mod prelude {
 
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 
+pub const RATELIMIT_BURST_PER_MIN: u32 = 120;
+
 pub fn setup_logging(
     name: &str,
     log_level: log::LevelFilter,

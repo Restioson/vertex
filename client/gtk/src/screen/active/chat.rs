@@ -5,7 +5,7 @@ use gtk::prelude::*;
 
 use vertex::prelude::*;
 
-use crate::{client, config};
+use crate::{config};
 use crate::client::{ChatSide, MessageContent};
 
 use super::*;
@@ -25,7 +25,6 @@ impl ChatWidget {
             author,
             profile,
             time,
-            // TODO
             true,
             config::get().screen_reader_message_list,
         );
@@ -40,7 +39,13 @@ impl ChatWidget {
     fn next_group(&mut self, author: UserId, profile: Profile, time: DateTime<Utc>, side: ChatSide) -> &mut MessageGroupWidget {
         match self.group_for(side) {
             Some(group) if group.can_combine(author, time) => {}
-            _ => self.add_group(author, profile, time, side),
+            Some(group) => {
+                if group.is_empty() {
+                    println!("len 0 but skip?");
+                }
+                self.add_group(author, profile, time, side)
+            },
+            None => self.add_group(author, profile, time, side),
         }
 
         self.group_for(side).unwrap()
@@ -54,6 +59,7 @@ impl ChatWidget {
     }
 
     fn remove_group(&mut self, group: &MessageGroupWidget) {
+        dbg!("remove!!");
         let mut cursor = self.groups.cursor_front_mut();
 
         while let Some(current) = cursor.current() {
@@ -68,19 +74,19 @@ impl ChatWidget {
     }
 }
 
-impl client::ChatWidget<Ui> for ChatWidget {
-    fn clear(&mut self) {
+impl ChatWidget {
+    pub fn clear(&mut self) {
         for child in self.message_list.get_children() {
             self.message_list.remove(&child);
         }
         self.groups.clear();
     }
 
-    fn add_message(
+    pub fn add_message(
         &mut self,
         content: MessageContent,
         side: ChatSide,
-        client: Client<Ui>,
+        client: Client,
         id: MessageId,
     ) -> MessageEntryWidget {
         let msg_list = self.message_list.clone();
@@ -93,13 +99,13 @@ impl client::ChatWidget<Ui> for ChatWidget {
         )
     }
 
-    fn remove_message(&mut self, widget: &mut MessageEntryWidget) {
+    pub fn remove_message(&mut self, widget: &mut MessageEntryWidget) {
         if let Some(group) = widget.remove() {
             self.remove_group(group);
         }
     }
 
-    fn flush(&mut self) {
+    pub fn flush(&mut self) {
         self.message_list.show_all();
     }
 }
