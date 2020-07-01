@@ -20,6 +20,7 @@ pub mod dialog;
 pub mod message;
 pub mod room;
 pub mod chat;
+pub mod message_scroll;
 
 pub use chat::*;
 pub use community::*;
@@ -191,98 +192,7 @@ impl Ui {
             }
         );
 
-        let adjustment = self.message_scroll.get_vadjustment().unwrap();
-        adjustment.connect_value_changed(
-            (client.clone(), self.message_scroll_state.clone()).connector()
-                .do_async(|(client, scroll), adjustment: gtk::Adjustment| async move {
-                    if let Some(chat) = client.chat().await {
-                        let mut state = scroll.write().unwrap();
-                        match &mut state.just_scrolled_up {
-                            Some(v) if adjustment.get_value() <= f64::EPSILON => {
-                                // Roll back - this change is due to a gtk glitch
-                                adjustment.set_value(*v);
-                            },
-                            opt @ Some(_) => *opt = None,
-                            None => {}
-                        }
 
-                        let upper = adjustment.get_upper() - adjustment.get_page_size();
-                        let reading_new = adjustment.get_value() + 10.0 >= upper;
-                        chat.set_reading_new(reading_new).await;
-                    }
-                })
-                .build_cloned_consumer()
-        );
-
-        self.message_scroll.connect_edge_reached(
-            (client.clone(), self.message_scroll_state.clone()).connector()
-                .do_async(|(client, scroll_state), (_scroll, position)| async move {
-                    if let Some(chat) = client.chat().await {
-                        let state = scroll_state.read().unwrap();
-                        if state.just_scrolled_up.is_none() {
-                            let _ = match position {
-                                gtk::PositionType::Top => {
-                                    if state.last_scrolled.elapsed() > Duration::from_secs(1) {
-                                        drop(state);
-                                        chat.extend_older().await.map(|_| {
-                                            let mut state = scroll_state.write().unwrap();
-                                            state.last_scrolled = Instant::now();
-                                        })
-                                    } else {
-                                        Ok(())
-                                    }
-                                },
-                                gtk::PositionType::Bottom => {
-                                    drop(state);
-                                    chat.extend_newer().await
-                                },
-                                _ => Ok(()),
-                            };
-                        }
-
-                        // TODO: handle error
-                    }
-                })
-                .build_widget_and_owned_listener()
-        );
-
-        self.message_list.connect_size_allocate(
-            (self.message_scroll_state.clone(), adjustment).connector()
-                .do_async(|(scroll_state, adjustment), _| async move {
-                    let mut old = scroll_state.write().unwrap();
-
-                    let new_bottom = adjustment.get_upper() - adjustment.get_page_size();
-                    let new_top = adjustment.get_lower();
-
-                    if (old.bottom - new_bottom).abs() < std::f64::EPSILON {
-                        return;
-                    }
-
-                    let old_value = adjustment.get_value();
-
-                    let on_bottom = old_value + 10.0 >= old.bottom;
-                    let on_top = old_value - 10.0 <= old.top;
-
-                    if on_top || on_bottom {
-                        let mut val = (new_bottom - old.bottom) + old_value;
-
-                        if on_top {
-                            let not_equal = (old_value - new_top).abs() > std::f64::EPSILON;
-                            if not_equal && val > adjustment.get_step_increment() {
-                                val -= adjustment.get_step_increment();
-                            }
-                            adjustment.set_value(val);
-                            old.just_scrolled_up = Some(val);
-                        }
-
-                        adjustment.set_value(val);
-                    }
-
-                    old.bottom = new_bottom;
-                    old.top = new_top;
-                })
-                .build_widget_listener()
-        );
     }
 
     pub fn select_room(&self, room: &RoomEntry) -> ChatWidget {

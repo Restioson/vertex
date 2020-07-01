@@ -14,13 +14,14 @@ yanked = "warn"
 notice = "warn"
 ignore = []
 
+
 [licenses]
 unlicensed = "deny"
 allow = [
     "MIT",
-    "Apache-2.0",
-    "GPL-3.0",
     "ISC",
+    "OpenSSL",
+    "Apache-2.0",
     "BSD-3-Clause",
     "BSD-2-Clause",
     "Zlib",
@@ -28,17 +29,14 @@ allow = [
 ]
 deny = []
 copyleft = "allow"
-allow-osi-fsf-free = "neither"
 default = "deny"
 confidence-threshold = 0.8
-#skip = [
-#    # ring has a rather complicated LICENSE file due to reasons spelled out
-#    # in said LICENSE file, but is basically OpenSSL for older parts, and ISC
-#    # for newer parts
-#    { name = "ring", licenses = [] },
-#    # webpki uses an ISC license but it only has a 0.83 confidence level
-#    { name = "webpki", licenses = [] },
-#]
+
+[[licenses.clarify]]
+name = "ring"
+version = "*"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [ { path = "LICENSE", hash = 0xbd0eed23 } ]
 
 [licenses.private]
 ignore = false

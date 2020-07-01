@@ -1,5 +1,6 @@
 [package]
 name = "vertex_server"
+license = "AGPL-3.0"
 version = "0.1.0"
 authors = ["Restioson <restiosondev@gmail.com>"]
 edition = "2018"

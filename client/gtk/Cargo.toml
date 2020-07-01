@@ -1,5 +1,6 @@
 [package]
 name = "vertex_client_gtk"
+license = "GPL-3.0"
 version = "0.1.0"
 authors = ["Restioson <restiosondev@gmail.com>", "gegy1000 <gegy1000@gmail.com>"]
 edition = "2018"

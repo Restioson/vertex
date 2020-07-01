@@ -19,6 +19,7 @@ use crate::{Error, Result};
 use url::Url;
 use crate::screen::active::dialog::show_generic_error;
 use crate::screen::active::Ui;
+use crate::screen::active::message_scroll::ScrollWidget;
 
 mod community;
 mod room;
@@ -80,6 +81,7 @@ pub struct Client {
     abort_handle: AbortHandle,
 
     pub state: WeakSharedMut<ClientState>,
+    scroll: ScrollWidget,
 }
 
 impl Client {
@@ -125,6 +127,7 @@ impl Client {
             notifier: Notifier::new(),
             abort_handle,
             state: state.downgrade(),
+            scroll: ScrollWidget::new(),
         };
         client.ui.deselect_room();
 
