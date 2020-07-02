@@ -18,12 +18,13 @@ pub const MESSAGE_DROP_COUNT: usize = MESSAGE_PAGE_SIZE * 2;
 pub struct PendingMessageHandle<'a> {
     chat: &'a Chat,
     widget: MessageEntryWidget,
+    fake_id: MessageId,
 }
 
 impl<'a> PendingMessageHandle<'a> {
-    pub async fn upgrade(mut self, message: Message) {
+    pub async fn upgrade(self, message: Message) {
         let mut state = self.chat.state.write().await;
-        state.widget.remove_message(&mut self.widget);
+        state.widget.remove_message(self.fake_id);
         drop(state);
 
         self.chat.push(message).await;
@@ -42,7 +43,6 @@ pub enum ChatSide {
 
 struct ChatEntry {
     id: MessageId,
-    widget: MessageEntryWidget,
 }
 
 pub struct ChatState {
@@ -86,7 +86,7 @@ impl ChatState {
 
     fn push(&mut self, id: MessageId, content: MessageContent, side: ChatSide) -> MessageEntryWidget {
         let widget = self.push_widget(content, side, id);
-        let entry = ChatEntry { id, widget: widget.clone() };
+        let entry = ChatEntry { id };
 
         match side {
             ChatSide::Front => self.entries.push_front(entry),
@@ -116,7 +116,7 @@ impl ChatState {
         };
 
         for dropped in dropped.iter_mut() {
-            self.widget.remove_message(&mut dropped.widget);
+            self.widget.remove_message(dropped.id);
         }
     }
 
@@ -186,7 +186,8 @@ impl Chat {
     pub async fn push_pending(&self, content: MessageContent) -> PendingMessageHandle<'_> {
         let mut state = self.state.write().await;
 
-        let widget = state.push_widget(content, ChatSide::Front, MessageId(Uuid::default()));
+        let fake_id = MessageId(Uuid::new_v4()); // Chance of collision is too small
+        let widget = state.push_widget(content, ChatSide::Front, fake_id);
         state.flush();
 
         widget.set_status(MessageStatus::Pending);
@@ -194,6 +195,7 @@ impl Chat {
         PendingMessageHandle {
             chat: self,
             widget,
+            fake_id,
         }
     }
 

@@ -2,7 +2,7 @@ use std::collections::LinkedList;
 use lazy_static::lazy_static;
 use gtk::prelude::*;
 
-use crate::{AuthParameters, Client, Error, Result, token_store, scheduler};
+use crate::{AuthParameters, Client, Error, Result, token_store, scheduler, config};
 use crate::auth;
 use crate::client::RoomEntry;
 use crate::connect::AsConnector;
@@ -114,6 +114,10 @@ impl Ui {
         let client_cloned = client.clone();
         self.message_entry.connect_focus_out_event(
             move |entry, _| {
+                if !config::get().message_editor_tweaks {
+                    return Inhibit(false);
+                }
+
                 let client = client_cloned.clone();
                 let buf = entry.get_buffer().unwrap();
                 let (begin, end) = buf.get_bounds();
@@ -138,6 +142,10 @@ impl Ui {
         let client_cloned = client.clone();
         self.message_entry.connect_focus_in_event(
             move |entry, _| {
+                if !config::get().message_editor_tweaks {
+                    return Inhibit(false);
+                }
+
                 let entry = entry.clone();
                 let client = client_cloned.clone();
                 scheduler::spawn(async move {
@@ -162,8 +170,12 @@ impl Ui {
                 match key_event.get_keyval() {
                     key::Return => {},
                     key::Escape => {
-                        entry.grab_remove();
-                        return Inhibit(true);
+                        return if config::get().message_editor_tweaks {
+                            entry.grab_remove();
+                            Inhibit(true)
+                        } else {
+                            Inhibit(false)
+                        }
                     },
                     _ => return Inhibit(false),
                 }
@@ -288,9 +300,16 @@ impl Ui {
     pub fn select_room(&self, room: &RoomEntry) -> ChatWidget {
         self.clear_messages();
 
-        self.message_entry.set_editable(true);
-        self.message_entry.get_style_context().remove_class("disabled");
-        self.message_entry.get_buffer().unwrap().set_text("");
+        let tweaks = config::get().message_editor_tweaks;
+
+        if tweaks || !self.message_entry.get_editable() {
+            self.message_entry.set_editable(true);
+            self.message_entry.get_style_context().remove_class("disabled");
+        }
+
+        if tweaks {
+            self.message_entry.get_buffer().unwrap().set_text("Send a message...");
+        }
 
         self.room_name.set_text(&room.name);
 
@@ -307,9 +326,11 @@ impl Ui {
     pub fn deselect_room(&self) {
         self.clear_messages();
 
-        self.message_entry.set_editable(false);
-        self.message_entry.get_style_context().add_class("disabled");
-        self.message_entry.get_buffer().unwrap().set_text("Select a room to send a message...");
+        if config::get().message_editor_tweaks {
+            self.message_entry.set_editable(false);
+            self.message_entry.get_style_context().add_class("disabled");
+            self.message_entry.get_buffer().unwrap().set_text("Select a room to send a message...");
+        }
 
         self.room_name.set_text("");
     }

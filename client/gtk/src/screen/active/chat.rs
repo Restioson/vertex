@@ -52,22 +52,10 @@ impl ChatWidget {
         }
     }
 
-    fn remove_group(&mut self, group: &MessageGroupWidget) {
-        let mut cursor = self.groups.cursor_front_mut();
-
-        while let Some(current) = cursor.current() {
-            if current == group {
-                cursor.remove_current();
-                group.remove_from(&self.message_list);
-
-                return;
-            }
-            cursor.move_next();
-        }
+    fn remove_group(&mut self, idx: usize) {
+        self.groups.remove(idx).remove_from(&self.message_list);
     }
-}
 
-impl ChatWidget {
     pub fn clear(&mut self) {
         for child in self.message_list.get_children() {
             self.message_list.remove(&child);
@@ -92,9 +80,15 @@ impl ChatWidget {
         )
     }
 
-    pub fn remove_message(&mut self, widget: &mut MessageEntryWidget) {
-        if let Some(group) = widget.remove() {
-            self.remove_group(group);
+    pub fn remove_message(&mut self, id: MessageId) {
+        for (i, group) in self.groups.iter_mut().enumerate() {
+            if let Some(idx) = group.position_of(&id) {
+                if group.remove_message(idx).is_some() {
+                    self.remove_group(i);
+                }
+
+                break;
+            }
         }
     }
 

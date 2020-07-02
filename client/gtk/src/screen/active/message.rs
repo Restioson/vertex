@@ -17,6 +17,7 @@ pub struct MessageGroupWidget {
     origin_time: DateTime<Utc>,
     interactable: bool,
     flavour: MessageGroupFlavour,
+    messages: Vec<MessageId>,
 }
 
 #[derive(Clone)]
@@ -31,7 +32,6 @@ enum MessageGroupFlavour {
     },
 }
 
-// To prevent recursion
 impl PartialEq for MessageGroupFlavour {
     fn eq(&self, other: &Self) -> bool {
         use MessageGroupFlavour::*;
@@ -80,6 +80,7 @@ impl MessageGroupWidget {
                 author,
                 origin_time,
                 flavour,
+                messages: Vec::new(),
                 interactable
             }
         } else {
@@ -107,6 +108,7 @@ impl MessageGroupWidget {
                 author,
                 origin_time,
                 flavour,
+                messages: Vec::new(),
                 interactable,
             }
         }
@@ -125,9 +127,13 @@ impl MessageGroupWidget {
         client: Client,
     ) -> MessageEntryWidget {
         let entry = MessageEntryWidget {
-            group: self.clone(),
             content: MessageContentWidget::build(client, content, id, self.interactable),
         };
+
+        match side {
+            ChatSide::Front => self.messages.insert(0, id),
+            ChatSide::Back => self.messages.push(id),
+        }
 
         match &mut self.flavour {
             MessageGroupFlavour::Inline { title, messages } => {
@@ -141,7 +147,10 @@ impl MessageGroupWidget {
                         list.insert(title, 0);
                         messages.push(entry.clone());
                     },
-                    ChatSide::Front => list.add(&entry.content.widget),
+                    ChatSide::Front => {
+                        list.add(&entry.content.widget);
+                        messages.insert(0, entry.clone());
+                    },
                 }
             },
             MessageGroupFlavour::Widget { entry_list, .. } => {
@@ -156,17 +165,17 @@ impl MessageGroupWidget {
     }
 
     pub fn is_empty(&self) -> bool {
-        match &self.flavour {
-            MessageGroupFlavour::Inline { messages, .. } => messages.is_empty(),
-            MessageGroupFlavour::Widget { entry_list, .. } => {
-                entry_list.get_children().is_empty()
-            }
-        }
+        self.messages.is_empty()
+    }
+
+    pub fn position_of(&self, id: &MessageId) -> Option<usize> {
+        self.messages.iter().position(|i| i == id)
     }
 
     pub fn remove_from(&self, list: &gtk::ListBox) {
         match &self.flavour {
             MessageGroupFlavour::Inline { title, messages } => {
+                // TODO check this
                 messages
                     .iter()
                     .map(|w| w.content.widget.clone().upcast())
@@ -207,7 +216,6 @@ impl MessageGroupWidget {
         client: Client,
     ) {
         let entry = MessageEntryWidget {
-            group: self.clone(),
             content: MessageContentWidget::build(client, content, id, self.interactable),
         };
 
@@ -222,14 +230,31 @@ impl MessageGroupWidget {
         }
     }
 
-    fn remove_msg(&mut self, msg: &MessageContentWidget) -> Option<&MessageGroupWidget> {
-        if let Some(row) = msg.widget.get_parent() {
+    pub fn remove_message(
+        &mut self,
+        pos: usize,
+    ) -> Option<&MessageGroupWidget> {
+        let widget: gtk::Widget = match &self.flavour {
+            MessageGroupFlavour::Inline { messages, .. } => {
+                messages[pos].content.widget.clone().upcast()
+            },
+            MessageGroupFlavour::Widget { entry_list, .. } => {
+                entry_list.get_row_at_index(pos as i32).unwrap().upcast()
+            },
+        };
+
+        if let Some(parent) = widget.get_parent() {
             match &mut self.flavour {
                 MessageGroupFlavour::Inline { messages, .. } => {
-                    messages.retain(|i| i.content != *msg);
+                    messages.remove(pos);
+                    let row: gtk::ListBoxRow = parent.downcast().unwrap();
+                    let list: gtk::ListBox = row.get_parent().unwrap().downcast().unwrap();
+                    list.remove(&row);
+
+                    // TODO here must actually remove
                 },
                 MessageGroupFlavour::Widget { entry_list, .. } => {
-                    entry_list.remove(&row);
+                    entry_list.remove(&parent);
                 }
             }
 
@@ -362,14 +387,7 @@ impl MessageContentWidget {
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct MessageEntryWidget {
-    group: MessageGroupWidget,
     content: MessageContentWidget,
-}
-
-impl MessageEntryWidget {
-    pub fn remove(&mut self) -> Option<&MessageGroupWidget> {
-        self.group.remove_msg(&self.content.clone())
-    }
 }
 
 impl MessageEntryWidget {
