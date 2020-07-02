@@ -39,13 +39,7 @@ impl ChatWidget {
     fn next_group(&mut self, author: UserId, profile: Profile, time: DateTime<Utc>, side: ChatSide) -> &mut MessageGroupWidget {
         match self.group_for(side) {
             Some(group) if group.can_combine(author, time) => {}
-            Some(group) => {
-                if group.is_empty() {
-                    println!("len 0 but skip?");
-                }
-                self.add_group(author, profile, time, side)
-            },
-            None => self.add_group(author, profile, time, side),
+            _ => self.add_group(author, profile, time, side),
         }
 
         self.group_for(side).unwrap()
@@ -54,12 +48,11 @@ impl ChatWidget {
     fn group_for(&mut self, side: ChatSide) -> Option<&mut MessageGroupWidget> {
         match side {
             ChatSide::Front => self.groups.front_mut(),
-            ChatSide::Back => self.groups.front_mut(),
+            ChatSide::Back => self.groups.back_mut(),
         }
     }
 
     fn remove_group(&mut self, group: &MessageGroupWidget) {
-        dbg!("remove!!");
         let mut cursor = self.groups.cursor_front_mut();
 
         while let Some(current) = cursor.current() {

@@ -125,7 +125,6 @@ impl Actor for ActiveSession {
 impl SyncHandler<CheckHeartbeat> for ActiveSession {
     fn handle(&mut self, _: CheckHeartbeat, ctx: &mut Context<Self>) {
         if Instant::now().duration_since(self.heartbeat) > HEARTBEAT_TIMEOUT {
-            dbg!("heartbeat timeout");
             ctx.stop();
         }
     }
@@ -356,7 +355,6 @@ impl ActiveSession {
             self.try_send(ServerMessage::Response { id: msg.id, result })
                 .await?;
         } else if message.is_close() {
-            dbg!("asked for close");
             ctx.stop();
         } else {
             log::debug!("Malformed message: {:#?}", message);

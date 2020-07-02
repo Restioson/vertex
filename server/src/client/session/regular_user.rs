@@ -175,7 +175,6 @@ impl<'a> RequestHandler<'a> {
             Ok(()) => Ok(OkResponse::NoData),
             Err(ChangeUsernameError::UsernameConflict) => Err(Error::UsernameAlreadyExists),
             Err(ChangeUsernameError::NonexistentUser) => {
-                dbg!("user didnt exist");
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(Error::LoggedOut)
             }
@@ -201,7 +200,6 @@ impl<'a> RequestHandler<'a> {
         {
             Ok(()) => Ok(OkResponse::NoData),
             Err(_) => {
-                dbg!("user didnt exist");
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(Error::LoggedOut)
             }
@@ -233,7 +231,6 @@ impl<'a> RequestHandler<'a> {
                 self.join_community_by_id(id).await
             }
             Err(_) => {
-                dbg!("user didnt exist");
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(Error::LoggedOut)
             }
@@ -487,7 +484,6 @@ impl<'a> RequestHandler<'a> {
             Ok(_) => Ok(OkResponse::NoData),
             Err(SetUserRoomStateError::InvalidRoom) => Err(Error::InvalidRoom),
             Err(SetUserRoomStateError::InvalidUser) => {
-                dbg!("user didnt exist");
                 self.ctx.stop(); // The user did not exist at the time of request
                 Err(Error::LoggedOut)
             }

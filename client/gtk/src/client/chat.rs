@@ -94,7 +94,6 @@ impl ChatState {
         }
 
         if self.entries.len() > MESSAGE_DROP_THRESHOLD {
-            dbg!("drop");
             self.drop_side(side);
         }
 
@@ -117,7 +116,6 @@ impl ChatState {
         };
 
         for dropped in dropped.iter_mut() {
-            println!("remove :(");
             self.widget.remove_message(&mut dropped.widget);
         }
     }
@@ -227,8 +225,6 @@ impl Chat {
 
         let mut state = self.state.write().await;
         for message in messages {
-            // TODO
-            //dbg!(&message);
             let content = self.build_content(&message).await;
             state.push(message.id, content, side);
         }
