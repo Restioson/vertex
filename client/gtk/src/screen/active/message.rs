@@ -3,7 +3,7 @@ use gtk::prelude::*;
 
 use vertex::prelude::*;
 
-use crate::client::{self, ChatSide, InviteEmbed, MessageEmbed, MessageStatus, OpenGraphEmbed};
+use crate::client::{ChatSide, InviteEmbed, MessageEmbed, MessageStatus, OpenGraphEmbed};
 use crate::{Glade, resource};
 
 use super::*;
@@ -126,9 +126,7 @@ impl MessageGroupWidget {
         list: &gtk::ListBox,
         client: Client,
     ) -> MessageEntryWidget {
-        let entry = MessageEntryWidget {
-            content: MessageContentWidget::build(client, content, id, self.interactable),
-        };
+        let entry = MessageEntryWidget::build(client, content, id, self.interactable);
 
         match side {
             ChatSide::Front => self.messages.insert(0, id),
@@ -143,20 +141,20 @@ impl MessageGroupWidget {
                             list.remove(&row);
                         }
 
-                        list.insert(&entry.content.widget, 0);
+                        list.insert(&entry.widget, 0);
                         list.insert(title, 0);
                         messages.push(entry.clone());
                     },
                     ChatSide::Front => {
-                        list.add(&entry.content.widget);
+                        list.add(&entry.widget);
                         messages.insert(0, entry.clone());
                     },
                 }
             },
             MessageGroupFlavour::Widget { entry_list, .. } => {
                 match side {
-                    ChatSide::Back => entry_list.insert(&entry.content.widget, 0),
-                    ChatSide::Front => entry_list.add(&entry.content.widget),
+                    ChatSide::Back => entry_list.insert(&entry.widget, 0),
+                    ChatSide::Front => entry_list.add(&entry.widget),
                 }
             }
         }
@@ -175,10 +173,9 @@ impl MessageGroupWidget {
     pub fn remove_from(&self, list: &gtk::ListBox) {
         match &self.flavour {
             MessageGroupFlavour::Inline { title, messages } => {
-                // TODO check this
                 messages
                     .iter()
-                    .map(|w| w.content.widget.clone().upcast())
+                    .map(|w| w.widget.clone().upcast())
                     .chain(title.get_parent())
                     .filter_map(|widget| widget.get_parent())
                     .for_each(|row| list.remove(&row));
@@ -215,14 +212,12 @@ impl MessageGroupWidget {
         id: MessageId,
         client: Client,
     ) {
-        let entry = MessageEntryWidget {
-            content: MessageContentWidget::build(client, content, id, self.interactable),
-        };
+        let entry = MessageEntryWidget::build(client, content, id, self.interactable);
 
         match &self.flavour {
             MessageGroupFlavour::Inline { title, .. } => {
                 b.add(title);
-                b.add(&entry.content.widget);
+                b.add(&entry.widget);
             }
             MessageGroupFlavour::Widget { widget, .. } => {
                 b.add(widget);
@@ -236,7 +231,7 @@ impl MessageGroupWidget {
     ) -> Option<&MessageGroupWidget> {
         let widget: gtk::Widget = match &self.flavour {
             MessageGroupFlavour::Inline { messages, .. } => {
-                messages[pos].content.widget.clone().upcast()
+                messages[pos].widget.clone().upcast()
             },
             MessageGroupFlavour::Widget { entry_list, .. } => {
                 entry_list.get_row_at_index(pos as i32).unwrap().upcast()
@@ -250,8 +245,6 @@ impl MessageGroupWidget {
                     let row: gtk::ListBoxRow = parent.downcast().unwrap();
                     let list: gtk::ListBox = row.get_parent().unwrap().downcast().unwrap();
                     list.remove(&row);
-
-                    // TODO here must actually remove
                 },
                 MessageGroupFlavour::Widget { entry_list, .. } => {
                     entry_list.remove(&parent);
@@ -267,19 +260,19 @@ impl MessageGroupWidget {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
-struct MessageContentWidget {
+#[derive(Clone, PartialEq, Eq)]
+pub struct MessageEntryWidget {
     widget: gtk::Box,
     text: gtk::Label,
 }
 
-impl MessageContentWidget {
+impl MessageEntryWidget {
     pub fn build(
         client: Client,
         text: Option<String>,
         id: MessageId,
         interactable: bool,
-    ) -> MessageContentWidget {
+    ) -> Self {
         thread_local! {
             static ICON: gdk_pixbuf::Pixbuf = gdk_pixbuf::Pixbuf::new_from_file_at_size(
                 &resource("feather/more-horizontal-cropped.svg"),
@@ -350,7 +343,7 @@ impl MessageContentWidget {
         hbox.add(&settings_vbox);
         vbox.add(&hbox);
 
-        MessageContentWidget { widget: vbox, text }
+        MessageEntryWidget { widget: vbox, text }
     }
 
     fn build_menu(client: Client, msg: MessageId) -> gtk::Popover {
@@ -383,16 +376,14 @@ impl MessageContentWidget {
 
         menu
     }
-}
 
-#[derive(Clone, Eq, PartialEq)]
-pub struct MessageEntryWidget {
-    content: MessageContentWidget,
-}
+    pub fn push_embed(&self, client: &Client, embed: MessageEmbed) {
+        let embed = build_embed(client, embed);
+        self.widget.add(&embed);
+    }
 
-impl MessageEntryWidget {
-    pub fn set_status(&self, status: client::MessageStatus) {
-        let style = self.content.text.get_style_context();
+    pub fn set_status(&self, status: MessageStatus) {
+        let style = self.text.get_style_context();
         style.remove_class("pending");
         style.remove_class("error");
 
@@ -401,11 +392,6 @@ impl MessageEntryWidget {
             MessageStatus::Err => style.add_class("error"),
             _ => (),
         }
-    }
-
-    pub fn push_embed(&self, client: &Client, embed: MessageEmbed) {
-        let embed = build_embed(client, embed);
-        self.content.widget.add(&embed);
     }
 }
 
