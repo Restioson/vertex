@@ -37,7 +37,10 @@ impl<'a> PendingMessageHandle<'a> {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ChatSide {
+    /// Bottom of the screen
     Front,
+
+    /// Top of the screen
     Back,
 }
 

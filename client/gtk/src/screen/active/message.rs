@@ -128,33 +128,37 @@ impl MessageGroupWidget {
     ) -> MessageEntryWidget {
         let entry = MessageEntryWidget::build(client, content, id, self.interactable);
 
-        match side {
-            ChatSide::Front => self.messages.insert(0, id),
-            ChatSide::Back => self.messages.push(id),
-        }
-
         match &mut self.flavour {
             MessageGroupFlavour::Inline { title, messages } => {
                 match side {
+                    ChatSide::Front => {
+                        self.messages.push(id);
+                        messages.push(entry.clone());
+
+                        list.add(&entry.widget);
+                    },
                     ChatSide::Back => {
+                        self.messages.insert(0, id);
+                        messages.insert(0, entry.clone());
+
                         if let Some(row) = title.get_parent() {
                             list.remove(&row);
                         }
-
                         list.insert(&entry.widget, 0);
                         list.insert(title, 0);
-                        messages.push(entry.clone());
-                    },
-                    ChatSide::Front => {
-                        list.add(&entry.widget);
-                        messages.insert(0, entry.clone());
                     },
                 }
             },
             MessageGroupFlavour::Widget { entry_list, .. } => {
                 match side {
-                    ChatSide::Back => entry_list.insert(&entry.widget, 0),
-                    ChatSide::Front => entry_list.add(&entry.widget),
+                    ChatSide::Front => {
+                        self.messages.push(id);
+                        entry_list.add(&entry.widget)
+                    },
+                    ChatSide::Back => {
+                        self.messages.insert(0, id);
+                        entry_list.insert(&entry.widget, 0)
+                    },
                 }
             }
         }
@@ -176,7 +180,7 @@ impl MessageGroupWidget {
                 messages
                     .iter()
                     .map(|w| w.widget.clone().upcast())
-                    .chain(title.get_parent())
+                    .chain(Some(title.clone().upcast::<gtk::Widget>()))
                     .filter_map(|widget| widget.get_parent())
                     .for_each(|row| list.remove(&row));
             },
@@ -238,22 +242,20 @@ impl MessageGroupWidget {
             },
         };
 
-        if let Some(parent) = widget.get_parent() {
-            match &mut self.flavour {
-                MessageGroupFlavour::Inline { messages, .. } => {
-                    messages.remove(pos);
-                    let row: gtk::ListBoxRow = parent.downcast().unwrap();
-                    let list: gtk::ListBox = row.get_parent().unwrap().downcast().unwrap();
-                    list.remove(&row);
-                },
-                MessageGroupFlavour::Widget { entry_list, .. } => {
-                    entry_list.remove(&parent);
-                }
-            }
+        self.messages.remove(pos);
 
-            if self.is_empty() {
-                return Some(self);
-            }
+        match &mut self.flavour {
+            MessageGroupFlavour::Inline { messages, .. } => {
+                messages.remove(pos);
+                let row: gtk::ListBoxRow = widget.get_parent().unwrap().downcast().unwrap();
+                let list: gtk::ListBox = row.get_parent().unwrap().downcast().unwrap();
+                list.remove(&row);
+            },
+            MessageGroupFlavour::Widget { entry_list, .. } => entry_list.remove(&widget),
+        }
+
+        if self.is_empty() {
+            return Some(self);
         }
 
         None
