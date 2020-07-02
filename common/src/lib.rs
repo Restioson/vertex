@@ -5,6 +5,7 @@
 use std::time::Duration;
 use std::fs;
 use std::fs::OpenOptions;
+use chrono::SecondsFormat;
 
 pub mod events;
 pub mod proto;
@@ -41,7 +42,7 @@ pub fn setup_logging(
         .format(|out, message, record| {
             out.finish(format_args!(
                 "[{}] [{}] [{}] {}",
-                chrono::Local::now().to_rfc3339(),
+                chrono::Local::now().to_rfc3339_opts(SecondsFormat::Millis, true),
                 record.level(),
                 record.target(),
                 message
