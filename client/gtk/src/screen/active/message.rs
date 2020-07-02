@@ -67,7 +67,10 @@ impl MessageGroupWidget {
                 profile.display_name,
                 pretty_date(origin_time),
             );
-            let title = gtk::Label::new(Some(&title));
+            let title = gtk::LabelBuilder::new()
+                .label(&title)
+                .xalign(0.0)
+                .build();
             let flavour = MessageGroupFlavour::Inline {
                 title,
                 messages: Vec::with_capacity(1),
