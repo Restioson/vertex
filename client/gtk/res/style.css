@@ -220,7 +220,6 @@ checkbutton, #settings .search_list check {
   min-width: 17px;
 }
 
-
 checkbutton check {
   margin-right: 15px;
   min-width: 20px;
@@ -229,6 +228,10 @@ checkbutton check {
 
 checkbutton {
   font-size: 16px;
+}
+
+tooltip {
+  background: @widget_bg_color;
 }
 
 /*
@@ -474,6 +477,8 @@ checkbutton {
   color: @subtitle_color;
   font-size: 15px;
   font-style: italic;
+  padding-bottom: 0px;
+  margin-bottom: 0px;
 }
 
 .no_hover *:hover {

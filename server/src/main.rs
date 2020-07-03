@@ -435,21 +435,25 @@ async fn invite(
 
     let html = format!(
         r#"
+        <!DOCTYPE html>
         <html>
             <head>
-                <meta property="vertex:invite_code" content="{invite_code}"/>
-                <meta property="vertex:invite_name" content="{community}"/>
-                <meta property="vertex:invite_description" content="{description}"/>
-                <meta property="og:title" content="Vertex Community Invite"/>
-                <meta property="og:description" content="You are invited to join {community} on Vertex!"/>
+                <meta charset="UTF-8">
+                <meta property="vertex:invite_code" content="{invite_code}">
+                <meta property="vertex:invite_name" content="{community}">
+                <meta property="vertex:invite_description" content="{description}">
+                <meta property="og:title" content="Vertex Community Invite">
+                <meta property="og:description" content="You are invited to join {community} on Vertex!">
             </head>
             <body>
-                <script>
+                <script type="text/javascript">
                     // Redirect to vertex://...
-                    var no_http = window.location.href.replace("https", "").replace("http", "");
-                    window.location.replace("vertex" + no_http);
+                    const url = new URL(location);
+                    url.protocol = "vertex:";
+                    alert(url);
+                    location.replace(url);
                 </script>
-            </script>
+            </body>
         </html>
         "#,
         //        hostname = hostname, // TODO https://github.com/seanmonstar/warp/issues/432

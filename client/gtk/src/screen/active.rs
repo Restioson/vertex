@@ -131,6 +131,7 @@ impl Ui {
 
                     if state.selected_room.is_none() {
                         entry.get_buffer().unwrap().set_text("Select a room to send a message...");
+                        state.message_entry_is_empty = true;
                     } else if state.message_entry_is_empty {
                         entry.get_buffer().unwrap().set_text("Send a message...");
                     }

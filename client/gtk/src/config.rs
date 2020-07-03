@@ -3,6 +3,7 @@ use std::sync::Arc;
 use arc_swap::ArcSwapOption;
 use serde::{Deserialize, Serialize};
 use once_cell::sync::Lazy;
+use log::Level;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -13,6 +14,7 @@ pub struct Config {
     pub high_contrast_css: bool,
     pub screen_reader_message_list: bool,
     pub message_editor_tweaks: bool,
+    pub log_level: Level,
 }
 
 impl Default for Config {
@@ -25,6 +27,7 @@ impl Default for Config {
             high_contrast_css: false,
             screen_reader_message_list: false,
             message_editor_tweaks: true,
+            log_level: Level::Info,
         }
     }
 }

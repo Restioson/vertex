@@ -6,6 +6,7 @@ use std::time::Duration;
 use std::fs;
 use std::fs::OpenOptions;
 use chrono::SecondsFormat;
+use log::LevelFilter;
 
 pub mod events;
 pub mod proto;
@@ -49,6 +50,9 @@ pub fn setup_logging(
             ))
         })
         .level(log_level)
+        .level_for("hyper", LevelFilter::Info)
+        .level_for("selectors", LevelFilter::Info)
+        .level_for("html5ever", LevelFilter::Info)
         .chain(std::io::stdout())
         .chain(
             OpenOptions::new()

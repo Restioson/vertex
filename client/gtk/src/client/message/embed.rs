@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::time::Duration;
-
 use tokio::time;
-
+use hyper::body::Bytes;
+use gdk_pixbuf::InterpType;
+use gio::Cancellable;
 use vertex::prelude::*;
-
 use crate::{Error, Result};
 use crate::SharedMut;
+use hyper::header;
 
 type EmbedKey = String;
 
@@ -76,6 +77,13 @@ pub struct OpenGraphEmbed {
     pub url: String,
     pub title: String,
     pub description: String,
+    pub image: Option<OpenGraphImage>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OpenGraphImage {
+    pub pixbuf: gdk_pixbuf::Pixbuf,
+    pub alt: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -107,6 +115,7 @@ fn build_embed(url: String, metadata: LinkMetadata) -> Option<MessageEmbed> {
                 url,
                 title: og.title,
                 description: og.description.unwrap_or_default(),
+                image: og.image,
             };
             Some(MessageEmbed::OpenGraph(embed))
         }
@@ -115,31 +124,48 @@ fn build_embed(url: String, metadata: LinkMetadata) -> Option<MessageEmbed> {
 }
 
 pub async fn get_link_metadata(url: &str) -> Result<LinkMetadata> {
-    type Connector = hyper_tls::HttpsConnector<hyper::client::HttpConnector>;
-
-    let https = hyper_tls::HttpsConnector::new();
-    let client: hyper::Client<Connector, hyper::Body> = hyper::Client::builder()
-        .build(https);
-
-    // TODO: request gzip + max size
-    let response = time::timeout(
-        Duration::from_secs(5),
-        client.get(url.parse::<hyper::Uri>()?),
-    )
-        .await
-        .map_err(|_| Error::Timeout)??;
-
-    let body = response.into_body();
-    let body = hyper::body::to_bytes(body).await?;
-    let body = String::from_utf8_lossy(&body);
+    let response = req(url, 400 * 1024).await?;
+    let body = String::from_utf8_lossy(&response);
 
     let html = scraper::Html::parse_document(&body);
     let props = collect_metadata_props(html);
 
-    Ok(parse_link_metadata(props))
+    Ok(build_link_metadata(props).await)
 }
 
-fn parse_link_metadata(mut props: HashMap<String, String>) -> LinkMetadata {
+async fn req(url: &str, max_size: usize) -> Result<Bytes> {
+    type Connector = hyper_tls::HttpsConnector<hyper::client::HttpConnector>;
+
+    let https = hyper_tls::HttpsConnector::new();
+    let client: hyper::Client<Connector, hyper::Body> = hyper::Client::builder()
+        .http1_max_buf_size(max_size)
+        .build(https);
+
+    let mut url = url.to_string();
+
+    for _ in 0..3 {
+        let response = time::timeout(
+                Duration::from_secs(5),
+                client.get(url.parse::<hyper::Uri>()?),
+            )
+            .await
+            .map_err(|_| Error::Timeout)??;
+
+        match response.headers().get(header::LOCATION) {
+            Some(loc) if response.status().is_redirection() => {
+                url = loc.to_str().map_err(|_| Error::InvalidUrl)?.to_string();
+            },
+            _ => {
+                let body = response.into_body();
+                return Ok(hyper::body::to_bytes(body).await?);
+            }
+        }
+    }
+
+    Err(Error::Timeout)
+}
+
+async fn build_link_metadata(mut props: HashMap<String, String>) -> LinkMetadata {
     let mut metadata = LinkMetadata {
         opengraph: None,
         invite: None,
@@ -157,16 +183,50 @@ fn parse_link_metadata(mut props: HashMap<String, String>) -> LinkMetadata {
 
     if let Some(title) = props.remove("og:title") {
         let description = props.remove("og:description");
-        metadata.opengraph = Some(OpenGraphMeta { title, description })
+        let image = get_image(props).await;
+        metadata.opengraph = Some(OpenGraphMeta { title, description, image })
     }
 
     metadata
 }
 
+async fn get_image(mut props: HashMap<String, String>) -> Option<OpenGraphImage> {
+    const MAX_DIM: i32 = 500;
+
+    let img_url = props.remove("og:image").or(props.remove("og:image:url"))?;
+    let alt = props.remove("og:image:alt");
+    let bytes = req(&img_url, 4 * 1024 * 1024).await.ok()?;
+    let bytes = glib::Bytes::from_owned(bytes);
+    let input_stream = gio::MemoryInputStream::new_from_bytes(&bytes);
+    let pixbuf = gdk_pixbuf::Pixbuf::new_from_stream(&input_stream, None::<&Cancellable>).ok()?;
+
+    let preferred: Option<(i32, i32)> = props.remove("og:image:width")
+        .zip(props.remove("og:image:height"))
+        .and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?)));
+    let pixbuf_dims = (pixbuf.get_width(), pixbuf.get_height());
+
+    let dims = if preferred.map(|d| d.0 <= MAX_DIM && d.1 <= MAX_DIM).unwrap_or(false) {
+        preferred.unwrap()
+    } else if pixbuf_dims.0 <= MAX_DIM && pixbuf_dims.1 <= MAX_DIM {
+        pixbuf_dims
+    } else {
+        let bigger_side = std::cmp::max(pixbuf_dims.0, pixbuf_dims.1);
+        let scale_factor = bigger_side as f64 / MAX_DIM as f64;
+
+        (
+            (pixbuf_dims.0 as f64 / scale_factor).round() as i32,
+            (pixbuf_dims.1 as f64 / scale_factor).round() as i32
+        )
+    };
+
+    let pixbuf = pixbuf.scale_simple(dims.0, dims.1, InterpType::Bilinear)?;
+    Some(OpenGraphImage { pixbuf, alt, })
+}
+
 fn collect_metadata_props(html: scraper::Html) -> HashMap<String, String> {
     let mut map = HashMap::new();
 
-    let select_meta = scraper::Selector::parse("head meta").unwrap();
+    let select_meta = scraper::Selector::parse("meta").unwrap();
     for element in html.select(&select_meta) {
         let element = element.value();
         let meta_info = (element.attr("property"), element.attr("content"));
@@ -189,6 +249,7 @@ pub struct LinkMetadata {
 struct OpenGraphMeta {
     title: String,
     description: Option<String>,
+    image: Option<OpenGraphImage>,
 }
 
 #[derive(Debug, Clone)]

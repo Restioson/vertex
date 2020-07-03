@@ -73,7 +73,7 @@ bimap = "0.4"
 nom = "5"
 itertools = "0.9"
 
-log = "0.4"
+log = { version = "0.4", features = ["serde"] }
 
 vertex = { path = "../../common" }
 

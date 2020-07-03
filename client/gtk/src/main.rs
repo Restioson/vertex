@@ -230,9 +230,9 @@ fn main() {
             return;
         }
         RUNNING.store(true, Ordering::SeqCst);
-        vertex::setup_logging("vertex_client_gtk", log::LevelFilter::Info);
-
         let conf = config::get();
+
+        vertex::setup_logging("vertex_client_gtk", conf.log_level.to_level_filter());
 
         // use native windows decoration
         #[cfg(windows)] std::env::set_var("GTK_CSD", "0");

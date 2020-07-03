@@ -299,7 +299,7 @@ impl MessageEntryWidget {
             .halign(gtk::Align::Start)
             .hexpand(true)
             .selectable(true)
-            .can_focus(false)
+            .can_focus(true)
             .wrap_mode(WrapMode::WordChar)
             .wrap(true)
             .build();
@@ -381,7 +381,9 @@ impl MessageEntryWidget {
 
     pub fn push_embed(&self, client: &Client, embed: MessageEmbed) {
         let embed = build_embed(client, embed);
-        self.widget.add(&embed);
+        if let Some(embed) = embed {
+            self.widget.add(&embed);
+        }
     }
 
     pub fn set_status(&self, status: MessageStatus) {
@@ -397,16 +399,14 @@ impl MessageEntryWidget {
     }
 }
 
-fn build_embed(client: &Client, embed: MessageEmbed) -> gtk::Widget {
+fn build_embed(client: &Client, embed: MessageEmbed) -> Option<gtk::Widget> {
     match embed {
-        MessageEmbed::OpenGraph(og) => build_opengraph_embed(og),
-        MessageEmbed::Invite(invite) => build_invite_embed(client, invite),
-        // TODO: custom embed for errors
-        MessageEmbed::Error(error) => build_opengraph_embed(OpenGraphEmbed {
-            url: error.url,
-            title: error.title,
-            description: error.error,
-        }),
+        MessageEmbed::OpenGraph(og) => Some(build_opengraph_embed(og)),
+        MessageEmbed::Invite(invite) => Some(build_invite_embed(client, invite)),
+        MessageEmbed::Error(error) => {
+            log::debug!("Error loading embed: {:?}", error);
+            None
+        },
     }
 }
 
@@ -421,8 +421,29 @@ fn build_opengraph_embed(embed: OpenGraphEmbed) -> gtk::Widget {
     let title_label: gtk::Label = builder.get_object("title").unwrap();
     title_label.set_text(&embed.title);
 
+    let description: gtk::TextView = builder.get_object("description").unwrap();
     let description_buffer: gtk::TextBuffer = builder.get_object("description_buffer").unwrap();
     description_buffer.set_text(&embed.description);
+
+    let image_box: gtk::Box = builder.get_object("image_box").unwrap();
+
+    if embed.description == "" {
+        opengraph.remove(&description);
+    }
+
+    if let Some(image_info) = embed.image {
+        let image = gtk::Image::new_from_pixbuf(Some(&image_info.pixbuf));
+        if let Some(alt) = image_info.alt {
+            image.get_accessible().unwrap().set_description(&alt);
+            image.set_tooltip_text(Some(&alt));
+        }
+
+        image_box.add(&image);
+        opengraph.show_all();
+    }
+
+
+
 
     opengraph.upcast()
 }
