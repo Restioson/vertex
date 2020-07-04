@@ -1,8 +1,10 @@
 [package]
 name = "vertex_server"
 version = "0.1.0"
-authors = ["Restioson <restiosondev@gmail.com>"]
+authors = ["Restioson <restiosondev@gmail.com>", "gegy1000 <gegy1000@gmail.com>"]
 edition = "2018"
+homepage = "https://vertex.cf/"
+repository = "https://github.com/Restioson/vertex"
 
 [dependencies]
 xtra = { version = "0.5.0-beta", features = ["with-tokio-0_2"] }

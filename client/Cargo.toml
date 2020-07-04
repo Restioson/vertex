@@ -1,0 +1,35 @@
+[package]
+name = "vertex_client"
+version = "0.1.0"
+authors = ["Restioson <restiosondev@gmail.com>", "gegy1000 <gegy1000@gmail.com>"]
+edition = "2018"
+homepage = "https://vertex.cf/"
+repository = "https://github.com/Restioson/vertex"
+
+[dependencies]
+rand = "0.7"
+log = "0.4"
+defile = "0.1"
+
+hyper = "0.13"
+hyper-tls = "0.4"
+url = { version = "2.1", features = ["serde"] }
+scraper = "0.12"
+
+tokio = { version = "0.2" }
+futures = "0.3"
+
+tungstenite = "0.10"
+tokio-tungstenite = { version = "0.10", features = ["tls"] }
+
+governor = { version = "0.2", default-features = false, features = ["std"] }
+
+xtra = "0.5.0-beta.0"
+spaad = { path = "../../spaad/spaad" }
+async-trait = "0.1"
+
+serde = "1"
+serde_urlencoded = "0.6"
+base64 = "0.12"
+
+vertex = { path = "../common" }

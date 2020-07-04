@@ -293,7 +293,10 @@ pub enum Error {
     ProtocolError(Option<StdError>),
     ErrorResponse(vertex::responses::Error),
     AuthErrorResponse(AuthError),
-    UnexpectedMessage,
+    UnexpectedMessage {
+        expected: String,
+        got: ServerMessage,
+    },
     DeserializeError(DeserializeError),
 }
 
@@ -320,6 +323,7 @@ impl fmt::Display for Error {
         }
     }
 }
+
 impl From<hyper::Error> for Error {
     fn from(error: hyper::Error) -> Self { Error::Http(error) }
 }

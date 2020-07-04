@@ -524,6 +524,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "defile"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9e88469b566fb49f39d42290ac2a7ccfe2125a3a1c123ec275338f4b43e0a55"
+dependencies = [
+ "defile-proc_macros",
+]
+
+[[package]]
+name = "defile-proc_macros"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1050a19236c331bf4766d32363cfd77905a3de0dee642e8705b6e83757ce5e81"
+
+[[package]]
 name = "derive_more"
 version = "0.99.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2819,7 +2834,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95c7ce8830064c805002623312c9d85b3e9bfeaeef204f51efcc9471f93d41d2"
 dependencies = [
  "async-trait",
- "spaad_internal",
+ "spaad_internal 0.3.2",
+ "xtra",
+]
+
+[[package]]
+name = "spaad"
+version = "0.4.0-beta.1"
+dependencies = [
+ "async-trait",
+ "spaad_internal 0.4.0-beta.1",
  "xtra",
 ]
 
@@ -2828,6 +2852,17 @@ name = "spaad_internal"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e96b4d274ac2931e1f13e0787808aad1aecbcb4cc8442fefa76444e9a736d48e"
+dependencies = [
+ "async-trait",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote 1.0.7",
+ "syn 1.0.31",
+]
+
+[[package]]
+name = "spaad_internal"
+version = "0.4.0-beta.1"
 dependencies = [
  "async-trait",
  "proc-macro-error",
@@ -3332,6 +3367,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "vertex_client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.12.2",
+ "defile",
+ "futures",
+ "governor",
+ "hyper",
+ "hyper-tls",
+ "log 0.4.8",
+ "rand 0.7.3",
+ "scraper",
+ "serde",
+ "serde_urlencoded",
+ "spaad 0.4.0-beta.1",
+ "tokio",
+ "tokio-tungstenite",
+ "tungstenite",
+ "url",
+ "vertex",
+ "xtra",
+]
+
+[[package]]
 name = "vertex_client_gtk"
 version = "0.1.0"
 dependencies = [
@@ -3405,7 +3465,7 @@ dependencies = [
  "rand 0.7.3",
  "rust-argon2 0.8.2",
  "serde",
- "spaad",
+ "spaad 0.4.0-beta.0",
  "tokio",
  "tokio-postgres",
  "toml",

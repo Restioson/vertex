@@ -2,7 +2,8 @@
 members = [
     "server",
     "common",
-    "client/gtk"
+    "client",
+    "client/gtk",
 ]
 
 [profile.dev.package."rust-argon2"]
