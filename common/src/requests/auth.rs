@@ -12,6 +12,7 @@ use std::ops::Try;
 pub struct Login {
     pub device: DeviceId,
     pub token: AuthToken,
+    pub bot: bool,
 }
 
 #[non_exhaustive]

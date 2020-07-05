@@ -21,12 +21,12 @@ use client::ActiveSession;
 use database::Database;
 use vertex::prelude::*;
 
+use crate::client::session::WsMessage;
 use crate::client::Authenticator;
 use crate::community::{Community, CommunityActor};
 use crate::config::Config;
 use crate::database::{DbResult, MalformedInviteCode};
 use clap::{App, Arg};
-use crate::client::session::WsMessage;
 use vertex::RATELIMIT_BURST_PER_MIN;
 
 mod auth;
@@ -70,7 +70,9 @@ where
 }
 
 fn new_ratelimiter() -> RateLimiter<DeviceId, DashMapStateStore<DeviceId>, DefaultClock> {
-    RateLimiter::dashmap(Quota::per_minute(NonZeroU32::new(RATELIMIT_BURST_PER_MIN).unwrap()))
+    RateLimiter::dashmap(Quota::per_minute(
+        NonZeroU32::new(RATELIMIT_BURST_PER_MIN).unwrap(),
+    ))
 }
 
 async fn refresh_ratelimiter(
@@ -308,6 +310,7 @@ async fn login(
         global: global.clone(),
     };
 
+    let bot = login.bot;
     let details = authenticator.login(login.device, login.token).await?;
     let (user, device, perms, hsv) = details;
 
@@ -316,8 +319,11 @@ async fn login(
             let upgrade = ws.on_upgrade(move |websocket| {
                 let (sink, stream) = websocket.split();
 
-                let session = ActiveSession::new(sink, global, user, device, perms);
-                session.clone().into_address().attach_stream(stream.map(WsMessage));
+                let session = ActiveSession::new(sink, global, user, device, perms, bot);
+                session
+                    .clone()
+                    .into_address()
+                    .attach_stream(stream.map(WsMessage));
 
                 // if the session fails to spawn, that means it has since been removed. we can ignore the error.
                 let _ = client::session::upgrade(user, device, session);

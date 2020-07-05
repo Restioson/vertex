@@ -19,6 +19,7 @@ pub enum ServerMessage {
     RateLimited {
         ready_in: Duration,
     },
+    TimedOut,
 }
 
 impl ServerMessage {
@@ -50,6 +51,7 @@ impl From<ServerMessage> for proto::events::ServerMessage {
             RateLimited { ready_in } => Message::RateLimited(proto::events::RateLimited {
                 ready_in_ms: ready_in.as_millis().try_into().unwrap_or(std::u32::MAX),
             }),
+            TimedOut => Message::TimedOut(proto::types::None {})
         };
 
         proto::events::ServerMessage {
@@ -85,6 +87,7 @@ impl TryFrom<proto::events::ServerMessage> for ServerMessage {
             RateLimited(proto::events::RateLimited { ready_in_ms }) => ServerMessage::RateLimited {
                 ready_in: Duration::from_millis(ready_in_ms as u64),
             },
+            TimedOut(_) => ServerMessage::TimedOut,
         })
     }
 }

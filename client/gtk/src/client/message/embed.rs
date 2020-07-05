@@ -145,7 +145,7 @@ async fn req(url: &str, max_size: usize) -> Result<Bytes> {
 
     for _ in 0..3 {
         let response = time::timeout(
-                Duration::from_secs(5),
+                Duration::from_secs(10),
                 client.get(url.parse::<hyper::Uri>()?),
             )
             .await

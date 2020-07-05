@@ -2829,40 +2829,20 @@ dependencies = [
 
 [[package]]
 name = "spaad"
-version = "0.4.0-beta.0"
+version = "0.4.0-beta.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95c7ce8830064c805002623312c9d85b3e9bfeaeef204f51efcc9471f93d41d2"
+checksum = "16405b8b2f65919517dcea1790537d30d6555e953af9be53c9737c77940ea298"
 dependencies = [
  "async-trait",
- "spaad_internal 0.3.2",
- "xtra",
-]
-
-[[package]]
-name = "spaad"
-version = "0.4.0-beta.1"
-dependencies = [
- "async-trait",
- "spaad_internal 0.4.0-beta.1",
+ "spaad_internal",
  "xtra",
 ]
 
 [[package]]
 name = "spaad_internal"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e96b4d274ac2931e1f13e0787808aad1aecbcb4cc8442fefa76444e9a736d48e"
-dependencies = [
- "async-trait",
- "proc-macro-error",
- "proc-macro2",
- "quote 1.0.7",
- "syn 1.0.31",
-]
-
-[[package]]
-name = "spaad_internal"
 version = "0.4.0-beta.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54e36705e4ed3cd3e9836994a62e8f9822abe67f814e5b9a443b17dce50f2c21"
 dependencies = [
  "async-trait",
  "proc-macro-error",
@@ -3385,7 +3365,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
- "spaad 0.4.0-beta.1",
+ "spaad",
  "tokio",
  "tokio-tungstenite",
  "tungstenite",
@@ -3468,7 +3448,7 @@ dependencies = [
  "rand 0.7.3",
  "rust-argon2 0.8.2",
  "serde",
- "spaad 0.4.0-beta.0",
+ "spaad",
  "tokio",
  "tokio-postgres",
  "toml",
@@ -3692,10 +3672,11 @@ dependencies = [
 
 [[package]]
 name = "xtra"
-version = "0.5.0-beta.0"
+version = "0.5.0-beta.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "892af3e24c00ba2bc5d2a54b9c3616a2c9b3067e8d29ee3d6e38bd90b2eedc37"
+checksum = "31cfc021390627b08c4355552cd35752d00fb775307a04bcab61135145319375"
 dependencies = [
+ "async-trait",
  "futures",
  "tokio",
 ]

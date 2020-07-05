@@ -1,12 +1,12 @@
-use keyring::Keyring;
 use vertex::prelude::*;
 use vertex_client::{AuthParameters, Client, EventHandler};
+use keyring::Keyring;
 
 struct Handler;
 
 #[async_trait::async_trait]
 impl EventHandler for Handler {
-    async fn ready(&mut self, _client: Client) {
+    async fn ready(&mut self, _client: &mut Client) {
         println!("ready!");
     }
 
@@ -15,7 +15,7 @@ impl EventHandler for Handler {
         community: CommunityId,
         room: RoomId,
         message: Message,
-        _client: Client,
+        _client: &mut Client,
     ) {
         println!("{:?} in {:?} in {:?}", message, community, room);
     }
@@ -30,9 +30,7 @@ pub fn get_stored_token() -> Option<AuthParameters> {
 
 #[tokio::main]
 async fn main() {
-    Client::start(get_stored_token().unwrap(), Handler)
-        .await
-        .unwrap()
-        .1
-        .await
+    let client = Client::connect(get_stored_token().unwrap(), true).await.unwrap();
+    client.start_with_handler(Handler).await
 }
+

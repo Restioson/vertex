@@ -542,7 +542,7 @@ impl<'a> RequestHandler<'a> {
 
         let msg_len = self.session.global.config.max_message_len as usize;
         if short_desc.len() > 100 || extended_desc.len() > msg_len {
-            return Err(Error::TooLong)
+            return Err(Error::TooLong);
         }
 
         let db = &self.session.global.database;

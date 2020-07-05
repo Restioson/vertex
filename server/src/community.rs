@@ -2,6 +2,7 @@ use crate::client::session::{AddRoom, ForwardMessage};
 use crate::client::{self, ActiveSession, Session};
 use crate::database::{AddToCommunityError, CommunityRecord, Database, DbResult};
 use crate::{handle_disconnected, IdentifiedMessage};
+use async_trait::async_trait;
 use chrono::Utc;
 use dashmap::mapref::one::{Ref, RefMut};
 use dashmap::DashMap;
@@ -12,7 +13,6 @@ use uuid::Uuid;
 use vertex::prelude::*;
 use xtra::prelude::*;
 use xtra::Disconnected;
-use async_trait::async_trait;
 
 lazy_static! {
     pub static ref COMMUNITIES: DashMap<CommunityId, Community> = DashMap::new();
@@ -188,7 +188,7 @@ impl Handler<Connect> for CommunityActor {
     async fn handle(
         &mut self,
         connect: Connect,
-        _: &mut Context<Self>
+        _: &mut Context<Self>,
     ) -> DbResult<Result<(), ConnectError>> {
         let membership = self
             .database
@@ -264,7 +264,7 @@ impl SyncHandler<IdentifiedMessage<Edit>> for CommunityActor {
                 let _ = session.send(send.clone());
                 Ok(())
             },
-            Some(from_device)
+            Some(from_device),
         );
 
         Ok(())
@@ -276,7 +276,7 @@ impl Handler<Join> for CommunityActor {
     async fn handle(
         &mut self,
         join: Join,
-        _: &mut Context<Self>
+        _: &mut Context<Self>,
     ) -> DbResult<Result<CommunityStructure, AddToCommunityError>> {
         if let Err(e) = self.database.add_to_community(self.id, join.user).await? {
             return Ok(Err(e)); // TODO(banning): check if user is not banned

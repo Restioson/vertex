@@ -1,13 +1,13 @@
 use std::fmt::Debug;
 use std::time::Instant;
 
+use async_trait::async_trait;
 use futures::stream::SplitSink;
 use futures::SinkExt;
 use log::{debug, error, warn};
 use warp::filters::ws;
 use warp::filters::ws::WebSocket;
 use xtra::prelude::*;
-use async_trait::async_trait;
 
 pub use manager::*;
 use vertex::prelude::*;
@@ -82,7 +82,7 @@ impl Handler<WsMessage> for ActiveSession {
                 );
                 ctx.stop();
                 KeepRunning::No
-            },
+            }
         }
     }
 }
@@ -95,6 +95,7 @@ pub struct ActiveSession {
     pub user: UserId,
     pub device: DeviceId,
     pub perms: TokenPermissionFlags,
+    pub bot: bool,
 }
 
 #[spaad::entangled]
@@ -122,9 +123,11 @@ impl Actor for ActiveSession {
 }
 
 #[spaad::entangled]
-impl SyncHandler<CheckHeartbeat> for ActiveSession {
-    fn handle(&mut self, _: CheckHeartbeat, ctx: &mut Context<Self>) {
+#[async_trait]
+impl Handler<CheckHeartbeat> for ActiveSession {
+    async fn handle(&mut self, _: CheckHeartbeat, ctx: &mut Context<Self>) {
         if Instant::now().duration_since(self.heartbeat) > HEARTBEAT_TIMEOUT {
+            let _ = self.send(ServerMessage::TimedOut, ctx).await;
             ctx.stop();
         }
     }
@@ -164,6 +167,7 @@ impl ActiveSession {
         user: UserId,
         device: DeviceId,
         perms: TokenPermissionFlags,
+        bot: bool,
     ) -> Self {
         ActiveSession {
             ws,
@@ -172,6 +176,7 @@ impl ActiveSession {
             user,
             device,
             perms,
+            bot,
         }
     }
 
@@ -181,7 +186,8 @@ impl ActiveSession {
 
     #[spaad::handler]
     pub async fn send<M>(&mut self, msg: M, ctx: &mut Context<Self>)
-        where M: Into<Vec<u8>> + Send + 'static
+    where
+        M: Into<Vec<u8>> + Send + Debug + 'static,
     {
         if let Err(e) = self.try_send(msg).await {
             error!(
@@ -222,11 +228,12 @@ impl ActiveSession {
     ) -> Result<(bool, bool), Error> {
         let mut active_user = manager::get_active_user_mut(self.user)?;
         let session = &active_user.sessions[&self.device];
-        let looking_at = session.as_active_looking_at().unwrap();
+        let looking_at = session.as_active_looking_at().unwrap(); // TODO move looking_at into session proper
 
         if let Some(user_community) = active_user.communities.get_mut(&community) {
             if let Some(user_room) = user_community.rooms.get_mut(&room) {
-                let notify = looking_at == Some((community, room))
+                let notify = self.bot
+                    || looking_at == Some((community, room))
                     || user_room.watch_level == WatchLevel::Watching;
                 let was_unread = user_room.unread;
                 user_room.unread = true;

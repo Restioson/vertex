@@ -13,7 +13,7 @@ impl super::ActiveSession {
     pub async fn admin_permissions_changed(
         &mut self,
         new: AdminPermissionFlags,
-        ctx: &mut Context<Self>
+        ctx: &mut Context<Self>,
     ) {
         let msg = ServerMessage::Event(ServerEvent::AdminPermissionsChanged(new));
         self.send(msg, ctx).await
@@ -116,8 +116,9 @@ impl super::ActiveSession {
 
         // Don't allow demoting more privileged users
         let all = AdminPermissionFlags::ALL;
-        if user != self.user &&
-            (their_perms.contains(self.admin_perms()?) || their_perms.contains(all)) {
+        if user != self.user
+            && (their_perms.contains(self.admin_perms()?) || their_perms.contains(all))
+        {
             return Err(Error::AccessDenied);
         }
 
@@ -147,8 +148,9 @@ impl super::ActiveSession {
 
         // Don't allow demoting more privileged users but allow demoting self
         let all = AdminPermissionFlags::ALL;
-        if user != self.user &&
-            (their_perms.contains(self.admin_perms()?) || their_perms.contains(all)) {
+        if user != self.user
+            && (their_perms.contains(self.admin_perms()?) || their_perms.contains(all))
+        {
             return Err(Error::AccessDenied);
         }
 
@@ -213,7 +215,7 @@ impl super::ActiveSession {
         super::manager::USERS.retain(|_, user| {
             if user.hash_scheme_version < HashSchemeVersion::LATEST || all {
                 let sessions = &mut user.sessions;
-                for (_, session) in sessions {
+                for session in sessions.values() {
                     if let Session::Active { actor, .. } = session {
                         let _ = actor
                             .address()

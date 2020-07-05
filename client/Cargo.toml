@@ -24,8 +24,8 @@ tokio-tungstenite = { version = "0.10", features = ["tls"] }
 
 governor = { version = "0.2", default-features = false, features = ["std"] }
 
-xtra = "0.5.0-beta.0"
-spaad = { path = "../../spaad/spaad" }
+xtra = "0.5.0-beta.3"
+spaad = "0.4.0-beta.2"
 async-trait = "0.1"
 
 serde = "1"

@@ -7,7 +7,6 @@ pub enum Error {
     Http(hyper::Error),
     Websocket(tungstenite::Error),
     Timeout,
-    ProtocolError(Option<Box<dyn std::error::Error + Send>>),
     ErrorResponse(vertex::responses::Error),
     AuthErrorResponse(AuthError),
     UnexpectedMessage {
@@ -32,10 +31,6 @@ impl fmt::Display for Error {
             }
             Websocket(ws) => write!(f, "{}", ws),
             Timeout => write!(f, "Connection timed out"),
-            ProtocolError(err) => match err {
-                Some(err) => write!(f, "Protocol error: {}", err),
-                None => write!(f, "Protocol error"),
-            },
             ErrorResponse(err) => write!(f, "{}", err),
             AuthErrorResponse(err) => write!(f, "{}", err),
             UnexpectedMessage { expected, got } => write!(
@@ -83,14 +78,25 @@ impl From<DeserializeError> for Error {
         Error::DeserializeError(err)
     }
 }
-
 #[macro_export]
-macro_rules! extract_path {
+macro_rules! expect {
+    (if let $pat:pat = $v:ident { $expr: expr }) => {
+        defile::expr! {
+            match $v {
+                $pat => $expr,
+                other => Err(Error::UnexpectedMessage {
+                    expected: expect!(@$pat),
+                    got: Box::new(other),
+                }),
+            }
+        }
+    };
+
     (
         @parsed [$($parsed:tt)*]
         $ident:ident
         $($rest:tt)*
-    ) => (extract_path! {
+    ) => (expect! {
         @parsed [$($parsed)* $ident]
         $($rest)*
     });
@@ -99,7 +105,7 @@ macro_rules! extract_path {
         @parsed [$($parsed:tt)*]
         ::
         $($rest:tt)*
-    ) => (extract_path! {
+    ) => (expect! {
         @parsed [$($parsed)* ::]
         $($rest)*
     });
@@ -113,23 +119,8 @@ macro_rules! extract_path {
 
     (
         $($path:tt)*
-    ) => (extract_path! {
+    ) => (expect! {
         @parsed []
         $($path)*
     });
-}
-
-#[macro_export]
-macro_rules! expect {
-    (if let $pat:pat = $v:ident { $expr: expr }) => {
-        defile::expr! {
-            match $v {
-                $pat => $expr,
-                other => Err(Error::UnexpectedMessage {
-                    expected: extract_path!(@$pat),
-                    got: Box::new(other),
-                }),
-            }
-        }
-    };
 }

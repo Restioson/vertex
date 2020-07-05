@@ -265,7 +265,7 @@ impl Database {
         let trimmed = &criteria.words.trim();
 
         let query = SELECT_QUERY.replace("%where%", &where_clause);
-        let order = if trimmed.len() == 0 {
+        let order = if trimmed.is_empty() {
             "ORDER BY reports.id DESC".to_string()
         } else {
             args.push(&trimmed);

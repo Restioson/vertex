@@ -1,13 +1,11 @@
+use crate::expect;
 use crate::{Error, Result};
+use futures::stream::{SplitSink, SplitStream, StreamExt};
 use tokio_tungstenite::WebSocketStream;
+use tungstenite::{Error as WsError, Message as WsMessage};
 use url::Url;
 use vertex::prelude::*;
-
-pub struct AuthenticatedWs {
-    pub stream: AuthenticatedWsStream,
-    pub device: DeviceId,
-    pub token: AuthToken,
-}
+use crate::error::Error::UnexpectedMessage;
 
 pub type AuthenticatedWsStream = WebSocketStream<hyper::upgrade::Upgraded>;
 
@@ -34,10 +32,16 @@ impl AuthClient {
         Ok(AuthClient { server_url, client })
     }
 
-    pub async fn login(&self, device: DeviceId, token: AuthToken) -> Result<AuthenticatedWs> {
+    pub(crate) async fn login(
+        &self,
+        device: DeviceId,
+        token: AuthToken,
+        bot: bool,
+    ) -> Result<(SplitStream<AuthenticatedWsStream>, SplitSink<AuthenticatedWsStream, WsMessage>, ClientReady)> {
         let request = serde_urlencoded::to_string(Login {
             device,
             token: token.clone(),
+            bot,
         })
         .expect("failed to encode authenticate request");
 
@@ -57,33 +61,50 @@ impl AuthClient {
 
         let response = self.client.request(request).await?;
 
-        match response.status() {
+        let ws = match response.status() {
             hyper::StatusCode::SWITCHING_PROTOCOLS => {
                 let body = response.into_body();
                 let upgraded = body.on_upgrade().await?;
 
-                let ws = tokio_tungstenite::WebSocketStream::from_raw_socket(
+                tokio_tungstenite::WebSocketStream::from_raw_socket(
                     upgraded,
                     tungstenite::protocol::Role::Client,
                     None,
                 )
-                .await;
-
-                Ok(AuthenticatedWs {
-                    stream: ws,
-                    device,
-                    token,
-                })
+                .await
             }
             _ => {
                 let body = response.into_body();
                 let bytes = hyper::body::to_bytes(body).await?;
 
-                match AuthResponse::from_protobuf_bytes(&bytes) {
-                    Ok(AuthResponse::Ok(_)) => Err(Error::ProtocolError(None)),
+                return match AuthResponse::from_protobuf_bytes(&bytes) {
+                    Ok(AuthResponse::Ok(ok)) => Err(UnexpectedMessage {
+                        expected: "status code switching protocols",
+                        got: Box::new(ok),
+                    }),
                     Ok(AuthResponse::Err(err)) => Err(Error::AuthErrorResponse(err)),
                     Err(e) => Err(e.into()),
-                }
+                };
+            }
+        };
+
+        let (sink, mut stream) = ws.split();
+
+        let message = match stream.next().await {
+            Some(Ok(WsMessage::Binary(bytes))) => ServerMessage::from_protobuf_bytes(&bytes)?,
+            Some(Err(e)) => return Err(Error::Websocket(e)),
+            Some(other) => {
+                return Err(Error::UnexpectedMessage {
+                    expected: "WsMessage::Binary",
+                    got: Box::new(other),
+                })
+            }
+            None => return Err(Error::Websocket(WsError::ConnectionClosed)),
+        };
+
+        expect! {
+            if let ServerMessage::Event(ServerEvent::ClientReady(ready)) = message {
+                Ok((stream, sink, ready))
             }
         }
     }

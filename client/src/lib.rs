@@ -1,23 +1,28 @@
 use async_trait::async_trait;
 use embed::{EmbedCache, MessageEmbed};
 pub use error::Error;
-use futures::{Future, StreamExt};
-use net::{Network, SendRequest};
+use event_handler::{EventHandlerActor, HandlerMessage};
+use net::{Network, Ready, SendRequest, NetworkMessage};
 use profile_cache::{ProfileCache, ProfileResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tungstenite::{Error as WsError, Message as WsMessage};
 use url::Url;
-use vertex::prelude::{Message, *};
+use vertex::prelude::*;
 use xtra::prelude::*;
+use auth::AuthenticatedWsStream;
+use futures::stream::{SplitSink, SplitStream};
+use tungstenite::Message as WsMessage;
+use futures::StreamExt;
 
 mod auth;
 mod embed;
 mod error;
+mod event_handler;
 mod net;
 mod profile_cache;
 
 pub use auth::AuthClient;
+pub use event_handler::EventHandler;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -26,7 +31,6 @@ pub struct AuthParameters {
     pub instance: Url,
     pub device: DeviceId,
     pub token: AuthToken,
-    pub username: String, // TODO(change_username): update
 }
 
 #[spaad::entangled]
@@ -46,12 +50,7 @@ pub struct Client {
 }
 
 #[spaad::entangled]
-impl Actor for Client {
-    fn started(&mut self, ctx: &mut Context<Self>) {
-        let client = ctx.address().unwrap().into();
-        self.handler.do_send(HandlerMessage::Ready(client)).unwrap();
-    }
-}
+impl Actor for Client {}
 
 #[derive(Clone)]
 pub struct Community {
@@ -66,39 +65,60 @@ pub struct Room {
     pub unread: bool,
 }
 
+pub struct ClientBuilder {
+    sink: SplitSink<AuthenticatedWsStream, WsMessage>,
+    stream: SplitStream<AuthenticatedWsStream>,
+    ready: ClientReady,
+    device: DeviceId,
+}
+
+impl ClientBuilder {
+    pub async fn start_with_handler<H>(
+        self,
+        handler: H,
+    )
+        where H: EventHandler + Send + 'static
+    {
+        let (address, actor) = EventHandlerActor::new(handler).create();
+        tokio::spawn(actor.manage());
+
+        Client::start_with_actor(self, address).await
+    }
+}
+
 #[spaad::entangled]
 impl Client {
-    pub async fn start<H: EventHandler + Send + 'static>(
-        parameters: AuthParameters,
-        handler: H,
-    ) -> Result<(crate::Client, impl Future<Output = ()>)> {
+    pub async fn connect(parameters: AuthParameters, bot: bool) -> Result<ClientBuilder> {
         let auth = auth::AuthClient::new(parameters.instance)?;
-        let ws = auth.login(parameters.device, parameters.token).await?;
-        let (sink, mut stream) = ws.stream.split();
+        let device = parameters.device;
+        let (stream, sink, ready) = auth.login(parameters.device, parameters.token, bot).await?;
 
-        let message = match stream.next().await {
-            Some(Ok(WsMessage::Binary(bytes))) => ServerMessage::from_protobuf_bytes(&bytes)?,
-            Some(Err(e)) => return Err(Error::Websocket(e)),
-            Some(other) => {
-                return Err(Error::UnexpectedMessage {
-                    expected: "WsMessage::Binary",
-                    got: Box::new(other),
-                })
-            }
-            None => return Err(Error::Websocket(WsError::ConnectionClosed)),
-        };
+        Ok(ClientBuilder {
+            stream,
+            sink,
+            ready,
+            device,
+        })
+    }
 
-        let ready = expect! {
-            if let ServerMessage::Event(ServerEvent::ClientReady(ready)) = message {
-                Ok(ready)
-            }
-        }?;
-
+    async fn start_with_actor<A>(
+        builder: ClientBuilder,
+        address: Address<A>,
+    )
+        where A: Handler<HandlerMessage>
+    {
+        let ClientBuilder { sink, mut stream, ready, device } = builder;
         let (network, actor) = Network::new(sink).create();
         tokio::spawn(actor.manage());
 
-        let (handler, actor) = EventHandlerActor(handler).create();
-        tokio::spawn(actor.manage());
+        let network_weak = network.downgrade();
+        tokio::spawn(async move {
+            while let Some(m) = stream.next().await {
+                if network_weak.do_send(NetworkMessage(m)).is_err() {
+                    return;
+                }
+            }
+        });
 
         let profiles = ProfileCache::new();
         let embeds = EmbedCache::new();
@@ -133,20 +153,24 @@ impl Client {
 
         let client = Client {
             id: ready.user,
-            device: parameters.device,
-            network,
+            device,
+            network: network.clone(),
             profiles,
             embeds,
             communities,
             admin_perms: ready.admin_permissions,
-            handler: handler.into_channel(),
+            handler: address.channel(),
         };
 
-        let (addr, mgr) = client.create();
-        Ok((addr.into(), mgr.manage()))
+        let (client_address, mgr) = client.create();
+
+        network.do_send(Ready(client_address.downgrade())).unwrap();
+        address.do_send(HandlerMessage::Ready(client_address.into())).unwrap();
+        mgr.manage().await
     }
 
-    pub async fn create_community(&self, name: &str) -> Result<CommunityStructure> {
+    #[spaad::handler]
+    pub async fn create_community(&self, name: String) -> Result<CommunityStructure> {
         let req = ClientRequest::CreateCommunity {
             name: name.to_owned(),
         };
@@ -159,6 +183,7 @@ impl Client {
         }
     }
 
+    #[spaad::handler]
     pub async fn join_community(&self, invite: InviteCode) -> Result<CommunityStructure> {
         let req = ClientRequest::JoinCommunity(invite);
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
@@ -170,10 +195,12 @@ impl Client {
         }
     }
 
+    #[spaad::handler]
     pub async fn get_community(&self, id: CommunityId) -> Option<Community> {
         self.communities.get(&id).cloned()
     }
 
+    #[spaad::handler]
     pub async fn select_room(&self, community: CommunityId, room: RoomId) -> Result<()> {
         let req = ClientRequest::SelectRoom { community, room };
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
@@ -183,6 +210,7 @@ impl Client {
         })
     }
 
+    #[spaad::handler]
     pub async fn deselect_room(&self) -> Result<()> {
         let req = ClientRequest::DeselectRoom;
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
@@ -192,6 +220,7 @@ impl Client {
         })
     }
 
+    #[spaad::handler]
     pub async fn log_out(&self) -> Result<()> {
         let req = ClientRequest::LogOut;
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
@@ -201,6 +230,7 @@ impl Client {
         })
     }
 
+    #[spaad::handler]
     pub async fn search_users(&self, name: String) -> Result<Vec<ServerUser>> {
         let req = ClientRequest::AdminAction(AdminRequest::SearchUser { name });
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
@@ -212,6 +242,7 @@ impl Client {
         }
     }
 
+    #[spaad::handler]
     pub async fn list_all_server_users(&self) -> Result<Vec<ServerUser>> {
         let req = ClientRequest::AdminAction(AdminRequest::ListAllUsers);
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
@@ -223,6 +254,7 @@ impl Client {
         }
     }
 
+    #[spaad::handler]
     pub async fn list_all_admins(&self) -> Result<Vec<Admin>> {
         let req = ClientRequest::AdminAction(AdminRequest::ListAllAdmins);
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
@@ -234,6 +266,7 @@ impl Client {
         }
     }
 
+    #[spaad::handler]
     pub async fn search_reports(&self, criteria: SearchCriteria) -> Result<Vec<Report>> {
         let req = ClientRequest::AdminAction(AdminRequest::SearchForReports(criteria));
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
@@ -271,6 +304,7 @@ impl Client {
         Ok(results)
     }
 
+    #[spaad::handler]
     pub async fn ban_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
         self.do_to_many(users, |user| {
             ClientRequest::AdminAction(AdminRequest::Ban(user))
@@ -278,6 +312,7 @@ impl Client {
         .await
     }
 
+    #[spaad::handler]
     pub async fn unban_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
         self.do_to_many(users, |user| {
             ClientRequest::AdminAction(AdminRequest::Unban(user))
@@ -285,6 +320,7 @@ impl Client {
         .await
     }
 
+    #[spaad::handler]
     pub async fn unlock_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
         self.do_to_many(users, |user| {
             ClientRequest::AdminAction(AdminRequest::Unlock(user))
@@ -292,6 +328,7 @@ impl Client {
         .await
     }
 
+    #[spaad::handler]
     pub async fn demote_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
         self.do_to_many(users, |user| {
             ClientRequest::AdminAction(AdminRequest::Demote(user))
@@ -299,6 +336,7 @@ impl Client {
         .await
     }
 
+    #[spaad::handler]
     pub async fn promote_users(
         &self,
         users: Vec<UserId>,
@@ -310,11 +348,12 @@ impl Client {
         .await
     }
 
+    #[spaad::handler]
     pub async fn report_message(
         &self,
         message: MessageId,
-        short_desc: &str,
-        extended_desc: &str,
+        short_desc: String,
+        extended_desc: String,
     ) -> Result<()> {
         let req = ClientRequest::ReportUser {
             message,
@@ -328,6 +367,7 @@ impl Client {
         })
     }
 
+    #[spaad::handler]
     pub async fn set_report_status(&self, id: i32, status: ReportStatus) -> Result<()> {
         let req = ClientRequest::AdminAction(AdminRequest::SetReportStatus { id, status });
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
@@ -337,6 +377,7 @@ impl Client {
         })
     }
 
+    #[spaad::handler]
     pub async fn set_compromised(&self, typ: SetCompromisedType) -> Result<()> {
         let req = ClientRequest::AdminAction(AdminRequest::SetAccountsCompromised(typ));
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
@@ -367,93 +408,7 @@ impl xtra::Message for Event {
 #[spaad::entangled]
 #[async_trait]
 impl Handler<Event> for Client {
-    async fn handle(&mut self, event: Event, ctx: &mut Context<Self>) {
-        let client = ctx.address().unwrap().into();
-        self.handler
-            .do_send(HandlerMessage::Event(event.0, client))
-            .unwrap();
-    }
-}
-
-#[async_trait]
-#[allow(unused_variables)]
-pub trait EventHandler {
-    async fn ready(&mut self, client: Client) {}
-    async fn error(&mut self, error: Error, client: Client) {}
-    async fn internal_error(&mut self, client: Client) {}
-    async fn add_message(
-        &mut self,
-        community: CommunityId,
-        room: RoomId,
-        message: Message,
-        client: Client,
-    ) {
-    }
-    async fn message_ready(&mut self, community: CommunityId, room: RoomId, client: Client) {}
-    async fn edit_message(&mut self, edit: Edit, client: Client) {}
-    async fn delete_message(&mut self, delete: Delete, client: Client) {}
-    async fn logged_out(&mut self) {}
-    async fn add_room(&mut self, community: CommunityId, room: RoomStructure, client: Client) {}
-    async fn add_community(&mut self, community: CommunityStructure, client: Client) {}
-    async fn remove_community(
-        &mut self,
-        id: CommunityId,
-        reason: RemoveCommunityReason,
-        client: Client,
-    ) {
-    }
-    async fn admin_permissions_changed(&mut self, new: AdminPermissionFlags, client: Client) {}
-}
-
-struct EventHandlerActor<H: EventHandler + 'static>(H);
-
-impl<H: EventHandler + Send + 'static> Actor for EventHandlerActor<H> {}
-
-enum HandlerMessage {
-    Event(Result<ServerEvent>, Client),
-    Ready(Client),
-}
-
-impl xtra::Message for HandlerMessage {
-    type Result = ();
-}
-
-#[async_trait]
-impl<H: EventHandler + Send + 'static> Handler<HandlerMessage> for EventHandlerActor<H> {
-    async fn handle(&mut self, msg: HandlerMessage, ctx: &mut Context<Self>) {
-        use ServerEvent::*;
-
-        let (client, event) = match msg {
-            HandlerMessage::Event(Ok(event), client) => (client, event),
-            HandlerMessage::Event(Err(err), client) => return self.0.error(err, client).await,
-            HandlerMessage::Ready(client) => return self.0.ready(client).await,
-        };
-
-        match event {
-            ClientReady(ready) => log::error!("Client sent ready at wrong time: {:#?}", ready),
-            AddMessage {
-                community,
-                room,
-                message,
-            } => self.0.add_message(community, room, message, client).await,
-            InternalError => self.0.internal_error(client).await,
-            NotifyMessageReady { community, room } => {
-                self.0.message_ready(community, room, client).await
-            }
-            Edit(edit) => self.0.edit_message(edit, client).await,
-            Delete(delete) => self.0.delete_message(delete, client).await,
-            SessionLoggedOut => {
-                self.0.logged_out().await;
-                ctx.stop();
-            }
-            AddRoom {
-                community,
-                structure,
-            } => self.0.add_room(community, structure, client).await,
-            AddCommunity(community) => self.0.add_community(community, client).await,
-            RemoveCommunity { id, reason } => self.0.remove_community(id, reason, client).await,
-            AdminPermissionsChanged(new) => self.0.admin_permissions_changed(new, client).await,
-            other => log::error!("Unimplemented server event {:#?}", other),
-        };
+    async fn handle(&mut self, event: Event, _ctx: &mut Context<Self>) {
+        let _ = self.handler.do_send(HandlerMessage::Event(event.0));
     }
 }

@@ -37,7 +37,7 @@ impl Client {
         device: DeviceId,
         token: AuthToken,
     ) -> Result<AuthenticatedWs> {
-        let request = serde_urlencoded::to_string(Login { device, token: token.clone() })
+        let request = serde_urlencoded::to_string(Login { device, token: token.clone(), bot: false })
             .expect("failed to encode authenticate request");
 
         let url = self.server.url().join(&format!("authenticate?{}", request))?;
