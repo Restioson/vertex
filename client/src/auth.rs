@@ -1,7 +1,7 @@
+use crate::{Error, Result};
 use tokio_tungstenite::WebSocketStream;
 use url::Url;
 use vertex::prelude::*;
-use crate::{Error, Result};
 
 pub struct AuthenticatedWs {
     pub stream: AuthenticatedWsStream,
@@ -21,20 +21,25 @@ pub struct AuthClient {
 impl AuthClient {
     pub fn new(server_url: Url) -> Result<AuthClient> {
         let https = hyper_tls::HttpsConnector::new();
-        let client = hyper::client::Client::builder()
-            .build(https);
-        let server_url = server_url.join("vertex/client/")?;
+        let client = hyper::client::Client::builder().build(https);
+
+        let path = server_url.path();
+        let has_api = path.ends_with("vertex/client/") || path.ends_with("vertex/client");
+        let server_url = if !has_api {
+            server_url.join("vertex/client/")?
+        } else {
+            server_url
+        };
 
         Ok(AuthClient { server_url, client })
     }
 
-    pub async fn login(
-        &self,
-        device: DeviceId,
-        token: AuthToken,
-    ) -> Result<AuthenticatedWs> {
-        let request = serde_urlencoded::to_string(Login { device, token: token.clone() })
-            .expect("failed to encode authenticate request");
+    pub async fn login(&self, device: DeviceId, token: AuthToken) -> Result<AuthenticatedWs> {
+        let request = serde_urlencoded::to_string(Login {
+            device,
+            token: token.clone(),
+        })
+        .expect("failed to encode authenticate request");
 
         let url = self.server_url.join(&format!("authenticate?{}", request))?;
 
@@ -61,9 +66,14 @@ impl AuthClient {
                     upgraded,
                     tungstenite::protocol::Role::Client,
                     None,
-                ).await;
+                )
+                .await;
 
-                Ok(AuthenticatedWs { stream: ws, device, token })
+                Ok(AuthenticatedWs {
+                    stream: ws,
+                    device,
+                    token,
+                })
             }
             _ => {
                 let body = response.into_body();
@@ -83,10 +93,15 @@ impl AuthClient {
         credentials: Credentials,
         display_name: Option<String>,
     ) -> Result<UserId> {
-        let response = self.post_auth(
-            AuthRequest::RegisterUser(RegisterUser { credentials, display_name }),
-            self.server_url.join("register")?,
-        ).await?;
+        let response = self
+            .post_auth(
+                AuthRequest::RegisterUser(RegisterUser {
+                    credentials,
+                    display_name,
+                }),
+                self.server_url.join("register")?,
+            )
+            .await?;
 
         match response? {
             AuthOk::User(user) => Ok(user),
@@ -102,10 +117,15 @@ impl AuthClient {
         credentials: Credentials,
         options: TokenCreationOptions,
     ) -> Result<NewToken> {
-        let response = self.post_auth(
-            AuthRequest::CreateToken(CreateToken { credentials, options }),
-            self.server_url.join("token/create")?,
-        ).await?;
+        let response = self
+            .post_auth(
+                AuthRequest::CreateToken(CreateToken {
+                    credentials,
+                    options,
+                }),
+                self.server_url.join("token/create")?,
+            )
+            .await?;
 
         match response? {
             AuthOk::Token(token) => Ok(token),
@@ -116,15 +136,16 @@ impl AuthClient {
         }
     }
 
-    pub async fn refresh_token(
-        &self,
-        credentials: Credentials,
-        device: DeviceId,
-    ) -> Result<()> {
-        let response = self.post_auth(
-            AuthRequest::RefreshToken(RefreshToken { credentials, device }),
-            self.server_url.join("token/refresh")?,
-        ).await?;
+    pub async fn refresh_token(&self, credentials: Credentials, device: DeviceId) -> Result<()> {
+        let response = self
+            .post_auth(
+                AuthRequest::RefreshToken(RefreshToken {
+                    credentials,
+                    device,
+                }),
+                self.server_url.join("token/refresh")?,
+            )
+            .await?;
 
         match response? {
             AuthOk::NoData => Ok(()),
@@ -135,15 +156,16 @@ impl AuthClient {
         }
     }
 
-    pub async fn revoke_token(
-        &self,
-        credentials: Credentials,
-        device: DeviceId,
-    ) -> Result<()> {
-        let response = self.post_auth(
-            AuthRequest::RevokeToken(RevokeToken { credentials, device }),
-            self.server_url.join("token/revoke")?,
-        ).await?;
+    pub async fn revoke_token(&self, credentials: Credentials, device: DeviceId) -> Result<()> {
+        let response = self
+            .post_auth(
+                AuthRequest::RevokeToken(RevokeToken {
+                    credentials,
+                    device,
+                }),
+                self.server_url.join("token/revoke")?,
+            )
+            .await?;
 
         match response? {
             AuthOk::NoData => Ok(()),

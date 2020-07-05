@@ -116,7 +116,7 @@ impl TryFrom<proto::requests::administration::AdminRequest> for AdminRequest {
             },
             SetAccountsCompromised(typ) => {
                 let typ = proto::requests::administration::SetCompromisedType::from_i32(typ)
-                    .ok_or(DeserializeError::InvalidEnumVariant)?;
+                    .ok_or_else(DeserializeError::invalid_enum_variant)?;
                 AdminRequest::SetAccountsCompromised(typ.try_into()?)
             },
         };
@@ -276,7 +276,7 @@ pub struct InvalidReportStatus;
 
 impl From<InvalidReportStatus> for DeserializeError {
     fn from(_: InvalidReportStatus) -> DeserializeError {
-        DeserializeError::InvalidEnumVariant
+        DeserializeError::invalid_enum_variant()
     }
 }
 

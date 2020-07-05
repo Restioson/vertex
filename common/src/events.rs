@@ -205,7 +205,7 @@ impl TryFrom<proto::events::ServerEvent> for ServerEvent {
             AddCommunity(community) => ServerEvent::AddCommunity(community.try_into()?),
             RemoveCommunity(remove) => {
                 let reason = proto::events::RemoveCommunityReason::from_i32(remove.reason);
-                let reason = reason.ok_or(DeserializeError::InvalidEnumVariant)?;
+                let reason = reason.ok_or_else(DeserializeError::invalid_enum_variant)?;
 
                 ServerEvent::RemoveCommunity {
                     id: remove.id?.try_into()?,

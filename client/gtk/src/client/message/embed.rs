@@ -193,7 +193,7 @@ async fn build_link_metadata(mut props: HashMap<String, String>) -> LinkMetadata
 async fn get_image(mut props: HashMap<String, String>) -> Option<OpenGraphImage> {
     const MAX_DIM: i32 = 500;
 
-    let img_url = props.remove("og:image").or(props.remove("og:image:url"))?;
+    let img_url = props.remove("og:image").or_else(|| props.remove("og:image:url"))?;
     let alt = props.remove("og:image:alt");
     let bytes = req(&img_url, 4 * 1024 * 1024).await.ok()?;
     let bytes = glib::Bytes::from_owned(bytes);

@@ -1,7 +1,7 @@
-use vertex::prelude::*;
-use std::collections::HashMap;
-use crate::{Error, Result};
 use crate::net::{Network, SendRequest};
+use crate::{Error, Result};
+use std::collections::HashMap;
+use vertex::prelude::*;
 use xtra::prelude::*;
 
 // TODO: invalidate old records
@@ -32,18 +32,21 @@ impl ProfileCache {
         id: UserId,
         version: ProfileVersion,
     ) -> ProfileResult {
-        if !self.cache.get(&id).map(|p| p.version == version).unwrap_or(false) {
+        if !self
+            .cache
+            .get(&id)
+            .map(|p| p.version == version)
+            .unwrap_or(false)
+        {
             match (self.load(id, sender).await, self.cache.contains_key(&id)) {
                 (Ok(profile), _) => {
                     self.cache.insert(id, profile);
                     ProfileResult::UpToDate(self.cache.get(&id).unwrap().clone())
-                },
-                (Err(err), true)  => {
-                    ProfileResult::Cached(self.cache.get(&id).unwrap().clone(), err)
-                },
-                (Err(err), false) => {
-                    ProfileResult::None(err)
                 }
+                (Err(err), true) => {
+                    ProfileResult::Cached(self.cache.get(&id).unwrap().clone(), err)
+                }
+                (Err(err), false) => ProfileResult::None(err),
             }
         } else {
             ProfileResult::UpToDate(self.cache.get(&id).unwrap().clone())

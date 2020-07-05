@@ -1,12 +1,12 @@
+use crate::{Error, Result};
+use hyper::body::Bytes;
+use hyper::header;
+use scraper::{Html, Selector};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time;
-use hyper::body::Bytes;
-use vertex::prelude::*;
-use hyper::header;
 use url::Url;
-use scraper::{Selector, Html};
-use crate::{Error, Result};
+use vertex::prelude::*;
 
 // TODO: drop old entries
 #[derive(Clone)]
@@ -22,7 +22,9 @@ impl Default for EmbedCache {
 
 impl EmbedCache {
     pub fn new() -> EmbedCache {
-        EmbedCache { cache: HashMap::new() }
+        EmbedCache {
+            cache: HashMap::new(),
+        }
     }
 
     pub async fn get(&mut self, url: &Url) -> Option<&MessageEmbed> {
@@ -116,13 +118,13 @@ async fn req(url: &Url, max_size: usize) -> Result<Bytes> {
             Duration::from_secs(5),
             client.get(url.parse::<hyper::Uri>()?),
         )
-            .await
-            .map_err(|_| Error::Timeout)??;
+        .await
+        .map_err(|_| Error::Timeout)??;
 
         match response.headers().get(header::LOCATION) {
             Some(loc) if response.status().is_redirection() => {
                 url = loc.to_str().map_err(|_| Error::InvalidUrl)?.to_string();
-            },
+            }
             _ => {
                 let body = response.into_body();
                 return Ok(hyper::body::to_bytes(body).await?);
@@ -146,24 +148,35 @@ async fn build_link_metadata(mut props: HashMap<String, String>) -> LinkMetadata
     );
     if let (Some(code), Some(name), Some(description)) = invite_details {
         let code = InviteCode(code);
-        metadata.invite = Some(InviteMeta { code, name, description })
+        metadata.invite = Some(InviteMeta {
+            code,
+            name,
+            description,
+        })
     }
 
     if let Some(title) = props.remove("og:title") {
         let description = props.remove("og:description");
         let image = get_image(props).await;
-        metadata.opengraph = Some(OpenGraphMeta { title, description, image })
+        metadata.opengraph = Some(OpenGraphMeta {
+            title,
+            description,
+            image,
+        })
     }
 
     metadata
 }
 
 async fn get_image(mut props: HashMap<String, String>) -> Option<OpenGraphImage> {
-    let img_url = props.remove("og:image").or(props.remove("og:image:url"))?;
+    let img_url = props
+        .remove("og:image")
+        .or_else(|| props.remove("og:image:url"))?;
     let alt = props.remove("og:image:alt");
     let data = req(&img_url.parse().ok()?, 4 * 1024 * 1024).await.ok()?;
 
-    let preferred_dimensions: Option<(usize, usize)> = props.remove("og:image:width")
+    let preferred_dimensions: Option<(usize, usize)> = props
+        .remove("og:image:width")
         .zip(props.remove("og:image:height"))
         .and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?)));
 

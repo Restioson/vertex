@@ -3355,6 +3355,7 @@ checksum = "b5a972e5669d67ba988ce3dc826706fb0a8b01471c088cb0b6110b805cc36aed"
 name = "vertex"
 version = "0.1.0"
 dependencies = [
+ "backtrace",
  "bitflags 1.2.1",
  "chrono",
  "directories-next",
@@ -3377,10 +3378,12 @@ dependencies = [
  "governor",
  "hyper",
  "hyper-tls",
+ "keyring",
  "log 0.4.8",
  "rand 0.7.3",
  "scraper",
  "serde",
+ "serde_json",
  "serde_urlencoded",
  "spaad 0.4.0-beta.1",
  "tokio",

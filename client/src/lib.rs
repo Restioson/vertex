@@ -1,21 +1,21 @@
-use std::collections::HashMap;
-use std::fmt::{self, Debug};
-use serde::{Serialize, Deserialize};
-use futures::{StreamExt, Future};
-use url::Url;
 use async_trait::async_trait;
-use xtra::prelude::*;
-use vertex::{proto::DeserializeError, prelude::{Message, *}};
-use tungstenite::{Message as WsMessage, Error as WsError};
+use embed::{EmbedCache, MessageEmbed};
+pub use error::Error;
+use futures::{Future, StreamExt};
 use net::{Network, SendRequest};
 use profile_cache::{ProfileCache, ProfileResult};
-use embed::{EmbedCache, MessageEmbed};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use tungstenite::{Error as WsError, Message as WsMessage};
+use url::Url;
+use vertex::prelude::{Message, *};
+use xtra::prelude::*;
 
-mod embed;
-mod profile_cache;
-mod net;
 mod auth;
-mod util;
+mod embed;
+mod error;
+mod net;
+mod profile_cache;
 
 pub use auth::AuthClient;
 
@@ -47,8 +47,9 @@ pub struct Client {
 
 #[spaad::entangled]
 impl Actor for Client {
-    fn started(&mut self, _ctx: &mut Context<Self>) {
-        self.handler.do_send(HandlerMessage::Ready).unwrap();
+    fn started(&mut self, ctx: &mut Context<Self>) {
+        let client = ctx.address().unwrap().into();
+        self.handler.do_send(HandlerMessage::Ready(client)).unwrap();
     }
 }
 
@@ -78,10 +79,12 @@ impl Client {
         let message = match stream.next().await {
             Some(Ok(WsMessage::Binary(bytes))) => ServerMessage::from_protobuf_bytes(&bytes)?,
             Some(Err(e)) => return Err(Error::Websocket(e)),
-            Some(other) => return Err(Error::UnexpectedMessage {
-                expected: "WsMessage::Binary",
-                got: Box::new(other),
-            }),
+            Some(other) => {
+                return Err(Error::UnexpectedMessage {
+                    expected: "WsMessage::Binary",
+                    got: Box::new(other),
+                })
+            }
             None => return Err(Error::Websocket(WsError::ConnectionClosed)),
         };
 
@@ -100,11 +103,13 @@ impl Client {
         let profiles = ProfileCache::new();
         let embeds = EmbedCache::new();
 
-        let communities = ready.communities
+        let communities = ready
+            .communities
             .into_iter()
             .map(|community| {
                 let id = community.id;
-                let rooms = community.rooms
+                let rooms = community
+                    .rooms
                     .into_iter()
                     .map(|room| {
                         let id = room.id;
@@ -142,7 +147,9 @@ impl Client {
     }
 
     pub async fn create_community(&self, name: &str) -> Result<CommunityStructure> {
-        let req = ClientRequest::CreateCommunity { name: name.to_owned() };
+        let req = ClientRequest::CreateCommunity {
+            name: name.to_owned(),
+        };
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
         let response = req.response().await?;
         expect! {
@@ -168,27 +175,30 @@ impl Client {
     }
 
     pub async fn select_room(&self, community: CommunityId, room: RoomId) -> Result<()> {
-        let req = ClientRequest::SelectRoom {
-            community,
-            room,
-        };
+        let req = ClientRequest::SelectRoom { community, room };
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
         let response = req.response().await?;
-        expect!(if let OkResponse::NoData = response { Ok(()) })
+        expect!(if let OkResponse::NoData = response {
+            Ok(())
+        })
     }
 
     pub async fn deselect_room(&self) -> Result<()> {
         let req = ClientRequest::DeselectRoom;
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
         let response = req.response().await?;
-        expect!(if let OkResponse::NoData = response { Ok(()) })
+        expect!(if let OkResponse::NoData = response {
+            Ok(())
+        })
     }
 
     pub async fn log_out(&self) -> Result<()> {
         let req = ClientRequest::LogOut;
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
         let response = req.response().await?;
-        expect!(if let OkResponse::NoData = response { Ok(()) })
+        expect!(if let OkResponse::NoData = response {
+            Ok(())
+        })
     }
 
     pub async fn search_users(&self, name: String) -> Result<Vec<ServerUser>> {
@@ -245,14 +255,14 @@ impl Client {
             let req = self.network.send(SendRequest(req(user))).await.unwrap()?;
 
             match req.response().await {
-                Ok(OkResponse::NoData) => {},
+                Ok(OkResponse::NoData) => {}
                 Ok(other) => {
                     let err = Error::UnexpectedMessage {
                         expected: "OkResponse::NoData",
                         got: Box::new(other),
                     };
                     results.push((user, err))
-                },
+                }
                 Err(e @ Error::ErrorResponse(_)) => results.push((user, e)),
                 Err(e) => return Err(e),
             };
@@ -262,42 +272,42 @@ impl Client {
     }
 
     pub async fn ban_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
-        self.do_to_many(
-            users,
-            |user| ClientRequest::AdminAction(AdminRequest::Ban(user))
-        ).await
+        self.do_to_many(users, |user| {
+            ClientRequest::AdminAction(AdminRequest::Ban(user))
+        })
+        .await
     }
 
     pub async fn unban_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
-        self.do_to_many(
-            users,
-            |user| ClientRequest::AdminAction(AdminRequest::Unban(user))
-        ).await
+        self.do_to_many(users, |user| {
+            ClientRequest::AdminAction(AdminRequest::Unban(user))
+        })
+        .await
     }
 
     pub async fn unlock_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
-        self.do_to_many(
-            users,
-            |user| ClientRequest::AdminAction(AdminRequest::Unlock(user))
-        ).await
+        self.do_to_many(users, |user| {
+            ClientRequest::AdminAction(AdminRequest::Unlock(user))
+        })
+        .await
     }
 
     pub async fn demote_users(&self, users: Vec<UserId>) -> Result<Vec<(UserId, Error)>> {
-        self.do_to_many(
-            users,
-            |user| ClientRequest::AdminAction(AdminRequest::Demote(user))
-        ).await
+        self.do_to_many(users, |user| {
+            ClientRequest::AdminAction(AdminRequest::Demote(user))
+        })
+        .await
     }
 
     pub async fn promote_users(
         &self,
         users: Vec<UserId>,
-        permissions: AdminPermissionFlags
+        permissions: AdminPermissionFlags,
     ) -> Result<Vec<(UserId, Error)>> {
-        self.do_to_many(
-            users,
-            |user| ClientRequest::AdminAction(AdminRequest::Promote { user, permissions })
-        ).await
+        self.do_to_many(users, |user| {
+            ClientRequest::AdminAction(AdminRequest::Promote { user, permissions })
+        })
+        .await
     }
 
     pub async fn report_message(
@@ -313,24 +323,27 @@ impl Client {
         };
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
         let response = req.response().await?;
-        expect!(if let OkResponse::NoData = response { Ok(()) })
+        expect!(if let OkResponse::NoData = response {
+            Ok(())
+        })
     }
 
     pub async fn set_report_status(&self, id: i32, status: ReportStatus) -> Result<()> {
-        let req = ClientRequest::AdminAction(AdminRequest::SetReportStatus {
-            id,
-            status,
-        });
+        let req = ClientRequest::AdminAction(AdminRequest::SetReportStatus { id, status });
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
         let response = req.response().await?;
-        expect!(if let OkResponse::NoData = response { Ok(()) })
+        expect!(if let OkResponse::NoData = response {
+            Ok(())
+        })
     }
 
     pub async fn set_compromised(&self, typ: SetCompromisedType) -> Result<()> {
         let req = ClientRequest::AdminAction(AdminRequest::SetAccountsCompromised(typ));
         let req = self.network.send(SendRequest(req)).await.unwrap()?;
         let response = req.response().await?;
-        expect!(if let OkResponse::NoData = response { Ok(()) })
+        expect!(if let OkResponse::NoData = response {
+            Ok(())
+        })
     }
 
     #[spaad::handler]
@@ -354,26 +367,42 @@ impl xtra::Message for Event {
 #[spaad::entangled]
 #[async_trait]
 impl Handler<Event> for Client {
-    async fn handle(&mut self, event: Event, _ctx: &mut Context<Self>) {
-        self.handler.do_send(HandlerMessage::Event(event.0)).unwrap();
+    async fn handle(&mut self, event: Event, ctx: &mut Context<Self>) {
+        let client = ctx.address().unwrap().into();
+        self.handler
+            .do_send(HandlerMessage::Event(event.0, client))
+            .unwrap();
     }
 }
 
 #[async_trait]
 #[allow(unused_variables)]
 pub trait EventHandler {
-    async fn ready(&mut self) {}
-    async fn error(&mut self, error: Error) {}
-    async fn internal_error(&mut self) {}
-    async fn add_message(&mut self, community: CommunityId, room: RoomId, message: Message) {}
-    async fn message_ready(&mut self, community: CommunityId, room: RoomId) {}
-    async fn edit_message(&mut self, edit: Edit) {}
-    async fn delete_message(&mut self, delete: Delete) {}
+    async fn ready(&mut self, client: Client) {}
+    async fn error(&mut self, error: Error, client: Client) {}
+    async fn internal_error(&mut self, client: Client) {}
+    async fn add_message(
+        &mut self,
+        community: CommunityId,
+        room: RoomId,
+        message: Message,
+        client: Client,
+    ) {
+    }
+    async fn message_ready(&mut self, community: CommunityId, room: RoomId, client: Client) {}
+    async fn edit_message(&mut self, edit: Edit, client: Client) {}
+    async fn delete_message(&mut self, delete: Delete, client: Client) {}
     async fn logged_out(&mut self) {}
-    async fn add_room(&mut self, community: CommunityId, room: RoomStructure) {}
-    async fn add_community(&mut self, community: CommunityStructure) {}
-    async fn remove_community(&mut self, id: CommunityId, reason: RemoveCommunityReason) {}
-    async fn admin_permissions_changed(&mut self, new: AdminPermissionFlags) {}
+    async fn add_room(&mut self, community: CommunityId, room: RoomStructure, client: Client) {}
+    async fn add_community(&mut self, community: CommunityStructure, client: Client) {}
+    async fn remove_community(
+        &mut self,
+        id: CommunityId,
+        reason: RemoveCommunityReason,
+        client: Client,
+    ) {
+    }
+    async fn admin_permissions_changed(&mut self, new: AdminPermissionFlags, client: Client) {}
 }
 
 struct EventHandlerActor<H: EventHandler + 'static>(H);
@@ -381,8 +410,8 @@ struct EventHandlerActor<H: EventHandler + 'static>(H);
 impl<H: EventHandler + Send + 'static> Actor for EventHandlerActor<H> {}
 
 enum HandlerMessage {
-    Event(Result<ServerEvent>),
-    Ready,
+    Event(Result<ServerEvent>, Client),
+    Ready(Client),
 }
 
 impl xtra::Message for HandlerMessage {
@@ -394,97 +423,37 @@ impl<H: EventHandler + Send + 'static> Handler<HandlerMessage> for EventHandlerA
     async fn handle(&mut self, msg: HandlerMessage, ctx: &mut Context<Self>) {
         use ServerEvent::*;
 
-        let event = match msg {
-            HandlerMessage::Event(Ok(event)) => event,
-            HandlerMessage::Event(Err(err)) => return self.0.error(err).await,
-            HandlerMessage::Ready => return self.0.ready().await,
+        let (client, event) = match msg {
+            HandlerMessage::Event(Ok(event), client) => (client, event),
+            HandlerMessage::Event(Err(err), client) => return self.0.error(err, client).await,
+            HandlerMessage::Ready(client) => return self.0.ready(client).await,
         };
 
         match event {
             ClientReady(ready) => log::error!("Client sent ready at wrong time: {:#?}", ready),
-            AddMessage { community, room, message } => self.0.add_message(community, room, message).await,
-            InternalError => self.0.internal_error().await,
-            NotifyMessageReady { community, room } => self.0.message_ready(community, room).await,
-            Edit(edit) => self.0.edit_message(edit).await,
-            Delete(delete) => self.0.delete_message(delete).await,
+            AddMessage {
+                community,
+                room,
+                message,
+            } => self.0.add_message(community, room, message, client).await,
+            InternalError => self.0.internal_error(client).await,
+            NotifyMessageReady { community, room } => {
+                self.0.message_ready(community, room, client).await
+            }
+            Edit(edit) => self.0.edit_message(edit, client).await,
+            Delete(delete) => self.0.delete_message(delete, client).await,
             SessionLoggedOut => {
                 self.0.logged_out().await;
                 ctx.stop();
-            },
-            AddRoom { community, structure } => self.0.add_room(community, structure).await,
-            AddCommunity(community) => self.0.add_community(community).await,
-            RemoveCommunity { id, reason } => self.0.remove_community(id, reason).await,
-            AdminPermissionsChanged(new) => self.0.admin_permissions_changed(new).await,
-            other => log::error!("Unimplemented server event {:#?}", other)
+            }
+            AddRoom {
+                community,
+                structure,
+            } => self.0.add_room(community, structure, client).await,
+            AddCommunity(community) => self.0.add_community(community, client).await,
+            RemoveCommunity { id, reason } => self.0.remove_community(id, reason, client).await,
+            AdminPermissionsChanged(new) => self.0.admin_permissions_changed(new, client).await,
+            other => log::error!("Unimplemented server event {:#?}", other),
         };
-    }
-}
-
-#[derive(Debug)]
-pub enum Error {
-    InvalidUrl,
-    Http(hyper::Error),
-    Websocket(tungstenite::Error),
-    Timeout,
-    ProtocolError(Option<Box<dyn std::error::Error + Send>>),
-    ErrorResponse(vertex::responses::Error),
-    AuthErrorResponse(AuthError),
-    UnexpectedMessage {
-        expected: &'static str,
-        got: Box<dyn Debug + Send>,
-    },
-
-    DeserializeError(DeserializeError),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use self::Error::*;
-        match self {
-            InvalidUrl => write!(f, "Invalid url"),
-            Http(http) => if http.is_connect() {
-                write!(f, "Couldn't connect to server")
-            } else {
-                write!(f, "Network error")
-            },
-            Websocket(ws) => write!(f, "{}", ws),
-            Timeout => write!(f, "Connection timed out"),
-            ProtocolError(err) => match err {
-                Some(err) => write!(f, "Protocol error: {}", err),
-                None => write!(f, "Protocol error"),
-            },
-            ErrorResponse(err) => write!(f, "{}", err),
-            AuthErrorResponse(err) => write!(f, "{}", err),
-            UnexpectedMessage { expected, got } => {
-                write!(f, "Received unexpected message: expected {}, got {:#?}", expected, got)
-            },
-            DeserializeError(_) => write!(f, "Failed to deserialize message"),
-        }
-    }
-}
-
-impl From<hyper::Error> for Error {
-    fn from(error: hyper::Error) -> Self { Error::Http(error) }
-}
-
-impl From<tungstenite::Error> for Error {
-    fn from(error: tungstenite::Error) -> Self { Error::Websocket(error) }
-}
-
-impl From<hyper::http::uri::InvalidUri> for Error {
-    fn from(_: hyper::http::uri::InvalidUri) -> Self { Error::InvalidUrl }
-}
-
-impl From<AuthError> for Error {
-    fn from(error: AuthError) -> Self { Error::AuthErrorResponse(error) }
-}
-
-impl From<url::ParseError> for Error {
-    fn from(_: url::ParseError) -> Self { Error::InvalidUrl }
-}
-
-impl From<DeserializeError> for Error {
-    fn from(err: DeserializeError) -> Self {
-        Error::DeserializeError(err)
     }
 }

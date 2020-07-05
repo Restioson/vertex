@@ -1,3 +1,5 @@
+use backtrace::Backtrace;
+
 pub mod types {
     include!(concat!(env!("OUT_DIR"), "/vertex.types.rs"));
 }
@@ -31,8 +33,23 @@ pub mod requests {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct DeserializeError {
+    pub flavour: ErrorFlavour,
+    pub backtrace: Backtrace,
+}
+
+impl DeserializeError {
+    pub fn invalid_enum_variant() -> DeserializeError {
+        DeserializeError {
+            flavour: ErrorFlavour::InvalidEnumVariant,
+            backtrace: Backtrace::new(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum DeserializeError {
+pub enum ErrorFlavour {
     InvalidUuid(uuid::Error),
     NullField,
     InvalidEnumVariant,
@@ -42,24 +59,36 @@ pub enum DeserializeError {
 
 impl From<uuid::Error> for DeserializeError {
     fn from(err: uuid::Error) -> Self {
-        DeserializeError::InvalidUuid(err)
+        DeserializeError {
+            backtrace: Backtrace::new(),
+            flavour: ErrorFlavour::InvalidUuid(err),
+        }
     }
 }
 
 impl From<prost::DecodeError> for DeserializeError {
     fn from(err: prost::DecodeError) -> Self {
-        DeserializeError::ProtobufError(err)
+        DeserializeError {
+            backtrace: Backtrace::new(),
+            flavour: ErrorFlavour::ProtobufError(err),
+        }
     }
 }
 
 impl From<std::option::NoneError> for DeserializeError {
     fn from(_err: std::option::NoneError) -> Self {
-        DeserializeError::NullField
+        DeserializeError {
+            backtrace: Backtrace::new(),
+            flavour: ErrorFlavour::NullField,
+        }
     }
 }
 
 impl From<std::num::TryFromIntError> for DeserializeError {
     fn from(_err: std::num::TryFromIntError) -> Self {
-        DeserializeError::IntOutOfRange
+        DeserializeError {
+            backtrace: Backtrace::new(),
+            flavour: ErrorFlavour::IntOutOfRange,
+        }
     }
 }

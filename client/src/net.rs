@@ -1,16 +1,16 @@
-use std::{collections::HashMap, num::NonZeroU32};
-use futures::{SinkExt, FutureExt, channel::oneshot, stream::SplitSink};
-use tokio::time::Duration;
-use governor::{RateLimiter, Quota, clock::DefaultClock};
-use governor::state::{NotKeyed, InMemoryState};
+use crate::{Error, Event, Result};
 use async_trait::async_trait;
-use tungstenite::{Message as WsMessage, Error as WsError};
+use futures::{channel::oneshot, stream::SplitSink, FutureExt, SinkExt};
+use governor::state::{InMemoryState, NotKeyed};
+use governor::{clock::DefaultClock, Quota, RateLimiter};
+use std::{collections::HashMap, num::NonZeroU32};
+use tokio::time::Duration;
 use tokio_tungstenite::WebSocketStream;
-use xtra::prelude::{*, Message};
-use xtra::WeakAddress;
+use tungstenite::{Error as WsError, Message as WsMessage};
 use vertex::prelude::*;
 use vertex::RATELIMIT_BURST_PER_MIN;
-use crate::{Result, Error, Event};
+use xtra::prelude::{Message, *};
+use xtra::WeakAddress;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 type AuthenticatedWsStream = WebSocketStream<hyper::upgrade::Upgraded>;
@@ -26,9 +26,9 @@ impl Network {
     pub fn new(ws: SplitSink<AuthenticatedWsStream, WsMessage>) -> Network {
         Network {
             request_manager: RequestManager::new(),
-            ratelimiter: RateLimiter::direct(
-                Quota::per_minute(NonZeroU32::new(RATELIMIT_BURST_PER_MIN).unwrap())
-            ),
+            ratelimiter: RateLimiter::direct(Quota::per_minute(
+                NonZeroU32::new(RATELIMIT_BURST_PER_MIN).unwrap(),
+            )),
             ws,
             client: None,
         }
@@ -69,12 +69,12 @@ impl Handler<SendRequest> for Network {
     async fn handle(
         &mut self,
         request: SendRequest,
-        _ctx: &mut Context<Self>
+        _ctx: &mut Context<Self>,
     ) -> Result<RequestHandle> {
         let (id, handle) = self.request_manager.enqueue();
         let req = ClientMessage {
             id,
-            request: request.0
+            request: request.0,
         };
         self.try_send(req).await?;
         Ok(handle)
@@ -108,7 +108,7 @@ impl Network {
                     "Server has informed us that we have sent a malformed message! Out of date?"
                 );
                 panic!("Malformed message")
-            },
+            }
             ServerMessage::RateLimited { .. } => {
                 log::error!("Ratelimited even after ratelimiting ourselves!");
                 panic!("Ratelimited");
@@ -150,8 +150,11 @@ impl RequestManager {
             Some(request) => {
                 let result = response.map_err(Error::ErrorResponse);
                 let _ = request.0.send(result); // We don't care if the channel has closed
-            },
-            _ => log::warn!("Server sent response for unknown request id: {:#?}", (response, id)),
+            }
+            _ => log::warn!(
+                "Server sent response for unknown request id: {:#?}",
+                (response, id)
+            ),
         }
     }
 }
@@ -161,7 +164,8 @@ pub struct RequestHandle(oneshot::Receiver<Result<OkResponse>>);
 impl RequestHandle {
     pub async fn response(self) -> Result<OkResponse> {
         let future = self.0.map(|result| result.expect("channel closed"));
-        let result = tokio::time::timeout(REQUEST_TIMEOUT, future).await
+        let result = tokio::time::timeout(REQUEST_TIMEOUT, future)
+            .await
             .map_err(|_| Error::Timeout)?;
 
         Ok(result?)

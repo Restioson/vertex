@@ -315,7 +315,7 @@ impl TryFrom<proto::requests::auth::AuthResponse> for AuthResponse {
             Response::Ok(ok) => AuthResponse::Ok(ok.try_into()?),
             Response::Error(err) => {
                 let error = proto::requests::auth::AuthError::from_i32(err)
-                    .ok_or(DeserializeError::InvalidEnumVariant)?;
+                    .ok_or_else(DeserializeError::invalid_enum_variant)?;
                 AuthResponse::Err(error.try_into()?)
             }
         })

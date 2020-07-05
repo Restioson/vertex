@@ -293,10 +293,7 @@ pub enum Error {
     ProtocolError(Option<StdError>),
     ErrorResponse(vertex::responses::Error),
     AuthErrorResponse(AuthError),
-    UnexpectedMessage {
-        expected: String,
-        got: ServerMessage,
-    },
+    UnexpectedMessage,
     DeserializeError(DeserializeError),
 }
 

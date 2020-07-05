@@ -13,6 +13,7 @@ prost = "0.6.1"
 fern = "0.6"
 directories-next = "1"
 log = "0.4"
+backtrace = "0.3"
 
 [build-dependencies]
-prost-build = "0.6.1"
+prost-build = "0.6"
