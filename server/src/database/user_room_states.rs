@@ -91,7 +91,7 @@ impl Database {
         handle_sql_error(res).map(|res| {
             res.map_err(|e| match e {
                 SetUserRoomStateError::InvalidUser => InvalidUser,
-                SetUserRoomStateError::InvalidRoom => panic!(
+                SetUserRoomStateError::InvalidRoom => panic_error!(
                     "{}{}",
                     "Create default user room states returned invalid room",
                     "; this should be impossible!",

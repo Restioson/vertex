@@ -198,7 +198,7 @@ impl Database {
         match res {
             Ok(1) => Ok(Ok(())), // 1 row modified = successfully added
             Ok(_n) => {
-                panic!("db error: report user query returned more than one row modified!");
+                panic_error!("db error: report user query returned more than one row modified!");
             }
             Err(err) => {
                 if err.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {

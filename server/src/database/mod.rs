@@ -250,7 +250,7 @@ impl TryFrom<&Row> for InsertIntoTableSource {
             b'i' => InsertIntoTableSource::Insert,
             b's' => InsertIntoTableSource::Select,
             b'u' => InsertIntoTableSource::Update,
-            _ => panic!("Invalid AddToRoomSource type!"),
+            _ => panic_error!("Invalid AddToRoomSource type!"),
         })
     }
 }

@@ -39,7 +39,7 @@ impl Database {
         match res {
             Ok(1) => Ok(Ok(())), // 1 row modified = successfully added
             Ok(_n) => {
-                panic!("db error: create admin query returned != 1 row modified!");
+                panic_error!("db error: create admin query returned != 1 row modified!");
             }
             Err(err) => {
                 if err.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {

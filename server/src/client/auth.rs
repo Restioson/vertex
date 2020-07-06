@@ -127,7 +127,7 @@ impl Authenticator {
             // The chances of a UUID conflict is so abysmally low that we can only assume that a
             // conflict is due to a programming error
 
-            panic!("Newly generated UUID conflicts with another!");
+            panic_error!("Newly generated UUID conflicts with another!");
         }
 
         AuthResponse::Ok(AuthOk::Token(NewToken {

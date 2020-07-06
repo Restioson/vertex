@@ -2,7 +2,7 @@ use futures::Future;
 use futures::FutureExt;
 use rand::RngCore;
 use unicode_normalization::UnicodeNormalization;
-
+use vertex::panic_error;
 use crate::config::Config;
 use crate::database::UserRecord;
 
@@ -22,7 +22,7 @@ impl From<i16> for HashSchemeVersion {
     fn from(v: i16) -> Self {
         match v {
             1 => HashSchemeVersion::Argon2V1,
-            invalid_version => panic!("Invalid hash scheme version {}", invalid_version),
+            invalid_version => panic_error!("Invalid hash scheme version {}", invalid_version),
         }
     }
 }

@@ -256,14 +256,14 @@ async fn promote_and_demote(args: clap::ArgMatches<'_>, database: &Database) {
             .get_user_by_name(name.to_string())
             .await
             .expect("Error promoting user to admin")
-            .unwrap_or_else(|| panic!("Invalid username {} to add as admin", name))
+            .unwrap_or_else(|| panic_error!("Invalid username {} to add as admin", name))
             .id;
 
         database
             .set_admin_permissions(id, AdminPermissionFlags::ALL)
             .await
-            .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e))
-            .unwrap_or_else(|e| panic!("Error promoting user {} to admin: {:?}", name, e));
+            .unwrap_or_else(|e| panic_error!("Error promoting user {} to admin: {:?}", name, e))
+            .unwrap_or_else(|e| panic_error!("Error promoting user {} to admin: {:?}", name, e));
 
         info!(
             "User {} successfully promoted to admin with all permissions!",
@@ -276,14 +276,14 @@ async fn promote_and_demote(args: clap::ArgMatches<'_>, database: &Database) {
             .get_user_by_name(name.to_string())
             .await
             .expect("Error removing user as admin")
-            .unwrap_or_else(|| panic!("Invalid username {} to demote", name))
+            .unwrap_or_else(|| panic_error!("Invalid username {} to demote", name))
             .id;
 
         database
             .set_admin_permissions(id, AdminPermissionFlags::from_bits_truncate(0))
             .await
-            .unwrap_or_else(|e| panic!("Error demoting user {}: {:?}", name, e))
-            .unwrap_or_else(|e| panic!("Error demoting user {}: {:?}", name, e));
+            .unwrap_or_else(|e| panic_error!("Error demoting user {}: {:?}", name, e))
+            .unwrap_or_else(|e| panic_error!("Error demoting user {}: {:?}", name, e));
 
         info!("User {} successfully demoted!", name);
     }

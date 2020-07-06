@@ -98,7 +98,7 @@ impl Database {
                 Ok(Err(AddToCommunityError::AlreadyInCommunity))
             }
             Ok(_n) => {
-                panic!("db error: add to community query returned more than one row modified!");
+                panic_error!("db error: add to community query returned more than one row modified!");
             }
             Err(err) => {
                 if err.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {
