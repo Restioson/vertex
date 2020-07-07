@@ -22,9 +22,10 @@ pub mod prelude {
     pub use crate::structures::*;
     pub use crate::types::*;
     pub use crate::HEARTBEAT_TIMEOUT;
+    pub use crate::panic_error;
 }
 
-pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
+pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub const RATELIMIT_BURST_PER_MIN: u32 = 120;
 
@@ -71,4 +72,14 @@ pub fn setup_logging(
         .expect("Error setting logger settings");
 
     log::info!("Logging set up");
+}
+
+#[macro_export]
+macro_rules! panic_error {
+    ($($tt:tt)*) => {
+        {
+            log::error!($($tt)*);
+            panic!($($tt)*)
+        }
+    }
 }

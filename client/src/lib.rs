@@ -20,6 +20,7 @@ mod error;
 mod event_handler;
 mod net;
 mod profile_cache;
+mod message_cache;
 
 pub use auth::AuthClient;
 pub use event_handler::EventHandler;
@@ -76,12 +77,21 @@ impl ClientBuilder {
     pub async fn start_with_handler<H>(
         self,
         handler: H,
-    )
+    ) -> Client
         where H: EventHandler + Send + 'static
     {
         let (address, actor) = EventHandlerActor::new(handler).create();
         tokio::spawn(actor.manage());
 
+        Client::start_with_actor(self, address).await
+    }
+
+    pub async fn start_with_actor<A>(
+        self,
+        address: Address<A>,
+    ) -> Client
+        where A: Handler<HandlerMessage>
+    {
         Client::start_with_actor(self, address).await
     }
 }
@@ -104,7 +114,7 @@ impl Client {
     async fn start_with_actor<A>(
         builder: ClientBuilder,
         address: Address<A>,
-    )
+    ) -> crate::Client
         where A: Handler<HandlerMessage>
     {
         let ClientBuilder { sink, mut stream, ready, device } = builder;
@@ -165,8 +175,35 @@ impl Client {
         let (client_address, mgr) = client.create();
 
         network.do_send(Ready(client_address.downgrade())).unwrap();
-        address.do_send(HandlerMessage::Ready(client_address.into())).unwrap();
-        mgr.manage().await
+        address.do_send(HandlerMessage::Ready(client_address.clone().into())).unwrap();
+        tokio::spawn(mgr.manage());
+        client_address.into()
+    }
+
+    #[spaad::handler]
+    pub async fn user(&self) -> UserId {
+        self.id
+    }
+
+    #[spaad::handler]
+    pub async fn send_message(
+        &self,
+        to_community: CommunityId,
+        to_room: RoomId,
+        content: String,
+    ) -> Result<MessageConfirmation> {
+        let req = ClientRequest::SendMessage(ClientSentMessage {
+            to_community,
+            to_room,
+            content
+        });
+        let req = self.network.send(SendRequest(req)).await.unwrap()?;
+        let response = req.response().await?;
+        expect! {
+            if let OkResponse::ConfirmMessage(confirmation) = response {
+                Ok(confirmation)
+            }
+        }
     }
 
     #[spaad::handler]

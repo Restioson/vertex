@@ -14,7 +14,7 @@ use xtra::WeakAddress;
 use std::time::Instant;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
-const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
+const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(15);
 type AuthenticatedWsStream = WebSocketStream<hyper::upgrade::Upgraded>;
 
 pub struct Network {
@@ -50,7 +50,7 @@ impl Network {
         let message = match message? {
             WsMessage::Binary(bytes) => ServerMessage::from_protobuf_bytes(&bytes)?,
             WsMessage::Close(_) => return Err(Error::Websocket(WsError::ConnectionClosed)),
-            WsMessage::Ping(_) => {
+            WsMessage::Ping(_) | WsMessage::Pong(_) => {
                 self.heartbeat = Instant::now();
                 return Ok(None)
             },
@@ -65,19 +65,13 @@ impl Network {
                 Ok(None)
             }
             ServerMessage::MalformedMessage => {
-                log::error!(
+                panic_error!(
                     "Server has informed us that we have sent a malformed message! Out of date?"
-                );
-                panic!("Malformed message")
+                )
             }
-            ServerMessage::RateLimited { .. } => {
-                log::error!("Ratelimited even after ratelimiting ourselves!");
-                panic!("Ratelimited");
-            }
-            other => {
-                log::error!("Unimplemented server message {:#?}", other);
-                unimplemented!()
-            }
+            ServerMessage::RateLimited { .. } => panic_error!("Ratelimited even after ratelimiting ourselves!"),
+            other => panic_error!("Unimplemented server message {:#?}", other),
+
         }
     }
 }

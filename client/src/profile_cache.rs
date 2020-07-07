@@ -19,6 +19,17 @@ pub enum ProfileResult {
     None(Error),
 }
 
+// TODO from
+impl Into<Result<Profile>> for ProfileResult {
+    fn into(self) -> Result<Profile> {
+        match self {
+            ProfileResult::UpToDate(p) => Ok(p),
+            ProfileResult::Cached(p, _) => Ok(p),
+            ProfileResult::None(e) => Err(e),
+        }
+    }
+}
+
 impl ProfileCache {
     pub fn new() -> ProfileCache {
         ProfileCache {

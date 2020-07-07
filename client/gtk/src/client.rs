@@ -28,7 +28,7 @@ mod profile;
 mod chat;
 mod notification;
 
-pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(2);
+pub const HEARTBEAT_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(15);
 
 lazy_static::lazy_static! {
     /// Channel through which messages to the invite-listener are sent, to allow for following invite

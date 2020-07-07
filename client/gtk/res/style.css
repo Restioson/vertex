@@ -377,7 +377,7 @@ tooltip {
   color: shade(@widget_color, 0.7);
   margin: 7px 4px;
   border-radius: 10px;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 #message_entry:focus {

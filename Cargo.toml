@@ -4,6 +4,7 @@ members = [
     "common",
     "client",
     "client/gtk",
+    "bridge/discord",
 ]
 
 [profile.dev.package."rust-argon2"]

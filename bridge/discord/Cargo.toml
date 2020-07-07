@@ -1,0 +1,23 @@
+[package]
+name = "vertex_bridge_discord"
+version = "0.1.0"
+authors = ["Restioson <restiosondev@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+vertex = { path = "../../common" }
+vertex_client = { path = "../../client" }
+tokio = { version = "0.2", features = ["full"] }
+async-trait = "0.1"
+xtra = "0.5.0-beta.3"
+spaad = { version = "0.4.0-beta.2", features = ["with-tokio-0_2"] }
+panda = { path = "../../../panda" }
+url = "2"
+bimap = { version = "0.4", features = ["serde"] }
+serde = "1"
+serde_json = "1"
+directories-next = "1"
+uuid = { version = "0.8", features = ["v4"] }
+log = "0.4"
+either = "1.5"
+base64 = "0.12"
