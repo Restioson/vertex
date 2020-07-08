@@ -6,7 +6,6 @@ use ears::{AudioController, Sound};
 
 use vertex::prelude::*;
 use crate::resource;
-use notify_rust::Hint;
 
 #[derive(Clone)]
 pub struct Notifier {
@@ -70,7 +69,7 @@ impl Notifier {
                 .appname("Vertex")
                 .icon(&icon_path.to_str().unwrap())
                 .body(&content)
-                .hint(Hint::Transient(true))
+                .hint(notify_rust::Hint::Transient(true))
                 .show();
 
             if let Ok(handle) = res {

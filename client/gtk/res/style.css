@@ -360,7 +360,8 @@ tooltip {
 
 #active #chat #lower_bar {
   background: @sidebar_bg_color;
-  padding: 10px 5px;
+  padding: 10px 0px;
+  padding-right: 5px;
 }
 
 #active #messages {
@@ -375,7 +376,7 @@ tooltip {
 #message_entry {
   background: @message_entry_color;
   color: shade(@widget_color, 0.7);
-  margin: 0px 4px;
+
   border-radius: 10px;
   font-size: 15px;
 }
