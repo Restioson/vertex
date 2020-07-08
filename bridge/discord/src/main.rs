@@ -148,8 +148,7 @@ impl Bridge {
         message: VertexMessage,
     ) {
         let vertex_channel = VertexChannelId { room, community };
-        let content = message.content.clone().unwrap_or_default();
-        dbg!(&content);
+        let content = message.content.clone().unwrap_or_else(|| "<Attachment>".to_string());
         let res: Result<Option<&str>, Error> = try {
             if content.starts_with("!db") {
                 let args: Vec<&str> = content.split(' ').collect();
@@ -199,8 +198,6 @@ impl Bridge {
             };
             discord.http.execute_webhook(&webhook.id, &webhook.token, payload).await.unwrap();
         }
-
-        println!("{:?} in {:?} in {:?}", message, community, room);
     }
 
     #[spaad::handler]
@@ -350,7 +347,7 @@ async fn main() {
             lock.as_ref().unwrap().clone()
         };
 
-        if message.0.author.id == id {
+        if message.0.author.id == id || message.0.webhook_id.is_some(){
             return Ok(());
         }
 

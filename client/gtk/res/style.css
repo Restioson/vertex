@@ -375,7 +375,7 @@ tooltip {
 #message_entry {
   background: @message_entry_color;
   color: shade(@widget_color, 0.7);
-  margin: 7px 4px;
+  margin: 0px 4px;
   border-radius: 10px;
   font-size: 15px;
 }
