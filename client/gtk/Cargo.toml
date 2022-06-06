@@ -55,7 +55,7 @@ tokio-tungstenite = { version = "0.10", features = ["tls"] }
 scraper = "0.12"
 linkify = "0.4"
 
-hyper = "0.13"
+hyper = "0.14"
 hyper-tls = "0.4"
 
 native-tls = "0.2"
